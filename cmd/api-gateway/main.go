@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/soheilhy/cmux"
+	"github.com/tmc/grpc-websocket-proxy/wsproxy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -22,6 +24,12 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/proxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/restmux"
 )
+
+// wsproxyLogger — адаптер slog → wsproxy.Logger interface (Warnln + Debugln).
+type wsproxyLogger struct{ l *slog.Logger }
+
+func (w wsproxyLogger) Warnln(args ...interface{})  { w.l.Warn(fmt.Sprint(args...)) }
+func (w wsproxyLogger) Debugln(args ...interface{}) { w.l.Debug(fmt.Sprint(args...)) }
 
 func main() {
 	cfg, err := config.Load()
@@ -85,10 +93,18 @@ func main() {
 	}
 
 	// --- HTTP mux с health endpoints ---
+	// wsproxy: оборачивает grpc-gateway mux так, что streaming RPC (Watch) умеет
+	// отвечать через WebSocket, если клиент шлёт `Upgrade: websocket`. Иначе —
+	// обычный chunked HTTP. Один обёрнутый handler покрывает оба пути.
+	wsHandler := wsproxy.WebsocketProxy(
+		restHandler,
+		wsproxy.WithLogger(wsproxyLogger{l: logger}),
+	)
+
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/healthz", health.HTTPHealthz)
 	httpMux.Handle("/readyz", health.HTTPReadyz(backends, logger))
-	httpMux.Handle("/", restHandler)
+	httpMux.Handle("/", wsHandler)
 
 	httpHandler := middleware.HTTPRequestID(
 		middleware.HTTPRecovery(logger)(
@@ -99,10 +115,12 @@ func main() {
 	)
 
 	httpSrv := &http.Server{
-		Handler:      httpHandler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Handler:     httpHandler,
+		ReadTimeout: 30 * time.Second,
+		// WriteTimeout=0 — для WebSocket / chunked-streaming Watch не должно прерывать
+		// long-lived connections. http.Server hijacking при WebSocket берёт control,
+		// но без таймаута безопаснее.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	// --- cmux: HTTP/2 gRPC vs HTTP/1.1 REST на одном порту ---

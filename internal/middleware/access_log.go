@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -59,18 +62,47 @@ func StreamAccessLog(logger *slog.Logger) grpc.StreamServerInterceptor {
 }
 
 // responseWriter оборачивает http.ResponseWriter для захвата статус-кода.
+// Прокидывает Flusher (для grpc-gateway server-streaming chunked transfer)
+// и Hijacker (для WebSocket upgrade в wsproxy).
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
+	wroteHeader bool
 }
 
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
-	return &responseWriter{w, http.StatusOK}
+	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		return
+	}
+	rw.wroteHeader = true
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.wroteHeader = true
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+// Flush — для grpc-gateway server-streaming.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack — для wsproxy WebSocket upgrade.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("ResponseWriter does not implement http.Hijacker")
 }
 
 // HTTPAccessLog — HTTP middleware: slog access log для REST-запросов.
