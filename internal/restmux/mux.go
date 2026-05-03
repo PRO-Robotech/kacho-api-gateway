@@ -1,14 +1,22 @@
 // Package restmux инициализирует grpc-gateway ServeMux для REST-запросов.
 //
-// Регистрирует все 14 публичных сервисов Kachō через RegisterXxxServiceHandlerFromEndpoint.
+// Регистрирует все 14 публичных сервисов Kachō + OperationService через
+// RegisterXxxServiceHandlerFromEndpoint / RegisterOperationServiceHandlerServer.
 // *InternalService* не регистрируются (запрет CLAUDE.md #7).
 //
-// URL-конвенция: POST /v1/<resource-plural-kebab>/<action>
-// Примеры:
+// URL-конвенция flat 1.0 API:
 //
-//	POST /v1/organizations/list
-//	POST /v1/instances/restart
-//	POST /v1/network-load-balancers/upsert
+//	GET    /v1/instances/{id}          → Get
+//	GET    /v1/instances               → List
+//	POST   /v1/instances               → Create → Operation
+//	PATCH  /v1/instances/{id}          → Update → Operation
+//	DELETE /v1/instances/{id}          → Delete → Operation
+//	POST   /v1/instances/{id}:start    → Start  → Operation
+//	POST   /v1/instances/{id}:stop     → Stop   → Operation
+//	POST   /v1/instances/{id}:restart  → Restart → Operation
+//	GET    /v1/operations/{id}         → OperationService.Get
+//	GET    /v1/operations              → OperationService.List
+//	POST   /v1/operations/{id}:cancel  → OperationService.Cancel
 package restmux
 
 import (
@@ -21,25 +29,36 @@ import (
 
 	cmpv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	lbv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation/v1"
 	rmv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
 	vpcv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
 
-// NewMux создаёт grpc-gateway ServeMux и регистрирует все 14 публичных сервисов.
+// NewMux создаёт grpc-gateway ServeMux и регистрирует все 14 публичных сервисов
+// плюс OperationService (через OpsProxy).
+//
 // addrs — карта domain → адрес gRPC backend:
 //
 //	"resourcemanager" → resource-manager.kacho.svc.cluster.local:9090
 //	"vpc"             → vpc.kacho.svc.cluster.local:9090
 //	"compute"         → compute.kacho.svc.cluster.local:9090
 //	"loadbalancer"    → loadbalancer.kacho.svc.cluster.local:9090
-func NewMux(ctx context.Context, addrs map[string]string) (*runtime.ServeMux, error) {
+//
+// conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
+// при nil — OperationService регистрируется через no-op Unimplemented (тесты).
+func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	rmAddr := addrs["resourcemanager"]
-	vpcAddr := addrs["vpc"]
-	cmpAddr := addrs["compute"]
-	lbAddr := addrs["loadbalancer"]
+	var rmAddr, vpcAddr, cmpAddr, lbAddr string
+	if addrs != nil {
+		rmAddr = addrs["resourcemanager"]
+		vpcAddr = addrs["vpc"]
+		cmpAddr = addrs["compute"]
+		lbAddr = addrs["loadbalancer"]
+	}
 
 	// --- resourcemanager ---
 	if err := rmv1.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
@@ -89,6 +108,19 @@ func NewMux(ctx context.Context, addrs map[string]string) (*runtime.ServeMux, er
 	}
 	if err := lbv1.RegisterTargetGroupServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
 		return nil, fmt.Errorf("register TargetGroupService: %w", err)
+	}
+
+	// --- operations (OpsProxy) ---
+	// OperationService не имеет своего отдельного backend — он живёт in-process как OpsProxy.
+	// Регистрируем через RegisterOperationServiceHandlerServer (локальный вызов, без лишнего dial).
+	var opsSrv operationpb.OperationServiceServer
+	if conns != nil {
+		opsSrv = opsproxy.New(conns)
+	} else {
+		opsSrv = operationpb.UnimplementedOperationServiceServer{}
+	}
+	if err := operationpb.RegisterOperationServiceHandlerServer(ctx, mux, opsSrv); err != nil {
+		return nil, fmt.Errorf("register OperationService: %w", err)
 	}
 
 	return mux, nil

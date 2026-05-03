@@ -33,7 +33,7 @@ func TestGateway_A1_DirectorRoutesToCompute(t *testing.T) {
 	backends := makeTestBackends(t, []string{"resourcemanager", "vpc", "compute", "loadbalancer"})
 	director := proxy.NewDirector(backends)
 
-	ctx, conn, err := director(context.Background(), "/kacho.cloud.compute.v1.InstanceService/List")
+	ctx, conn, err := director(context.Background(), "/kacho.cloud.compute.v1.InstanceService/Get")
 	if err != nil {
 		t.Fatalf("ожидали успех, получили: %v", err)
 	}

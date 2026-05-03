@@ -28,8 +28,8 @@ type mockOrgServer struct {
 	rmv1.UnimplementedOrganizationServiceServer
 }
 
-func (m *mockOrgServer) List(_ context.Context, _ *rmv1.OrganizationListRequest) (*rmv1.OrganizationListResponse, error) {
-	return &rmv1.OrganizationListResponse{}, nil
+func (m *mockOrgServer) List(_ context.Context, _ *rmv1.ListOrganizationsRequest) (*rmv1.ListOrganizationsResponse, error) {
+	return &rmv1.ListOrganizationsResponse{}, nil
 }
 
 // mockHealthServer — mock grpc.health.v1.Health для backends.
@@ -68,7 +68,8 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
 	ctx := context.Background()
-	restHandler, err := restmux.NewMux(ctx, nil)
+	// conns=nil → OperationService регистрируется через Unimplemented (тесты без operations)
+	restHandler, err := restmux.NewMux(ctx, nil, nil)
 	if err != nil {
 		t.Fatalf("rest mux: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := client.List(ctx, &rmv1.OrganizationListRequest{})
+	resp, err := client.List(ctx, &rmv1.ListOrganizationsRequest{})
 	if err != nil {
 		t.Fatalf("List через gateway: %v", err)
 	}
@@ -162,7 +163,8 @@ func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	// Вызываем неизвестный метод через raw invoker
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err = gwConn.Invoke(ctx, "/kacho.cloud.unknown.v1.FooService/Bar", &rmv1.OrganizationListRequest{}, &rmv1.OrganizationListResponse{})
+	err = gwConn.Invoke(ctx, "/kacho.cloud.unknown.v1.FooService/Bar",
+		&rmv1.ListOrganizationsRequest{}, &rmv1.ListOrganizationsResponse{})
 	if err == nil {
 		t.Fatal("ожидали ошибку NOT_FOUND")
 	}
@@ -191,7 +193,7 @@ func TestGateway_E1_InternalServiceBlockedAtGateway(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = gwConn.Invoke(ctx, "/kacho.cloud.resourcemanager.v1.FolderInternalService/Exists",
-		&rmv1.OrganizationListRequest{}, &rmv1.OrganizationListResponse{})
+		&rmv1.ListOrganizationsRequest{}, &rmv1.ListOrganizationsResponse{})
 	if err == nil {
 		t.Fatal("ожидали NOT_FOUND для InternalService")
 	}
@@ -270,7 +272,7 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_, err := client.List(ctx, &rmv1.OrganizationListRequest{})
+			_, err := client.List(ctx, &rmv1.ListOrganizationsRequest{})
 			errs <- err
 		}()
 	}

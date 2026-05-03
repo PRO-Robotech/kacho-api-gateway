@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -13,23 +12,19 @@ import (
 	"time"
 
 	"github.com/soheilhy/cmux"
-	"github.com/tmc/grpc-websocket-proxy/wsproxy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation/v1"
+
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/proxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/restmux"
 )
-
-// wsproxyLogger — адаптер slog → wsproxy.Logger interface (Warnln + Debugln).
-type wsproxyLogger struct{ l *slog.Logger }
-
-func (w wsproxyLogger) Warnln(args ...interface{})  { w.l.Warn(fmt.Sprint(args...)) }
-func (w wsproxyLogger) Debugln(args ...interface{}) { w.l.Debug(fmt.Sprint(args...)) }
 
 func main() {
 	cfg, err := config.Load()
@@ -44,7 +39,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	// --- Backend connections: один постоянный ClientConn на backend (OQ-6) ---
+	// --- Backend connections: один постоянный ClientConn на backend ---
 	keepaliveParams := keepalive.ClientParameters{
 		Time:                30 * time.Second,
 		Timeout:             10 * time.Second,
@@ -83,28 +78,27 @@ func main() {
 	)
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
+	// OpsProxy регистрируется как нативный gRPC-сервис в gateway-сервере.
+	// Запросы /kacho.cloud.operation.v1.OperationService/* идут напрямую сюда,
+	// минуя transparent-proxy director (он бы отправил их на несуществующий "operation"-backend).
+	opsProxy := opsproxy.New(backends)
+	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
+
 	// --- REST mux (grpc-gateway) ---
-	// Регистрирует все 14 публичных сервисов через google.api.http аннотации.
+	// Регистрирует все 14 публичных сервисов + OperationService через OpsProxy.
 	// *InternalService* не регистрируются (запрет #7).
 	restAddrs := cfg.BackendAddrs()
-	restHandler, err := restmux.NewMux(ctx, restAddrs)
+	restHandler, err := restmux.NewMux(ctx, restAddrs, backends)
 	if err != nil {
 		log.Fatalf("rest mux: %v", err)
 	}
 
 	// --- HTTP mux с health endpoints ---
-	// wsproxy: оборачивает grpc-gateway mux так, что streaming RPC (Watch) умеет
-	// отвечать через WebSocket, если клиент шлёт `Upgrade: websocket`. Иначе —
-	// обычный chunked HTTP. Один обёрнутый handler покрывает оба пути.
-	wsHandler := wsproxy.WebsocketProxy(
-		restHandler,
-		wsproxy.WithLogger(wsproxyLogger{l: logger}),
-	)
-
+	// wsproxy удалён: Watch RPC не существует в 1.0, WebSocket support не нужен.
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/healthz", health.HTTPHealthz)
 	httpMux.Handle("/readyz", health.HTTPReadyz(backends, logger))
-	httpMux.Handle("/", wsHandler)
+	httpMux.Handle("/", restHandler)
 
 	httpHandler := middleware.HTTPRequestID(
 		middleware.HTTPRecovery(logger)(
@@ -117,9 +111,6 @@ func main() {
 	httpSrv := &http.Server{
 		Handler:     httpHandler,
 		ReadTimeout: 30 * time.Second,
-		// WriteTimeout=0 — для WebSocket / chunked-streaming Watch не должно прерывать
-		// long-lived connections. http.Server hijacking при WebSocket берёт control,
-		// но без таймаута безопаснее.
 		IdleTimeout: 120 * time.Second,
 	}
 
