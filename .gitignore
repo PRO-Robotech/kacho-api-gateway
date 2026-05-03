@@ -1,0 +1,12 @@
+# Go build
+*.exe
+*.test
+*.out
+bin/
+dist/
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
