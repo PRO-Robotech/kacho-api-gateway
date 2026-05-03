@@ -76,8 +76,8 @@ func main() {
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
 	// --- REST mux (grpc-gateway) ---
-	// Примечание: proto-файлы не содержат HTTP-аннотаций (google.api.http),
-	// поэтому REST-маршруты /v1/... недоступны до фазы 1 (см. internal/restmux/mux.go).
+	// Регистрирует все 14 публичных сервисов через google.api.http аннотации.
+	// *InternalService* не регистрируются (запрет #7).
 	restAddrs := cfg.BackendAddrs()
 	restHandler, err := restmux.NewMux(ctx, restAddrs)
 	if err != nil {
