@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: kacho
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      containers:
+        - name: {{ .Values.name }}
+          image: "{{ .Values.image }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/usr/local/bin/api-gateway"]
+          ports:
+            - name: cmux
+              containerPort: {{ .Values.port }}
+          env:
+            - name: KACHO_API_GATEWAY_LISTEN_ADDR
+              value: ":{{ .Values.port }}"
+            - name: KACHO_RESOURCE_MANAGER_GRPC
+              value: "{{ .Values.backends.resourceManager }}"
+            - name: KACHO_VPC_GRPC
+              value: "{{ .Values.backends.vpc }}"
+            - name: KACHO_COMPUTE_GRPC
+              value: "{{ .Values.backends.compute }}"
+            - name: KACHO_LOADBALANCER_GRPC
+              value: "{{ .Values.backends.loadbalancer }}"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: cmux
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: cmux
+            initialDelaySeconds: 10
+            periodSeconds: 30
