@@ -24,14 +24,10 @@ spec:
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
-            - name: KACHO_RESOURCE_MANAGER_GRPC
+            - name: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC
               value: "{{ .Values.backends.resourceManager }}"
-            - name: KACHO_VPC_GRPC
+            - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
-            - name: KACHO_COMPUTE_GRPC
-              value: "{{ .Values.backends.compute }}"
-            - name: KACHO_LOADBALANCER_GRPC
-              value: "{{ .Values.backends.loadbalancer }}"
           readinessProbe:
             httpGet:
               path: /healthz

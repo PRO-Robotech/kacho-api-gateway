@@ -5,15 +5,13 @@ imagePullPolicy: IfNotPresent
 
 port: 8080
 
-# Адреса backend-сервисов (KACHO_*_GRPC env vars)
+# Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
+# Compute и loadbalancer заморожены — их адреса здесь отсутствуют.
 backends:
   resourceManager: resource-manager.kacho.svc.cluster.local:9090
   vpc: vpc.kacho.svc.cluster.local:9090
-  compute: compute.kacho.svc.cluster.local:9090
-  loadbalancer: loadbalancer.kacho.svc.cluster.local:9090
 
 ingress:
   enabled: true
   host: api.kacho.local
-  # nginx.ingress.kubernetes.io/proxy-read-timeout нужен для Watch-стримов (acceptance OQ-5)
   proxyReadTimeout: "120"

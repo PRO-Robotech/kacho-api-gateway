@@ -15,7 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	rmv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	orgv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
+	rmv1  "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
@@ -25,11 +26,16 @@ import (
 
 // mockOrgServer — простой mock OrganizationService для тестов.
 type mockOrgServer struct {
-	rmv1.UnimplementedOrganizationServiceServer
+	orgv1.UnimplementedOrganizationServiceServer
 }
 
-func (m *mockOrgServer) List(_ context.Context, _ *rmv1.ListOrganizationsRequest) (*rmv1.ListOrganizationsResponse, error) {
-	return &rmv1.ListOrganizationsResponse{}, nil
+func (m *mockOrgServer) List(_ context.Context, _ *orgv1.ListOrganizationsRequest) (*orgv1.ListOrganizationsResponse, error) {
+	return &orgv1.ListOrganizationsResponse{}, nil
+}
+
+// mockCloudServer — простой mock CloudService для тестов.
+type mockCloudServer struct {
+	rmv1.UnimplementedCloudServiceServer
 }
 
 // mockHealthServer — mock grpc.health.v1.Health для backends.
@@ -42,6 +48,7 @@ func (m *mockHealthServer) Check(_ context.Context, _ *healthpb.HealthCheckReque
 }
 
 // setupMockBackend запускает mock gRPC-backend и возвращает его адрес.
+// Регистрирует и OrganizationService, и CloudService — backend один для обоих.
 func setupMockBackend(t *testing.T) string {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -49,7 +56,8 @@ func setupMockBackend(t *testing.T) string {
 		t.Fatalf("listen mock backend: %v", err)
 	}
 	srv := grpc.NewServer()
-	rmv1.RegisterOrganizationServiceServer(srv, &mockOrgServer{})
+	orgv1.RegisterOrganizationServiceServer(srv, &mockOrgServer{})
+	rmv1.RegisterCloudServiceServer(srv, &mockCloudServer{})
 	healthpb.RegisterHealthServer(srv, &mockHealthServer{})
 	go srv.Serve(lis)
 	t.Cleanup(srv.GracefulStop)
@@ -114,7 +122,7 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 }
 
 // TestGateway_A1_GrpcProxyForwardsToBackend проверяет сценарий A1:
-// gateway проксирует запрос на правильный backend.
+// gateway проксирует запрос на правильный backend (OrganizationService).
 func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	backendAddr := setupMockBackend(t)
 
@@ -124,7 +132,11 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{"resourcemanager": conn}
+	// organizationmanager и resourcemanager — оба на одном backend
+	backends := proxy.Backends{
+		"resourcemanager":     conn,
+		"organizationmanager": conn,
+	}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -133,11 +145,11 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	}
 	t.Cleanup(func() { gwConn.Close() })
 
-	client := rmv1.NewOrganizationServiceClient(gwConn)
+	client := orgv1.NewOrganizationServiceClient(gwConn)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := client.List(ctx, &rmv1.ListOrganizationsRequest{})
+	resp, err := client.List(ctx, &orgv1.ListOrganizationsRequest{})
 	if err != nil {
 		t.Fatalf("List через gateway: %v", err)
 	}
@@ -151,7 +163,10 @@ func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	conn, _ := grpc.NewClient("localhost:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{"resourcemanager": conn}
+	backends := proxy.Backends{
+		"resourcemanager":     conn,
+		"organizationmanager": conn,
+	}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -164,7 +179,7 @@ func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = gwConn.Invoke(ctx, "/kacho.cloud.unknown.v1.FooService/Bar",
-		&rmv1.ListOrganizationsRequest{}, &rmv1.ListOrganizationsResponse{})
+		&orgv1.ListOrganizationsRequest{}, &orgv1.ListOrganizationsResponse{})
 	if err == nil {
 		t.Fatal("ожидали ошибку NOT_FOUND")
 	}
@@ -181,7 +196,10 @@ func TestGateway_E1_InternalServiceBlockedAtGateway(t *testing.T) {
 	conn, _ := grpc.NewClient(backendAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{"resourcemanager": conn}
+	backends := proxy.Backends{
+		"resourcemanager":     conn,
+		"organizationmanager": conn,
+	}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -193,7 +211,7 @@ func TestGateway_E1_InternalServiceBlockedAtGateway(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = gwConn.Invoke(ctx, "/kacho.cloud.resourcemanager.v1.FolderInternalService/Exists",
-		&rmv1.ListOrganizationsRequest{}, &rmv1.ListOrganizationsResponse{})
+		&orgv1.ListOrganizationsRequest{}, &orgv1.ListOrganizationsResponse{})
 	if err == nil {
 		t.Fatal("ожидали NOT_FOUND для InternalService")
 	}
@@ -222,7 +240,10 @@ func TestGateway_G5_GrpcHealthCheck(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{"resourcemanager": conn}
+	backends := proxy.Backends{
+		"resourcemanager":     conn,
+		"organizationmanager": conn,
+	}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -253,7 +274,10 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{"resourcemanager": conn}
+	backends := proxy.Backends{
+		"resourcemanager":     conn,
+		"organizationmanager": conn,
+	}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr,
@@ -264,7 +288,7 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 	}
 	t.Cleanup(func() { gwConn.Close() })
 
-	client := rmv1.NewOrganizationServiceClient(gwConn)
+	client := orgv1.NewOrganizationServiceClient(gwConn)
 
 	const n = 20
 	errs := make(chan error, n)
@@ -272,7 +296,7 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_, err := client.List(ctx, &rmv1.ListOrganizationsRequest{})
+			_, err := client.List(ctx, &orgv1.ListOrganizationsRequest{})
 			errs <- err
 		}()
 	}

@@ -1,22 +1,14 @@
 // Package restmux инициализирует grpc-gateway ServeMux для REST-запросов.
 //
-// Регистрирует все 14 публичных сервисов Kachō + OperationService через
-// RegisterXxxServiceHandlerFromEndpoint / RegisterOperationServiceHandlerServer.
+// Регистрирует активные сервисы Kachō 1.0 + OperationService через OpsProxy.
+// Compute, loadbalancer, SecurityGroup, Gateway — НЕ регистрируются (заморожены).
 // *InternalService* не регистрируются (запрет CLAUDE.md #7).
 //
-// URL-конвенция flat 1.0 API:
-//
-//	GET    /v1/instances/{id}          → Get
-//	GET    /v1/instances               → List
-//	POST   /v1/instances               → Create → Operation
-//	PATCH  /v1/instances/{id}          → Update → Operation
-//	DELETE /v1/instances/{id}          → Delete → Operation
-//	POST   /v1/instances/{id}:start    → Start  → Operation
-//	POST   /v1/instances/{id}:stop     → Stop   → Operation
-//	POST   /v1/instances/{id}:restart  → Restart → Operation
-//	GET    /v1/operations/{id}         → OperationService.Get
-//	GET    /v1/operations              → OperationService.List
-//	POST   /v1/operations/{id}:cancel  → OperationService.Cancel
+// Активные сервисы:
+//   - resourcemanager.v1: Cloud, Folder
+//   - organizationmanager.v1: Organization (backend: resource-manager)
+//   - vpc.v1: Network, Subnet, Address, RouteTable
+//   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
 import (
@@ -27,24 +19,22 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	cmpv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
-	lbv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
-	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation/v1"
-	rmv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
-	vpcv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	orgpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+	rmpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	vpcpb   "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
 
-// NewMux создаёт grpc-gateway ServeMux и регистрирует все 14 публичных сервисов
+// NewMux создаёт grpc-gateway ServeMux и регистрирует активные публичные сервисы
 // плюс OperationService (через OpsProxy).
 //
 // addrs — карта domain → адрес gRPC backend:
 //
-//	"resourcemanager" → resource-manager.kacho.svc.cluster.local:9090
-//	"vpc"             → vpc.kacho.svc.cluster.local:9090
-//	"compute"         → compute.kacho.svc.cluster.local:9090
-//	"loadbalancer"    → loadbalancer.kacho.svc.cluster.local:9090
+//	"resourcemanager"     → resource-manager.kacho.svc.cluster.local:9090
+//	"organizationmanager" → resource-manager.kacho.svc.cluster.local:9090 (тот же backend)
+//	"vpc"                 → vpc.kacho.svc.cluster.local:9090
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -52,67 +42,42 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	var rmAddr, vpcAddr, cmpAddr, lbAddr string
+	var rmAddr, vpcAddr string
 	if addrs != nil {
 		rmAddr = addrs["resourcemanager"]
 		vpcAddr = addrs["vpc"]
-		cmpAddr = addrs["compute"]
-		lbAddr = addrs["loadbalancer"]
 	}
 
-	// --- resourcemanager ---
-	if err := rmv1.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-		return nil, fmt.Errorf("register OrganizationService: %w", err)
-	}
-	if err := rmv1.RegisterCloudServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+	// --- resourcemanager: Cloud + Folder ---
+	if err := rmpb.RegisterCloudServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
 		return nil, fmt.Errorf("register CloudService: %w", err)
 	}
-	if err := rmv1.RegisterFolderServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+	if err := rmpb.RegisterFolderServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
 		return nil, fmt.Errorf("register FolderService: %w", err)
 	}
 
-	// --- vpc ---
-	if err := vpcv1.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+	// --- organizationmanager: Organization (backend: resource-manager) ---
+	if err := orgpb.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+		return nil, fmt.Errorf("register OrganizationService: %w", err)
+	}
+
+	// --- vpc: Network + Subnet + Address + RouteTable ---
+	if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register NetworkService: %w", err)
 	}
-	if err := vpcv1.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+	if err := vpcpb.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register SubnetService: %w", err)
 	}
-	if err := vpcv1.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register SecurityGroupService: %w", err)
-	}
-	if err := vpcv1.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register RouteTableService: %w", err)
-	}
-	if err := vpcv1.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+	if err := vpcpb.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register AddressService: %w", err)
 	}
-
-	// --- compute ---
-	if err := cmpv1.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, cmpAddr, opts); err != nil {
-		return nil, fmt.Errorf("register InstanceService: %w", err)
-	}
-	if err := cmpv1.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, cmpAddr, opts); err != nil {
-		return nil, fmt.Errorf("register DiskService: %w", err)
-	}
-	if err := cmpv1.RegisterImageServiceHandlerFromEndpoint(ctx, mux, cmpAddr, opts); err != nil {
-		return nil, fmt.Errorf("register ImageService: %w", err)
-	}
-	if err := cmpv1.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, cmpAddr, opts); err != nil {
-		return nil, fmt.Errorf("register SnapshotService: %w", err)
+	if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		return nil, fmt.Errorf("register RouteTableService: %w", err)
 	}
 
-	// --- loadbalancer ---
-	if err := lbv1.RegisterNetworkLoadBalancerServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
-		return nil, fmt.Errorf("register NetworkLoadBalancerService: %w", err)
-	}
-	if err := lbv1.RegisterTargetGroupServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
-		return nil, fmt.Errorf("register TargetGroupService: %w", err)
-	}
-
-	// --- operations (OpsProxy) ---
-	// OperationService не имеет своего отдельного backend — он живёт in-process как OpsProxy.
-	// Регистрируем через RegisterOperationServiceHandlerServer (локальный вызов, без лишнего dial).
+	// --- OperationService (OpsProxy, in-process) ---
+	// Не имеет отдельного backend — живёт in-process как OpsProxy.
+	// Регистрируем через RegisterOperationServiceHandlerServer (локальный вызов, без dial).
 	var opsSrv operationpb.OperationServiceServer
 	if conns != nil {
 		opsSrv = opsproxy.New(conns)

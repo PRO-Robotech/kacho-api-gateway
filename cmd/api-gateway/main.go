@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
-	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
@@ -40,6 +40,8 @@ func main() {
 	defer cancel()
 
 	// --- Backend connections: один постоянный ClientConn на backend ---
+	// Активные backends: resource-manager + vpc.
+	// Compute и loadbalancer заморожены — dial не выполняется.
 	keepaliveParams := keepalive.ClientParameters{
 		Time:                30 * time.Second,
 		Timeout:             10 * time.Second,
@@ -79,13 +81,13 @@ func main() {
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
 	// OpsProxy регистрируется как нативный gRPC-сервис в gateway-сервере.
-	// Запросы /kacho.cloud.operation.v1.OperationService/* идут напрямую сюда,
-	// минуя transparent-proxy director (он бы отправил их на несуществующий "operation"-backend).
+	// Запросы /kacho.cloud.operation.OperationService/* идут напрямую сюда,
+	// минуя transparent-proxy director.
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
 
 	// --- REST mux (grpc-gateway) ---
-	// Регистрирует все 14 публичных сервисов + OperationService через OpsProxy.
+	// Регистрирует активные публичные сервисы + OperationService через OpsProxy.
 	// *InternalService* не регистрируются (запрет #7).
 	restAddrs := cfg.BackendAddrs()
 	restHandler, err := restmux.NewMux(ctx, restAddrs, backends)
@@ -94,7 +96,6 @@ func main() {
 	}
 
 	// --- HTTP mux с health endpoints ---
-	// wsproxy удалён: Watch RPC не существует в 1.0, WebSocket support не нужен.
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/healthz", health.HTTPHealthz)
 	httpMux.Handle("/readyz", health.HTTPReadyz(backends, logger))
