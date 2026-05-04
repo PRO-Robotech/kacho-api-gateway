@@ -1,16 +1,23 @@
 // Package opsproxy реализует OpsProxy — фасад OperationService для api-gateway.
 //
-// Operation.id имеет domain-prefix: "rm_<uuid>", "vpc_<uuid>", "org_<uuid>", и т.д.
+// Operation.id имеет 3-символьный domain-prefix (verbatim cloud-provider-API
+// convention): "b1g…" → resource-manager, "enp…" → vpc, и т.д.
 // OpsProxy парсит prefix → выбирает нужный backend-клиент → проксирует запрос.
 // Клиент видит единый endpoint /operations/*.
 //
-// Маппинг prefix → backend:
+// Маппинг префикса на backend:
 //
-//	"rm_"               → resourcemanager
-//	"resourcemanager_"  → resourcemanager
-//	"org_"              → resourcemanager (Organization тоже на resource-manager)
-//	"organizationmanager_" → resourcemanager
-//	"vpc_"              → vpc
+//	"b1g" → resourcemanager   (операции по Cloud / Folder)
+//	"bpf" → resourcemanager   (операции по Organization)
+//	"enp" → vpc               (операции по Network / RouteTable / SecurityGroup)
+//	"e9b" → vpc               (операции по Subnet / Address)
+//
+// Префикс заведомо стабильный: ровно 3 символа, lowercase crockford-base32-friendly.
+// Тело id (17 символов) — непрозрачно для proxy.
+//
+// Legacy-префиксы "rm_" / "vpc_" принимаются для backward-compat (id могут
+// ещё лежать в БД после переходного периода). Это handled через legacyPrefix
+// fallback ниже.
 package opsproxy
 
 import (
@@ -24,24 +31,29 @@ import (
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 )
 
-// prefixToBackend нормализует domain-prefix из Operation.id к имени backend.
+// prefixToBackend — карта 3-символьного префикса в имя backend-домена.
 var prefixToBackend = map[string]string{
-	"rm":               "resourcemanager",
-	"resourcemanager":  "resourcemanager",
-	"org":              "resourcemanager",
+	// resource-manager domain
+	"b1g": "resourcemanager", // Cloud / Folder / op-root
+	"bpf": "resourcemanager", // Organization
+	// vpc domain
+	"enp": "vpc", // Network / RouteTable / SecurityGroup / vpc op-root
+	"e9b": "vpc", // Subnet / Address
+}
+
+// legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, всё ещё
+// допустимые на чтение (например, если они закешированы в долгоживущих
+// клиентах). Не используется при создании новых операций.
+var legacyPrefixToBackend = map[string]string{
+	"rm":                  "resourcemanager",
+	"resourcemanager":     "resourcemanager",
+	"org":                 "resourcemanager",
 	"organizationmanager": "resourcemanager",
-	"vpc":              "vpc",
+	"vpc":                 "vpc",
 }
 
 // OpsProxy реализует operationpb.OperationServiceServer, проксируя запросы
 // к конкретному backend на основе domain-prefix в Operation.id.
-//
-// domain-prefix — первый сегмент до "_" в id:
-//
-//	"rm_a1b2..."           → backends["resourcemanager"]
-//	"resourcemanager_…"   → backends["resourcemanager"]
-//	"org_…"               → backends["resourcemanager"]
-//	"vpc_c3d4..."          → backends["vpc"]
 type OpsProxy struct {
 	operationpb.UnimplementedOperationServiceServer
 	// backends — карта domain → OperationServiceClient данного backend.
@@ -58,26 +70,36 @@ func New(conns map[string]*grpc.ClientConn) *OpsProxy {
 	return &OpsProxy{backends: clients}
 }
 
-// domainFromID парсит domain-prefix из Operation.id и нормализует его к backend-ключу.
-// Формат: "<prefix>_<uuid>" → backend-ключ из prefixToBackend.
+// domainFromID парсит domain-prefix из Operation.id и нормализует его к
+// backend-ключу.
+//
+// Порядок проверок:
+//  1. id состоит из 20 символов и первые 3 матчатся на prefixToBackend → новый формат.
+//  2. id содержит "_" и часть до "_" есть в legacyPrefixToBackend → legacy формат.
+//
+// Возвращает ("", false) если ни один формат не подошёл.
 func domainFromID(id string) (string, bool) {
-	parts := strings.SplitN(id, "_", 2)
-	if len(parts) < 2 || parts[0] == "" {
-		return "", false
+	// Новый формат: ровно 20 символов, первые 3 — prefix.
+	if len(id) == 20 {
+		if backend, ok := prefixToBackend[id[:3]]; ok {
+			return backend, true
+		}
 	}
-	backend, ok := prefixToBackend[parts[0]]
-	if !ok {
-		// Неизвестный prefix — пробуем как прямой backend-ключ (например "vpc_…" → "vpc").
-		return parts[0], true
+	// Legacy формат: "<prefix>_<uuid>".
+	if i := strings.Index(id, "_"); i > 0 {
+		legacyPrefix := id[:i]
+		if backend, ok := legacyPrefixToBackend[legacyPrefix]; ok {
+			return backend, true
+		}
 	}
-	return backend, true
+	return "", false
 }
 
 // Get проксирует OperationService.Get к нужному backend по prefix id.
 func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest) (*operationpb.Operation, error) {
 	domain, ok := domainFromID(req.OperationId)
 	if !ok {
-		return nil, status.Errorf(codes.InvalidArgument, "operation_id must have domain prefix: %q", req.OperationId)
+		return nil, status.Errorf(codes.InvalidArgument, "operation_id has unknown prefix: %q", req.OperationId)
 	}
 	client, ok := p.backends[domain]
 	if !ok {
@@ -90,7 +112,7 @@ func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest
 func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationRequest) (*operationpb.Operation, error) {
 	domain, ok := domainFromID(req.OperationId)
 	if !ok {
-		return nil, status.Errorf(codes.InvalidArgument, "operation_id must have domain prefix: %q", req.OperationId)
+		return nil, status.Errorf(codes.InvalidArgument, "operation_id has unknown prefix: %q", req.OperationId)
 	}
 	client, ok := p.backends[domain]
 	if !ok {

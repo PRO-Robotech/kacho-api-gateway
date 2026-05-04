@@ -128,7 +128,8 @@ func TestOpsProxy_Get_ResourcemanagerPrefixRoutesToRM(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_UnknownDomain проверяет NOT_FOUND для неизвестного domain-prefix.
+// TestOpsProxy_Get_UnknownDomain проверяет INVALID_ARGUMENT для unknown legacy prefix
+// (новый поведение: legacy prefix не из known set → 3, как и любой синтаксис без prefix).
 func TestOpsProxy_Get_UnknownDomain(t *testing.T) {
 	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
@@ -138,8 +139,44 @@ func TestOpsProxy_Get_UnknownDomain(t *testing.T) {
 		t.Fatal("ожидали ошибку для неизвестного domain")
 	}
 	st, ok := status.FromError(err)
-	if !ok || st.Code() != codes.NotFound {
-		t.Errorf("ожидали NOT_FOUND, получили %v", err)
+	if !ok || st.Code() != codes.InvalidArgument {
+		t.Errorf("ожидали INVALID_ARGUMENT (unknown prefix), получили %v", err)
+	}
+}
+
+// TestOpsProxy_Get_NewFormatRM проверяет роутинг новых 20-char id с
+// 3-char prefix b1g (resource-manager).
+func TestOpsProxy_Get_NewFormatRM(t *testing.T) {
+	id := "b1g0123456789abcdefg" // 20 chars
+	op := &operationpb.Operation{Id: id, Description: "create cloud (new fmt)"}
+	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
+
+	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get b1g…: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+}
+
+// TestOpsProxy_Get_NewFormatVPC проверяет роутинг новых 20-char id с
+// 3-char prefix enp (vpc).
+func TestOpsProxy_Get_NewFormatVPC(t *testing.T) {
+	id := "enpfedcba98765432109" // 20 chars
+	op := &operationpb.Operation{Id: id, Description: "create network (new fmt)"}
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
+
+	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get enp…: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
 	}
 }
 
