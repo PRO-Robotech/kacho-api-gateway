@@ -107,10 +107,15 @@ func main() {
 	httpMux.Handle("/readyz", health.HTTPReadyz(backends, logger))
 	httpMux.Handle("/", restHandler)
 
+	// Idempotency-Key store: in-memory с TTL=24h (как в YC).
+	idempStore := middleware.NewIdempotencyStore(middleware.IdempotencyTTL)
+
 	httpHandler := middleware.HTTPRequestID(
 		middleware.HTTPRecovery(logger)(
 			middleware.HTTPAuthNoop(
-				middleware.HTTPAccessLog(logger)(httpMux),
+				middleware.HTTPAccessLog(logger)(
+					middleware.HTTPIdempotency(idempStore)(httpMux),
+				),
 			),
 		),
 	)
