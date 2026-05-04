@@ -40,16 +40,20 @@ import (
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
 func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
-	// JSON-marshaller с UseProtoNames=false: верстаем JSON-поля в camelCase
-	// (verbatim YC contract). EmitUnpopulated=true: отдаём явные нулевые
-	// значения для всех полей, чтобы клиент не удивлялся отсутствующим ключам.
-	// UI клиент применяет camel↔snake transformer в api/client.ts.
+	// JSON-marshaller verbatim YC contract:
+	//   - UseProtoNames=false → camelCase JSON-поля.
+	//   - EmitUnpopulated=true → отдаём явные нулевые значения (`false`/`""`/`{}`)
+	//     для proto-полей; YC так делает (см. YC-DIFF-EMIT-UNPOPULATED.md).
+	//
+	// Поломка прошлой попытки EmitUnpopulated была в том, что protojson не мог
+	// распаковать `BadRequest.field_violations[]` (Any) без зарегистрированного
+	// errdetails-типа в protoregistry. Это решено в `cmd/api-gateway/main.go`
+	// blank-import `_ "google.golang.org/genproto/googleapis/rpc/errdetails"`,
+	// поэтому EmitUnpopulated теперь безопасно включить.
 	jsonMarshaler := &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
-			UseProtoNames: false, // verbatim YC contract — camelCase
-			// EmitUnpopulated убран: вместе с BadRequest.field_violations[]
-			// (Any-message с FieldViolation внутри) protojson возвращает
-			// "failed to marshal error message" для error responses.
+			UseProtoNames:   false,
+			EmitUnpopulated: true,
 		},
 		UnmarshalOptions: protojson.UnmarshalOptions{
 			DiscardUnknown: true,
