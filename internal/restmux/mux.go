@@ -18,6 +18,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	orgpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
@@ -39,7 +40,24 @@ import (
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
 func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
-	mux := runtime.NewServeMux()
+	// JSON-marshaller с UseProtoNames=false: верстаем JSON-поля в camelCase
+	// (verbatim YC contract). EmitUnpopulated=true: отдаём явные нулевые
+	// значения для всех полей, чтобы клиент не удивлялся отсутствующим ключам.
+	// UI клиент применяет camel↔snake transformer в api/client.ts.
+	jsonMarshaler := &runtime.JSONPb{
+		MarshalOptions: protojson.MarshalOptions{
+			UseProtoNames: false, // verbatim YC contract — camelCase
+			// EmitUnpopulated убран: вместе с BadRequest.field_violations[]
+			// (Any-message с FieldViolation внутри) protojson возвращает
+			// "failed to marshal error message" для error responses.
+		},
+		UnmarshalOptions: protojson.UnmarshalOptions{
+			DiscardUnknown: true,
+		},
+	}
+	mux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonMarshaler),
+	)
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
 	var rmAddr, vpcAddr string

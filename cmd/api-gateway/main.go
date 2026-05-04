@@ -16,6 +16,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	// Регистрация errdetails-типов в protoregistry — иначе protojson не
+	// разворачивает Any в BadRequest.FieldViolations / ResourceInfo при
+	// marshalling InvalidArgument-ответов в JSON, и клиент видит только
+	// "failed to marshal error message".
+	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
+
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
