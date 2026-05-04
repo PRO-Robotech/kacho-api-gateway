@@ -96,6 +96,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register RouteTableService: %w", err)
 	}
+	if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		return nil, fmt.Errorf("register SecurityGroupService: %w", err)
+	}
 
 	// --- OperationService (OpsProxy, in-process) ---
 	// Не имеет отдельного backend — живёт in-process как OpsProxy.
