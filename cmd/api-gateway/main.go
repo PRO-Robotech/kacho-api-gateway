@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 
 	// Регистрация errdetails-типов в protoregistry — иначе protojson не
 	// разворачивает Any в BadRequest.FieldViolations / ResourceInfo при
@@ -91,6 +92,13 @@ func main() {
 	// минуя transparent-proxy director.
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
+
+	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
+	// сервисов через ServerReflection. Видны только сервисы, нативно
+	// зарегистрированные на api-gateway (OperationService + Health). Сервисы
+	// vpc/resource-manager доступны через transparent-proxy и видны в
+	// reflection их собственных backends (если включить там).
+	reflection.Register(grpcSrv)
 
 	// --- REST mux (grpc-gateway) ---
 	// Регистрирует активные публичные сервисы + OperationService через OpsProxy.
