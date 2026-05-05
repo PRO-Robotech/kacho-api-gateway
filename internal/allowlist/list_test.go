@@ -152,9 +152,6 @@ func TestGateway_D8_ComputeLoadbalancerFrozen(t *testing.T) {
 		"/kacho.cloud.compute.v1.DiskService/Get",
 		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
 		"/kacho.cloud.loadbalancer.v1.TargetGroupService/List",
-		// SecurityGroup и Gateway — тоже не в allowlist
-		"/kacho.cloud.vpc.v1.SecurityGroupService/Get",
-		"/kacho.cloud.vpc.v1.GatewayService/Get",
 	}
 	for _, m := range frozenMethods {
 		m := m

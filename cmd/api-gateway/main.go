@@ -76,6 +76,26 @@ func main() {
 		backends[domain] = conn
 	}
 
+	// Self-loopback ClientConn for the "operation" domain. Requests for
+	// /kacho.cloud.operation.OperationService/* arrive natively (registered
+	// below) and are dispatched directly to OpsProxy. But yc CLI sends
+	// /yandex.cloud.operation.OperationService/* — that path is NOT registered
+	// natively, so it hits the UnknownServiceHandler, which rewrites it to
+	// /kacho.cloud.operation.OperationService/* and looks up backend by domain
+	// "operation". This loopback satisfies the lookup; the connection re-enters
+	// the gateway through the listening port and matches the natively-registered
+	// kacho.cloud.operation.OperationService.
+	loopbackAddr := cfg.ListenAddr
+	if len(loopbackAddr) > 0 && loopbackAddr[0] == ':' {
+		loopbackAddr = "127.0.0.1" + loopbackAddr
+	}
+	opsLoopback, dialErr := grpc.NewClient(loopbackAddr, dialOpts...)
+	if dialErr != nil {
+		log.Fatalf("dial operation self-loopback (%s): %v", loopbackAddr, dialErr)
+	}
+	defer opsLoopback.Close()
+	backends["operation"] = opsLoopback
+
 	// --- gRPC server ---
 	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
 	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
