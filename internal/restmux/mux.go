@@ -24,6 +24,7 @@ import (
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	rmpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
 	vpcpb   "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	pepb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
@@ -98,6 +99,12 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	}
 	if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register SecurityGroupService: %w", err)
+	}
+	if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		return nil, fmt.Errorf("register GatewayService: %w", err)
+	}
+	if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
 	}
 
 	// --- OperationService (OpsProxy, in-process) ---

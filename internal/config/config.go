@@ -6,14 +6,29 @@ import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
 // Переменные окружения:
 //
 //	KACHO_API_GATEWAY_LISTEN_ADDR         — адрес для cmux listener (default: :8080)
+//	KACHO_API_GATEWAY_TLS_LISTEN_ADDR     — адрес для TLS listener (default: пусто — TLS отключён)
+//	KACHO_API_GATEWAY_TLS_CERT_FILE       — путь к TLS-сертификату (PEM)
+//	KACHO_API_GATEWAY_TLS_KEY_FILE        — путь к TLS-приватному ключу (PEM)
 //	KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC — адрес backend resource-manager
 //	KACHO_API_GATEWAY_VPC_GRPC            — адрес backend vpc
+//
+// TLS требуется для совместимости с CLI-клиентами (yc CLI hardcoded требует TLS).
+// Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
 //
 // Compute и loadbalancer заморожены — env vars удалены.
 type Config struct {
 	ListenAddr          string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
+	TLSListenAddr       string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
+	TLSCertFile         string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
+	TLSKeyFile          string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
 	ResourceManagerAddr string `envconfig:"KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC"  default:"resource-manager.kacho.svc.cluster.local:9090"`
 	VPCAddr             string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+}
+
+// TLSEnabled возвращает true, если TLS-listener должен быть запущен.
+// Требует одновременно TLS_LISTEN_ADDR + TLS_CERT_FILE + TLS_KEY_FILE.
+func (c Config) TLSEnabled() bool {
+	return c.TLSListenAddr != "" && c.TLSCertFile != "" && c.TLSKeyFile != ""
 }
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.

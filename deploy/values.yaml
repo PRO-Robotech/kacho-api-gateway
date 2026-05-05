@@ -4,12 +4,22 @@ image: kacho-api-gateway:dev
 imagePullPolicy: IfNotPresent
 
 port: 8080
+tlsPort: 8443
 
 # Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
 # Compute и loadbalancer заморожены — их адреса здесь отсутствуют.
 backends:
   resourceManager: resource-manager.kacho.svc.cluster.local:9090
   vpc: vpc.kacho.svc.cluster.local:9090
+
+# TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
+# Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.
+# Используется для совместимости с yc CLI и другими TLS-only клиентами.
+tls:
+  enabled: true
+  secretName: api-gateway-tls
+  certPath: /etc/api-gateway/tls/tls.crt
+  keyPath: /etc/api-gateway/tls/tls.key
 
 ingress:
   enabled: true

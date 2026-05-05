@@ -21,6 +21,10 @@ spec:
           ports:
             - name: cmux
               containerPort: {{ .Values.port }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              containerPort: {{ .Values.tlsPort }}
+            {{- end }}
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
@@ -28,6 +32,20 @@ spec:
               value: "{{ .Values.backends.resourceManager }}"
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
+            {{- if .Values.tls.enabled }}
+            - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
+              value: ":{{ .Values.tlsPort }}"
+            - name: KACHO_API_GATEWAY_TLS_CERT_FILE
+              value: "{{ .Values.tls.certPath }}"
+            - name: KACHO_API_GATEWAY_TLS_KEY_FILE
+              value: "{{ .Values.tls.keyPath }}"
+            {{- end }}
+          {{- if .Values.tls.enabled }}
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/api-gateway/tls
+              readOnly: true
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /healthz
@@ -40,3 +58,9 @@ spec:
               port: cmux
             initialDelaySeconds: 10
             periodSeconds: 30
+      {{- if .Values.tls.enabled }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.secretName }}
+      {{- end }}

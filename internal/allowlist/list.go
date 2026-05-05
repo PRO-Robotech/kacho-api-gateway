@@ -51,6 +51,21 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.RouteTableService/Create": {},
 	"/kacho.cloud.vpc.v1.RouteTableService/Update": {},
 	"/kacho.cloud.vpc.v1.RouteTableService/Delete": {},
+	// vpc.v1 — GatewayService (NAT egress)
+	"/kacho.cloud.vpc.v1.GatewayService/Get":            {},
+	"/kacho.cloud.vpc.v1.GatewayService/List":           {},
+	"/kacho.cloud.vpc.v1.GatewayService/Create":         {},
+	"/kacho.cloud.vpc.v1.GatewayService/Update":         {},
+	"/kacho.cloud.vpc.v1.GatewayService/Delete":         {},
+	"/kacho.cloud.vpc.v1.GatewayService/Move":           {},
+	"/kacho.cloud.vpc.v1.GatewayService/ListOperations": {},
+	// vpc.v1.privatelink — PrivateEndpointService
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Get":            {},
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/List":           {},
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Create":         {},
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Update":         {},
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Delete":         {},
+	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/ListOperations": {},
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},

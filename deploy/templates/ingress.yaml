@@ -9,6 +9,16 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
 spec:
   ingressClassName: nginx
+  {{- if .Values.tls.enabled }}
+  # TLS termination на ingress используя тот же cert, что и api-gateway pod.
+  # secretName совпадает с api-gateway-tls (создаётся вручную через kubectl).
+  # Без этой секции ingress-nginx использует default-fake-cert, не подходящий
+  # для yc CLI (требует, чтобы клиент доверял подписи).
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.tls.secretName }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host }}
       http:

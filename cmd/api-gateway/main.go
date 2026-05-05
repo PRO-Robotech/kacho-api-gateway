@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"log/slog"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/soheilhy/cmux"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -160,6 +162,54 @@ func main() {
 			logger.Error("http serve error", "error", serveErr)
 		}
 	}()
+
+	// --- TLS listener (опционально) для совместимости с yc CLI / TLS-клиентами ---
+	// Запускаем отдельный TLS-листенер; за ним — отдельный cmux, который точно так же
+	// разделяет gRPC vs HTTP/REST после TLS-handshake. Тот же grpcSrv и httpSrv обслуживают
+	// connections (через два независимых serve goroutine).
+	var tlsCmux cmux.CMux
+	if cfg.TLSEnabled() {
+		cert, certErr := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if certErr != nil {
+			log.Fatalf("load TLS cert (%s, %s): %v", cfg.TLSCertFile, cfg.TLSKeyFile, certErr)
+		}
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			NextProtos:   []string{"h2", "http/1.1"},
+			MinVersion:   tls.VersionTLS12,
+		}
+		tlsListener, tlsErr := tls.Listen("tcp", cfg.TLSListenAddr, tlsCfg)
+		if tlsErr != nil {
+			log.Fatalf("tls listen %s: %v", cfg.TLSListenAddr, tlsErr)
+		}
+		logger.Info("api-gateway TLS started", "addr", cfg.TLSListenAddr)
+
+		// Включаем h2c-style HTTP/2 поддержку для http.Server (через golang.org/x/net/http2),
+		// иначе HTTP/2 over TLS не работает корректно.
+		_ = http2.ConfigureServer(httpSrv, &http2.Server{})
+
+		tlsCmux = cmux.New(tlsListener)
+		tlsGrpcL := tlsCmux.MatchWithWriters(
+			cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),
+		)
+		tlsHTTPL := tlsCmux.Match(cmux.Any())
+
+		go func() {
+			if serveErr := grpcSrv.Serve(tlsGrpcL); serveErr != nil {
+				logger.Error("tls grpc serve error", "error", serveErr)
+			}
+		}()
+		go func() {
+			if serveErr := httpSrv.Serve(tlsHTTPL); serveErr != nil && serveErr != http.ErrServerClosed {
+				logger.Error("tls http serve error", "error", serveErr)
+			}
+		}()
+		go func() {
+			if serveErr := tlsCmux.Serve(); serveErr != nil {
+				logger.Error("tls cmux serve error", "error", serveErr)
+			}
+		}()
+	}
 
 	go func() {
 		<-ctx.Done()
