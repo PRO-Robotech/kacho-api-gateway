@@ -27,6 +27,11 @@ import (
 
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 
+	endpointpb "github.com/PRO-Robotech/kacho-yc-shim/gen/go/yandex/cloud/endpoint"
+	iampb "github.com/PRO-Robotech/kacho-yc-shim/gen/go/yandex/cloud/iam/v1"
+	shimendpoint "github.com/PRO-Robotech/kacho-yc-shim/endpoint"
+	shimiam "github.com/PRO-Robotech/kacho-yc-shim/iam"
+
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
@@ -72,8 +77,10 @@ func main() {
 	}
 
 	// --- gRPC server ---
-	director := proxy.NewDirector(backends)
-	grpcSrv := proxy.NewServer(director,
+	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
+	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
+	resolver := proxy.Resolver(backends)
+	grpcSrv := proxy.NewServer(resolver,
 		grpc.ChainUnaryInterceptor(
 			middleware.UnaryRequestID,
 			middleware.UnaryRecovery(logger),
@@ -94,6 +101,16 @@ func main() {
 	// минуя transparent-proxy director.
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
+
+	// yc CLI compatibility shim (kacho-yc-shim repo): register
+	// yandex.cloud.endpoint.ApiEndpointService for service discovery and
+	// yandex.cloud.iam.v1.IamTokenService for OAuth-token exchange. The shim
+	// uses the yandex.cloud.* proto namespace (isolated to that one repo); all
+	// other yandex.cloud.* calls are method-rewritten to kacho.cloud.* by the
+	// unknown-service handler.
+	advertisedEndpoint := cfg.AdvertisedEndpoint()
+	endpointpb.RegisterApiEndpointServiceServer(grpcSrv, shimendpoint.New(advertisedEndpoint))
+	iampb.RegisterIamTokenServiceServer(grpcSrv, shimiam.New())
 
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
 	// сервисов через ServerReflection. Видны только сервисы, нативно

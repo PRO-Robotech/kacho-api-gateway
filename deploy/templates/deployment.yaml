@@ -40,6 +40,8 @@ spec:
             - name: KACHO_API_GATEWAY_TLS_KEY_FILE
               value: "{{ .Values.tls.keyPath }}"
             {{- end }}
+            - name: KACHO_API_GATEWAY_ADVERTISED_ENDPOINT
+              value: "{{ .Values.advertisedEndpoint }}"
           {{- if .Values.tls.enabled }}
           volumeMounts:
             - name: tls

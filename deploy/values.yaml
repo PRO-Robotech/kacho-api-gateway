@@ -25,3 +25,10 @@ ingress:
   enabled: true
   host: api.kacho.local
   proxyReadTimeout: "120"
+
+# Advertised endpoint for yc CLI compatibility shim.
+# Returned in yandex.cloud.endpoint.ApiEndpointService.List for ALL endpoint IDs,
+# so that yc CLI dials this address for every service after discovery.
+# Production: api.kacho.local:443 (or whatever externally resolvable host:port).
+# Dev (kind + port-forward): override to localhost:18443.
+advertisedEndpoint: api.kacho.local:443

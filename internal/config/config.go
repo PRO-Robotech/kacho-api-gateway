@@ -23,12 +23,23 @@ type Config struct {
 	TLSKeyFile          string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
 	ResourceManagerAddr string `envconfig:"KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC"  default:"resource-manager.kacho.svc.cluster.local:9090"`
 	VPCAddr             string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+
+	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
+	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
+	// External clients dial this address. Defaults to api.kacho.local:443.
+	AdvertisedEndpointAddr string `envconfig:"KACHO_API_GATEWAY_ADVERTISED_ENDPOINT" default:"api.kacho.local:443"`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
 // Требует одновременно TLS_LISTEN_ADDR + TLS_CERT_FILE + TLS_KEY_FILE.
 func (c Config) TLSEnabled() bool {
 	return c.TLSListenAddr != "" && c.TLSCertFile != "" && c.TLSKeyFile != ""
+}
+
+// AdvertisedEndpoint returns the host:port to advertise in the yc CLI
+// compatibility shim (ApiEndpointService.List response).
+func (c Config) AdvertisedEndpoint() string {
+	return c.AdvertisedEndpointAddr
 }
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.

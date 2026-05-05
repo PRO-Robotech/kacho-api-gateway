@@ -68,8 +68,8 @@ func setupMockBackend(t *testing.T) string {
 func setupGateway(t *testing.T, backends proxy.Backends) string {
 	t.Helper()
 
-	director := proxy.NewDirector(backends)
-	grpcSrv := proxy.NewServer(director,
+	resolver := proxy.Resolver(backends)
+	grpcSrv := proxy.NewServer(resolver,
 		grpc.ChainUnaryInterceptor(middleware.UnaryRequestID),
 		grpc.ChainStreamInterceptor(middleware.StreamRequestID),
 	)
