@@ -2,12 +2,13 @@
 //
 // Регистрирует активные сервисы Kachō 1.0 + OperationService через OpsProxy.
 // Compute, loadbalancer, SecurityGroup, Gateway — НЕ регистрируются (заморожены).
-// *InternalService* не регистрируются (запрет CLAUDE.md #7).
 //
 // Активные сервисы:
 //   - resourcemanager.v1: Cloud, Folder
 //   - organizationmanager.v1: Organization (backend: resource-manager)
-//   - vpc.v1: Network, Subnet, Address, RouteTable
+//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): Region, Zone, AddressPool —
+//     обслуживаются internal-портом vpc backend (9091); см. CLAUDE.md §16.
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
@@ -65,10 +66,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	)
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	var rmAddr, vpcAddr string
+	var rmAddr, vpcAddr, vpcInternalAddr string
 	if addrs != nil {
 		rmAddr = addrs["resourcemanager"]
 		vpcAddr = addrs["vpc"]
+		vpcInternalAddr = addrs["vpcInternal"]
 	}
 
 	// --- resourcemanager: Cloud + Folder ---
@@ -105,6 +107,24 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	}
 	if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
+	}
+
+	// --- vpc admin (Region/Zone/AddressPool) — kacho-only, internal-port (9091) ---
+	// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
+	// на verbatim-YC; путь /vpc/v1/regions, /vpc/v1/zones, /vpc/v1/addressPools.
+	if vpcInternalAddr != "" {
+		if err := vpcpb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalRegionService: %w", err)
+		}
+		if err := vpcpb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalZoneService: %w", err)
+		}
+		if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
+		}
+		if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalCloudService: %w", err)
+		}
 	}
 
 	// --- OperationService (OpsProxy, in-process) ---

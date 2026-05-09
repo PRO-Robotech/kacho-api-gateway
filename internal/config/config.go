@@ -23,6 +23,9 @@ type Config struct {
 	TLSKeyFile          string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
 	ResourceManagerAddr string `envconfig:"KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC"  default:"resource-manager.kacho.svc.cluster.local:9090"`
 	VPCAddr             string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+	// VPCInternalAddr — admin-only internal-port (9091) of vpc backend.
+	// Routes Region/Zone/AddressPool RESTful endpoints (kacho-only, NOT YC-verbatim).
+	VPCInternalAddr string `envconfig:"KACHO_API_GATEWAY_VPC_INTERNAL_GRPC" default:"vpc.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
@@ -49,6 +52,7 @@ func (c Config) BackendAddrs() map[string]string {
 		"resourcemanager":     c.ResourceManagerAddr,
 		"organizationmanager": c.ResourceManagerAddr,
 		"vpc":                 c.VPCAddr,
+		"vpcInternal":         c.VPCInternalAddr,
 	}
 }
 
