@@ -8,24 +8,27 @@ import "strings"
 // Compute и loadbalancer заморожены — их методов здесь нет.
 var AllowedMethods = map[string]struct{}{
 	// resourcemanager.v1 — CloudService
-	"/kacho.cloud.resourcemanager.v1.CloudService/Get":    {},
-	"/kacho.cloud.resourcemanager.v1.CloudService/List":   {},
-	"/kacho.cloud.resourcemanager.v1.CloudService/Create": {},
-	"/kacho.cloud.resourcemanager.v1.CloudService/Update": {},
-	"/kacho.cloud.resourcemanager.v1.CloudService/Delete": {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/Get":            {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/List":           {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/Create":         {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/Update":         {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/Delete":         {},
+	"/kacho.cloud.resourcemanager.v1.CloudService/ListOperations": {},
 	// resourcemanager.v1 — FolderService
-	"/kacho.cloud.resourcemanager.v1.FolderService/Get":    {},
-	"/kacho.cloud.resourcemanager.v1.FolderService/List":   {},
-	"/kacho.cloud.resourcemanager.v1.FolderService/Create": {},
-	"/kacho.cloud.resourcemanager.v1.FolderService/Update": {},
-	"/kacho.cloud.resourcemanager.v1.FolderService/Delete": {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/Get":            {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/List":           {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/Create":         {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/Update":         {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/Delete":         {},
+	"/kacho.cloud.resourcemanager.v1.FolderService/ListOperations": {},
 
 	// organizationmanager.v1 — OrganizationService
-	"/kacho.cloud.organizationmanager.v1.OrganizationService/Get":    {},
-	"/kacho.cloud.organizationmanager.v1.OrganizationService/List":   {},
-	"/kacho.cloud.organizationmanager.v1.OrganizationService/Create": {},
-	"/kacho.cloud.organizationmanager.v1.OrganizationService/Update": {},
-	"/kacho.cloud.organizationmanager.v1.OrganizationService/Delete": {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/Get":            {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/List":           {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/Create":         {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/Update":         {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/Delete":         {},
+	"/kacho.cloud.organizationmanager.v1.OrganizationService/ListOperations": {},
 
 	// vpc.v1 — NetworkService
 	"/kacho.cloud.vpc.v1.NetworkService/Get":                {},
