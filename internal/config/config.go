@@ -11,11 +11,13 @@ import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
 //	KACHO_API_GATEWAY_TLS_KEY_FILE        — путь к TLS-приватному ключу (PEM)
 //	KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC — адрес backend resource-manager
 //	KACHO_API_GATEWAY_VPC_GRPC            — адрес backend vpc
+//	KACHO_API_GATEWAY_COMPUTE_GRPC        — адрес backend compute (public, port 9090)
+//	KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC — адрес backend compute internal-port (9091)
 //
 // TLS требуется для совместимости с CLI-клиентами (yc CLI hardcoded требует TLS).
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
 //
-// Compute и loadbalancer заморожены — env vars удалены.
+// loadbalancer заморожен — env vars удалены.
 type Config struct {
 	ListenAddr          string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
 	TLSListenAddr       string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
@@ -23,6 +25,14 @@ type Config struct {
 	TLSKeyFile          string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
 	ResourceManagerAddr string `envconfig:"KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC"  default:"resource-manager.kacho.svc.cluster.local:9090"`
 	VPCAddr             string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+	// VPCInternalAddr — admin-only internal-port (9091) of vpc backend.
+	// Routes Region/Zone/AddressPool RESTful endpoints (kacho-only, NOT YC-verbatim).
+	VPCInternalAddr string `envconfig:"KACHO_API_GATEWAY_VPC_INTERNAL_GRPC" default:"vpc.kacho.svc.cluster.local:9091"`
+	// ComputeAddr — public gRPC backend of kacho-compute (Disk/Image/Snapshot/Instance/DiskType/Zone).
+	ComputeAddr string `envconfig:"KACHO_API_GATEWAY_COMPUTE_GRPC" default:"compute.kacho.svc.cluster.local:9090"`
+	// ComputeInternalAddr — admin-only internal-port (9091) of compute backend.
+	// Routes InternalDiskType/InternalZone RESTful endpoints (kacho-only, NOT YC-verbatim).
+	ComputeInternalAddr string `envconfig:"KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC" default:"compute.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
@@ -49,6 +59,9 @@ func (c Config) BackendAddrs() map[string]string {
 		"resourcemanager":     c.ResourceManagerAddr,
 		"organizationmanager": c.ResourceManagerAddr,
 		"vpc":                 c.VPCAddr,
+		"vpcInternal":         c.VPCInternalAddr,
+		"compute":             c.ComputeAddr,
+		"computeInternal":     c.ComputeInternalAddr,
 	}
 }
 

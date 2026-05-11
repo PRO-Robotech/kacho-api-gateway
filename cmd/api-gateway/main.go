@@ -54,8 +54,10 @@ func main() {
 	defer cancel()
 
 	// --- Backend connections: один постоянный ClientConn на backend ---
-	// Активные backends: resource-manager + vpc.
-	// Compute и loadbalancer заморожены — dial не выполняется.
+	// Активные backends: resource-manager + vpc + compute (+ их internal-порты).
+	// loadbalancer заморожен — dial не выполняется. grpc.NewClient ленив:
+	// фактическое соединение устанавливается при первом RPC, поэтому отсутствие
+	// ещё-не-задеплоенного backend не валит запуск.
 	keepaliveParams := keepalive.ClientParameters{
 		Time:                30 * time.Second,
 		Timeout:             10 * time.Second,
@@ -140,8 +142,12 @@ func main() {
 	reflection.Register(grpcSrv)
 
 	// --- REST mux (grpc-gateway) ---
-	// Регистрирует активные публичные сервисы + OperationService через OpsProxy.
-	// *InternalService* не регистрируются (запрет #7).
+	// Регистрирует активные публичные сервисы + OperationService через OpsProxy
+	// + kacho-only Internal admin-сервисы (vpc Region/Zone/AddressPool, compute
+	// DiskType/Zone) на их internal-портах (9091). Internal-методы НЕ публикуются
+	// на external/TLS endpoint в gRPC-проксе (allowlist + HasInternalSuffix);
+	// REST-доступ к ним — только для UI / admin-tooling через cluster-internal
+	// REST listener (см. workspace CLAUDE.md §запрет 6, kacho-vpc/CLAUDE.md §16).
 	restAddrs := cfg.BackendAddrs()
 	restHandler, err := restmux.NewMux(ctx, restAddrs, backends)
 	if err != nil {

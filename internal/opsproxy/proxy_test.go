@@ -47,14 +47,14 @@ func setupMockBackend(t *testing.T, ops map[string]*operationpb.Operation) *grpc
 	}
 	srv := grpc.NewServer()
 	operationpb.RegisterOperationServiceServer(srv, &mockOperationServer{ops: ops})
-	go srv.Serve(lis)
+	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.GracefulStop)
 
 	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 	return conn
 }
 
@@ -180,6 +180,29 @@ func TestOpsProxy_Get_NewFormatVPC(t *testing.T) {
 	}
 }
 
+// TestOpsProxy_Get_NewFormatCompute проверяет роутинг 20-char id с 3-char
+// prefix epd (compute — все операции домена делят этот prefix).
+func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {
+	id := "epd0123456789abcdefg" // 20 chars
+	op := &operationpb.Operation{Id: id, Description: "create instance"}
+	computeConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"compute": computeConn})
+
+	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get epd…: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+
+	// Cancel должен ходить туда же.
+	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+		t.Fatalf("Cancel epd…: %v", err)
+	}
+}
+
 // TestOpsProxy_Get_InvalidIDFormat проверяет INVALID_ARGUMENT для id без prefix.
 func TestOpsProxy_Get_InvalidIDFormat(t *testing.T) {
 	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})
@@ -192,6 +215,34 @@ func TestOpsProxy_Get_InvalidIDFormat(t *testing.T) {
 	st, ok := status.FromError(err)
 	if !ok || st.Code() != codes.InvalidArgument {
 		t.Errorf("ожидали INVALID_ARGUMENT, получили %v", err)
+	}
+}
+
+// TestOpsProxy_Get_UnknownPrefix_20chars: 20-символьный id с неизвестным prefix
+// → InvalidArgument "invalid operation id" (для kacho это не валидный operation id;
+// см. PRO-Robotech/kacho-api-gateway#2 — verbatim-YC выравнивание opsproxy).
+func TestOpsProxy_Get_UnknownPrefix_20chars(t *testing.T) {
+	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
+
+	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "zzz0123456789abcdefg"})
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.InvalidArgument {
+		t.Errorf("ожидали INVALID_ARGUMENT, получили %v", err)
+	}
+}
+
+// TestOpsProxy_Get_KnownPrefixNoBackend: синтаксически валидный id (известный prefix),
+// но соответствующий backend не подключён → NotFound "Operation X not found"
+// (для клиента «такой операции тут нет», как verbatim YC).
+func TestOpsProxy_Get_KnownPrefixNoBackend(t *testing.T) {
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn}) // нет resourcemanager
+
+	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "b1g0123456789abcdefg"})
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.NotFound {
+		t.Errorf("ожидали NOT_FOUND, получили %v", err)
 	}
 }
 
