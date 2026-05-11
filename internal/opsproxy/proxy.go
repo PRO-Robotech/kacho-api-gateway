@@ -70,53 +70,68 @@ func New(conns map[string]*grpc.ClientConn) *OpsProxy {
 	return &OpsProxy{backends: clients}
 }
 
-// domainFromID парсит domain-prefix из Operation.id и нормализует его к
-// backend-ключу.
+// resolveBackend парсит domain-prefix из Operation.id и возвращает либо клиент
+// нужного backend, либо gRPC-ошибку, как её отдал бы verbatim YC (probe 2026-05-11):
 //
-// Порядок проверок:
-//  1. id состоит из 20 символов и первые 3 матчатся на prefixToBackend → новый формат.
-//  2. id содержит "_" и часть до "_" есть в legacyPrefixToBackend → legacy формат.
+//   - 20-символьный id с известным kacho-prefix → роутим в backend; его NotFound
+//     ("Operation X not found") пробрасываем как есть.
+//   - 20-символьный id с известным kacho-prefix, но backend не подключён (defensively;
+//     в prod не должно случаться) → NotFound "Operation X not found" (операции тут нет).
+//   - legacy "<prefix>_<uuid>" с известным legacy-prefix → роутим.
+//   - всё остальное (malformed, неизвестный prefix) → InvalidArgument
+//     "invalid operation id <X>" — это поведение YC для нераспознанных id (и честно для
+//     kacho: валидные operation-id у нас только enp…/e9b…/b1g…/bpf… и legacy-формы).
 //
-// Возвращает ("", false) если ни один формат не подошёл.
-func domainFromID(id string) (string, bool) {
-	// Новый формат: ровно 20 символов, первые 3 — prefix.
-	if len(id) == 20 {
-		if backend, ok := prefixToBackend[id[:3]]; ok {
-			return backend, true
+// Замечание: реальный YC на 20-символьный id с prefix чужого домена (`fhm…` = compute)
+// отдаёт NotFound (он умеет туда роутить). У kacho нет тех доменов, поэтому для нас
+// такой id — InvalidArgument. См. PRO-Robotech/kacho-api-gateway#2.
+func (p *OpsProxy) resolveBackend(id string) (operationpb.OperationServiceClient, error) {
+	invalid := status.Errorf(codes.InvalidArgument, "invalid operation id %q", id)
+	notFound := status.Errorf(codes.NotFound, "Operation %s not found", id)
+
+	var domain string
+	switch {
+	case len(id) == 20:
+		d, ok := prefixToBackend[id[:3]]
+		if !ok {
+			return nil, invalid
 		}
-	}
-	// Legacy формат: "<prefix>_<uuid>".
-	if i := strings.Index(id, "_"); i > 0 {
-		legacyPrefix := id[:i]
-		if backend, ok := legacyPrefixToBackend[legacyPrefix]; ok {
-			return backend, true
+		domain = d
+	default:
+		i := strings.Index(id, "_")
+		if i <= 0 {
+			return nil, invalid
 		}
+		d, ok := legacyPrefixToBackend[id[:i]]
+		if !ok {
+			return nil, invalid
+		}
+		domain = d
 	}
-	return "", false
+
+	client, ok := p.backends[domain]
+	if !ok {
+		// id синтаксически валиден, но соответствующий backend не подключён —
+		// для клиента это «такой операции тут нет».
+		return nil, notFound
+	}
+	return client, nil
 }
 
 // Get проксирует OperationService.Get к нужному backend по prefix id.
 func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest) (*operationpb.Operation, error) {
-	domain, ok := domainFromID(req.OperationId)
-	if !ok {
-		return nil, status.Errorf(codes.InvalidArgument, "operation_id has unknown prefix: %q", req.OperationId)
-	}
-	client, ok := p.backends[domain]
-	if !ok {
-		return nil, status.Errorf(codes.NotFound, "no backend for domain %q (operation_id=%q)", domain, req.OperationId)
+	client, err := p.resolveBackend(req.OperationId)
+	if err != nil {
+		return nil, err
 	}
 	return client.Get(ctx, req)
 }
 
 // Cancel проксирует OperationService.Cancel к нужному backend по prefix id.
 func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationRequest) (*operationpb.Operation, error) {
-	domain, ok := domainFromID(req.OperationId)
-	if !ok {
-		return nil, status.Errorf(codes.InvalidArgument, "operation_id has unknown prefix: %q", req.OperationId)
-	}
-	client, ok := p.backends[domain]
-	if !ok {
-		return nil, status.Errorf(codes.NotFound, "no backend for domain %q (operation_id=%q)", domain, req.OperationId)
+	client, err := p.resolveBackend(req.OperationId)
+	if err != nil {
+		return nil, err
 	}
 	return client.Cancel(ctx, req)
 }
