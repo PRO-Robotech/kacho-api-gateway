@@ -32,6 +32,18 @@ spec:
               value: "{{ .Values.backends.resourceManager }}"
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
+            {{- if .Values.backends.vpcInternal }}
+            - name: KACHO_API_GATEWAY_VPC_INTERNAL_GRPC
+              value: "{{ .Values.backends.vpcInternal }}"
+            {{- end }}
+            {{- if .Values.backends.compute }}
+            - name: KACHO_API_GATEWAY_COMPUTE_GRPC
+              value: "{{ .Values.backends.compute }}"
+            {{- end }}
+            {{- if .Values.backends.computeInternal }}
+            - name: KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC
+              value: "{{ .Values.backends.computeInternal }}"
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
               value: ":{{ .Values.tlsPort }}"

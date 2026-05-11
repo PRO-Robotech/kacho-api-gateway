@@ -88,13 +88,13 @@ func TestGateway_A5_DirectorUnknownDomainNotFound(t *testing.T) {
 	}
 }
 
-// TestGateway_A6_ComputeLoadbalancerFrozenBlocked проверяет, что compute/lb заморожены.
-func TestGateway_A6_ComputeLoadbalancerFrozenBlocked(t *testing.T) {
+// TestGateway_A6_LoadbalancerFrozenBlocked проверяет, что loadbalancer всё ещё заморожен.
+func TestGateway_A6_LoadbalancerFrozenBlocked(t *testing.T) {
 	frozenMethods := []string{
-		"/kacho.cloud.compute.v1.InstanceService/Get",
 		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
 	}
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
+	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc", "compute"})
 	director := proxy.NewDirector(backends)
 
 	for _, m := range frozenMethods {
@@ -103,6 +103,39 @@ func TestGateway_A6_ComputeLoadbalancerFrozenBlocked(t *testing.T) {
 			_, _, err := director(context.Background(), m)
 			if err == nil {
 				t.Fatalf("замороженный метод %q должен быть заблокирован", m)
+			}
+			st, ok := status.FromError(err)
+			if !ok || st.Code() != codes.NotFound {
+				t.Errorf("метод %q: ожидали NOT_FOUND, получили %v", m, err)
+			}
+		})
+	}
+}
+
+// TestGateway_A6b_ComputeRoutesToBackend проверяет, что публичные compute-RPC
+// маршрутизируются на compute-backend, а Internal*-методы compute блокируются.
+func TestGateway_A6b_ComputeRoutesToBackend(t *testing.T) {
+	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc", "compute"})
+	director := proxy.NewDirector(backends)
+
+	_, conn, err := director(context.Background(), "/kacho.cloud.compute.v1.InstanceService/Get")
+	if err != nil {
+		t.Fatalf("ожидали успех для compute InstanceService.Get: %v", err)
+	}
+	if conn != backends["compute"] {
+		t.Error("директор должен вернуть compute-backend")
+	}
+
+	for _, m := range []string{
+		"/kacho.cloud.compute.v1.InternalDiskTypeService/Create",
+		"/kacho.cloud.compute.v1.InternalZoneService/Delete",
+		"/kacho.cloud.compute.v1.InternalWatchService/Watch",
+	} {
+		m := m
+		t.Run(m, func(t *testing.T) {
+			_, _, err := director(context.Background(), m)
+			if err == nil {
+				t.Fatalf("Internal compute-метод %q должен быть заблокирован", m)
 			}
 			st, ok := status.FromError(err)
 			if !ok || st.Code() != codes.NotFound {

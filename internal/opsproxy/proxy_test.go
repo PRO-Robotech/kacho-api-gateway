@@ -180,6 +180,29 @@ func TestOpsProxy_Get_NewFormatVPC(t *testing.T) {
 	}
 }
 
+// TestOpsProxy_Get_NewFormatCompute проверяет роутинг 20-char id с 3-char
+// prefix epd (compute — все операции домена делят этот prefix).
+func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {
+	id := "epd0123456789abcdefg" // 20 chars
+	op := &operationpb.Operation{Id: id, Description: "create instance"}
+	computeConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"compute": computeConn})
+
+	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get epd…: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+
+	// Cancel должен ходить туда же.
+	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+		t.Fatalf("Cancel epd…: %v", err)
+	}
+}
+
 // TestOpsProxy_Get_InvalidIDFormat проверяет INVALID_ARGUMENT для id без prefix.
 func TestOpsProxy_Get_InvalidIDFormat(t *testing.T) {
 	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})

@@ -3,9 +3,10 @@ package allowlist
 import "strings"
 
 // AllowedMethods — публичные RPC-пути, маршрутизируемые через api-gateway.
-// Методы *InternalService.* НИКОГДА не включаются (запрет #7, CLAUDE.md).
-// Sub-phase 1.0 (verbatim YC proto): активны resourcemanager, organizationmanager, vpc, operation.
-// Compute и loadbalancer заморожены — их методов здесь нет.
+// Методы *InternalService.* НИКОГДА не включаются (запрет #6, workspace CLAUDE.md):
+// их REST-проекция доступна только на cluster-internal listener (см. restmux/mux.go).
+// Активны: resourcemanager, organizationmanager, vpc, compute, operation.
+// loadbalancer заморожен — его методов здесь нет.
 var AllowedMethods = map[string]struct{}{
 	// resourcemanager.v1 — CloudService
 	"/kacho.cloud.resourcemanager.v1.CloudService/Get":            {},
@@ -97,6 +98,74 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Delete":         {},
 	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/ListOperations": {},
 
+	// compute.v1 — DiskService
+	"/kacho.cloud.compute.v1.DiskService/Get":                   {},
+	"/kacho.cloud.compute.v1.DiskService/List":                  {},
+	"/kacho.cloud.compute.v1.DiskService/Create":                {},
+	"/kacho.cloud.compute.v1.DiskService/Update":                {},
+	"/kacho.cloud.compute.v1.DiskService/Delete":                {},
+	"/kacho.cloud.compute.v1.DiskService/ListOperations":        {},
+	"/kacho.cloud.compute.v1.DiskService/Move":                  {},
+	"/kacho.cloud.compute.v1.DiskService/Relocate":              {},
+	"/kacho.cloud.compute.v1.DiskService/ListSnapshotSchedules": {},
+	"/kacho.cloud.compute.v1.DiskService/ListAccessBindings":    {},
+	"/kacho.cloud.compute.v1.DiskService/SetAccessBindings":     {},
+	"/kacho.cloud.compute.v1.DiskService/UpdateAccessBindings":  {},
+	// compute.v1 — ImageService
+	"/kacho.cloud.compute.v1.ImageService/Get":                  {},
+	"/kacho.cloud.compute.v1.ImageService/GetLatestByFamily":    {},
+	"/kacho.cloud.compute.v1.ImageService/List":                 {},
+	"/kacho.cloud.compute.v1.ImageService/Create":               {},
+	"/kacho.cloud.compute.v1.ImageService/Update":               {},
+	"/kacho.cloud.compute.v1.ImageService/Delete":               {},
+	"/kacho.cloud.compute.v1.ImageService/ListOperations":       {},
+	"/kacho.cloud.compute.v1.ImageService/ListAccessBindings":   {},
+	"/kacho.cloud.compute.v1.ImageService/SetAccessBindings":    {},
+	"/kacho.cloud.compute.v1.ImageService/UpdateAccessBindings": {},
+	// compute.v1 — SnapshotService
+	"/kacho.cloud.compute.v1.SnapshotService/Get":                  {},
+	"/kacho.cloud.compute.v1.SnapshotService/List":                 {},
+	"/kacho.cloud.compute.v1.SnapshotService/Create":               {},
+	"/kacho.cloud.compute.v1.SnapshotService/Update":               {},
+	"/kacho.cloud.compute.v1.SnapshotService/Delete":               {},
+	"/kacho.cloud.compute.v1.SnapshotService/ListOperations":       {},
+	"/kacho.cloud.compute.v1.SnapshotService/ListAccessBindings":   {},
+	"/kacho.cloud.compute.v1.SnapshotService/SetAccessBindings":    {},
+	"/kacho.cloud.compute.v1.SnapshotService/UpdateAccessBindings": {},
+	// compute.v1 — InstanceService
+	"/kacho.cloud.compute.v1.InstanceService/Get":                      {},
+	"/kacho.cloud.compute.v1.InstanceService/List":                     {},
+	"/kacho.cloud.compute.v1.InstanceService/Create":                   {},
+	"/kacho.cloud.compute.v1.InstanceService/Update":                   {},
+	"/kacho.cloud.compute.v1.InstanceService/Delete":                   {},
+	"/kacho.cloud.compute.v1.InstanceService/UpdateMetadata":           {},
+	"/kacho.cloud.compute.v1.InstanceService/GetSerialPortOutput":      {},
+	"/kacho.cloud.compute.v1.InstanceService/Stop":                     {},
+	"/kacho.cloud.compute.v1.InstanceService/Start":                    {},
+	"/kacho.cloud.compute.v1.InstanceService/Restart":                  {},
+	"/kacho.cloud.compute.v1.InstanceService/AttachDisk":               {},
+	"/kacho.cloud.compute.v1.InstanceService/DetachDisk":               {},
+	"/kacho.cloud.compute.v1.InstanceService/AttachFilesystem":         {},
+	"/kacho.cloud.compute.v1.InstanceService/DetachFilesystem":         {},
+	"/kacho.cloud.compute.v1.InstanceService/AttachNetworkInterface":   {},
+	"/kacho.cloud.compute.v1.InstanceService/DetachNetworkInterface":   {},
+	"/kacho.cloud.compute.v1.InstanceService/AddOneToOneNat":           {},
+	"/kacho.cloud.compute.v1.InstanceService/RemoveOneToOneNat":        {},
+	"/kacho.cloud.compute.v1.InstanceService/UpdateNetworkInterface":   {},
+	"/kacho.cloud.compute.v1.InstanceService/ListOperations":           {},
+	"/kacho.cloud.compute.v1.InstanceService/Move":                     {},
+	"/kacho.cloud.compute.v1.InstanceService/Relocate":                 {},
+	"/kacho.cloud.compute.v1.InstanceService/SimulateMaintenanceEvent": {},
+	"/kacho.cloud.compute.v1.InstanceService/ListAccessBindings":       {},
+	"/kacho.cloud.compute.v1.InstanceService/SetAccessBindings":        {},
+	"/kacho.cloud.compute.v1.InstanceService/UpdateAccessBindings":     {},
+	// compute.v1 — DiskTypeService (read-only справочник)
+	"/kacho.cloud.compute.v1.DiskTypeService/Get":  {},
+	"/kacho.cloud.compute.v1.DiskTypeService/List": {},
+	// compute.v1 — ZoneService (read-only справочник)
+	"/kacho.cloud.compute.v1.ZoneService/Get":  {},
+	"/kacho.cloud.compute.v1.ZoneService/List": {},
+
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},
 	"/kacho.cloud.operation.OperationService/Cancel": {},
@@ -108,8 +177,32 @@ func IsAllowed(methodPath string) bool {
 	return ok
 }
 
-// HasInternalSuffix — эшелонированная защита: любой метод, чей путь содержит
-// "InternalService", блокируется автоматически, даже если он случайно попал в AllowedMethods.
+// HasInternalSuffix — эшелонированная защита: любой метод, чей gRPC-service
+// помечен как internal, блокируется автоматически, даже если он случайно попал
+// в AllowedMethods.
+//
+// Покрывает обе принятые в kacho-proto конвенции именования internal-сервисов:
+//   - суффикс  "<Xxx>InternalService" (resource-manager: FolderInternalService);
+//   - префикс  "Internal<Xxx>Service" (vpc: InternalZoneService, InternalCloudService;
+//     compute: InternalDiskTypeService, InternalZoneService, InternalWatchService).
+//
+// Путь имеет вид "/kacho.cloud.<domain>.v1.<Service>/<Method>"; проверяем сегмент
+// между последней "." и "/".
 func HasInternalSuffix(methodPath string) bool {
-	return strings.Contains(methodPath, "InternalService")
+	if strings.Contains(methodPath, "InternalService") {
+		return true
+	}
+	// methodPath = "/kacho.cloud.<domain>.v1.<Service>/<Method>"
+	p := strings.TrimPrefix(methodPath, "/")
+	slash := strings.IndexByte(p, '/')
+	if slash < 1 {
+		return false
+	}
+	pkgService := p[:slash] // "kacho.cloud.<domain>.v1.<Service>"
+	dot := strings.LastIndexByte(pkgService, '.')
+	if dot < 0 {
+		return false
+	}
+	service := pkgService[dot+1:]
+	return strings.HasPrefix(service, "Internal") && strings.HasSuffix(service, "Service")
 }

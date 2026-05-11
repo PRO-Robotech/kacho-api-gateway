@@ -1,14 +1,17 @@
 // Package restmux инициализирует grpc-gateway ServeMux для REST-запросов.
 //
-// Регистрирует активные сервисы Kachō 1.0 + OperationService через OpsProxy.
-// Compute, loadbalancer, SecurityGroup, Gateway — НЕ регистрируются (заморожены).
+// Регистрирует активные сервисы Kachō + OperationService через OpsProxy.
+// loadbalancer — НЕ регистрируется (заморожен).
 //
 // Активные сервисы:
 //   - resourcemanager.v1: Cloud, Folder
 //   - organizationmanager.v1: Organization (backend: resource-manager)
 //   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint
-//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): Region, Zone, AddressPool —
-//     обслуживаются internal-портом vpc backend (9091); см. CLAUDE.md §16.
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): Region, Zone, AddressPool, Cloud —
+//     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
+//   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone
+//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone —
+//     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md §16.
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
@@ -21,11 +24,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	orgpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
+	computepb   "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
+	orgpb       "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
-	rmpb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
-	vpcpb   "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
-	pepb    "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
+	rmpb        "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	vpcpb       "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	pepb        "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
@@ -38,6 +42,9 @@ import (
 //	"resourcemanager"     → resource-manager.kacho.svc.cluster.local:9090
 //	"organizationmanager" → resource-manager.kacho.svc.cluster.local:9090 (тот же backend)
 //	"vpc"                 → vpc.kacho.svc.cluster.local:9090
+//	"vpcInternal"         → vpc.kacho.svc.cluster.local:9091 (admin internal-порт)
+//	"compute"             → compute.kacho.svc.cluster.local:9090
+//	"computeInternal"     → compute.kacho.svc.cluster.local:9091 (admin internal-порт)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -66,11 +73,13 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	)
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	var rmAddr, vpcAddr, vpcInternalAddr string
+	var rmAddr, vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr string
 	if addrs != nil {
 		rmAddr = addrs["resourcemanager"]
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
+		computeAddr = addrs["compute"]
+		computeInternalAddr = addrs["computeInternal"]
 	}
 
 	// --- resourcemanager: Cloud + Folder ---
@@ -86,7 +95,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		return nil, fmt.Errorf("register OrganizationService: %w", err)
 	}
 
-	// --- vpc: Network + Subnet + Address + RouteTable ---
+	// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway + PrivateEndpoint ---
 	if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register NetworkService: %w", err)
 	}
@@ -109,7 +118,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
 	}
 
-	// --- vpc admin (Region/Zone/AddressPool) — kacho-only, internal-port (9091) ---
+	// --- vpc admin (Region/Zone/AddressPool/Cloud) — kacho-only, internal-port (9091) ---
 	// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
 	// на verbatim-YC; путь /vpc/v1/regions, /vpc/v1/zones, /vpc/v1/addressPools.
 	if vpcInternalAddr != "" {
@@ -124,6 +133,42 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 		if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register InternalCloudService: %w", err)
+		}
+	}
+
+	// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone (read-only) ---
+	if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute DiskService: %w", err)
+	}
+	if err := computepb.RegisterImageServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute ImageService: %w", err)
+	}
+	if err := computepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute SnapshotService: %w", err)
+	}
+	if err := computepb.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute InstanceService: %w", err)
+	}
+	if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute DiskTypeService: %w", err)
+	}
+	if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute ZoneService: %w", err)
+	}
+
+	// --- compute admin (InternalDiskType/InternalZone) — kacho-only, internal-port (9091) ---
+	// CRUD справочников DiskType/Zone (POST/PATCH/DELETE на /compute/v1/diskTypes,
+	// /compute/v1/zones). Не верстается на verbatim-YC, доступен только через
+	// cluster-internal REST listener для UI/admin-tooling (CLAUDE.md §запрет 6,
+	// kacho-compute/CLAUDE.md §16). InternalWatchService — gRPC server-streaming
+	// (outbox), через grpc-gateway REST не проксируется; consumer'ы ходят в
+	// compute.kacho.svc:9091 напрямую gRPC.
+	if computeInternalAddr != "" {
+		if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
+		}
+		if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
 		}
 	}
 

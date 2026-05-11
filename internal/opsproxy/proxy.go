@@ -11,6 +11,8 @@
 //	"bpf" → resourcemanager   (операции по Organization)
 //	"enp" → vpc               (операции по Network / RouteTable / SecurityGroup)
 //	"e9b" → vpc               (операции по Subnet / Address)
+//	"epd" → compute           (ВСЕ операции compute-домена: Instance/Disk/Image/Snapshot —
+//	                           PrefixOperationCompute == PrefixInstance, см. kacho-corelib/ids)
 //
 // Префикс заведомо стабильный: ровно 3 символа, lowercase crockford-base32-friendly.
 // Тело id (17 символов) — непрозрачно для proxy.
@@ -39,6 +41,8 @@ var prefixToBackend = map[string]string{
 	// vpc domain
 	"enp": "vpc", // Network / RouteTable / SecurityGroup / vpc op-root
 	"e9b": "vpc", // Subnet / Address
+	// compute domain
+	"epd": "compute", // все операции compute (Instance/Disk/Image/Snapshot — общий op-prefix)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, всё ещё

@@ -144,12 +144,10 @@ func TestGateway_D7_OldUpsertWatchBlocked(t *testing.T) {
 	}
 }
 
-// TestGateway_D8_ComputeLoadbalancerFrozen проверяет, что compute и loadbalancer заморожены.
-func TestGateway_D8_ComputeLoadbalancerFrozen(t *testing.T) {
+// TestGateway_D8_LoadbalancerFrozen проверяет, что loadbalancer всё ещё заморожен.
+// (compute активирован — см. TestGateway_D8b_ComputeActive ниже.)
+func TestGateway_D8_LoadbalancerFrozen(t *testing.T) {
 	frozenMethods := []string{
-		"/kacho.cloud.compute.v1.InstanceService/Get",
-		"/kacho.cloud.compute.v1.InstanceService/Create",
-		"/kacho.cloud.compute.v1.DiskService/Get",
 		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
 		"/kacho.cloud.loadbalancer.v1.TargetGroupService/List",
 	}
@@ -158,6 +156,48 @@ func TestGateway_D8_ComputeLoadbalancerFrozen(t *testing.T) {
 		t.Run(m, func(t *testing.T) {
 			if allowlist.IsAllowed(m) {
 				t.Errorf("замороженный метод %q НЕ должен быть в allowlist", m)
+			}
+		})
+	}
+}
+
+// TestGateway_D8b_ComputeActive проверяет, что публичные compute-RPC в allowlist,
+// а Internal*-методы compute — НЕ в allowlist (и блокируются HasInternalSuffix).
+func TestGateway_D8b_ComputeActive(t *testing.T) {
+	publicMethods := []string{
+		"/kacho.cloud.compute.v1.DiskService/Get",
+		"/kacho.cloud.compute.v1.DiskService/Create",
+		"/kacho.cloud.compute.v1.ImageService/List",
+		"/kacho.cloud.compute.v1.SnapshotService/Create",
+		"/kacho.cloud.compute.v1.InstanceService/Get",
+		"/kacho.cloud.compute.v1.InstanceService/Start",
+		"/kacho.cloud.compute.v1.InstanceService/AttachDisk",
+		"/kacho.cloud.compute.v1.DiskTypeService/List",
+		"/kacho.cloud.compute.v1.ZoneService/List",
+	}
+	for _, m := range publicMethods {
+		m := m
+		t.Run("public/"+m, func(t *testing.T) {
+			if !allowlist.IsAllowed(m) {
+				t.Errorf("публичный compute-метод %q должен быть в allowlist", m)
+			}
+		})
+	}
+
+	internalMethods := []string{
+		"/kacho.cloud.compute.v1.InternalDiskTypeService/Create",
+		"/kacho.cloud.compute.v1.InternalDiskTypeService/Delete",
+		"/kacho.cloud.compute.v1.InternalZoneService/Create",
+		"/kacho.cloud.compute.v1.InternalWatchService/Watch",
+	}
+	for _, m := range internalMethods {
+		m := m
+		t.Run("internal/"+m, func(t *testing.T) {
+			if allowlist.IsAllowed(m) {
+				t.Errorf("Internal compute-метод %q НЕ должен быть в allowlist", m)
+			}
+			if !allowlist.HasInternalSuffix(m) {
+				t.Errorf("Internal compute-метод %q должен ловиться HasInternalSuffix", m)
 			}
 		})
 	}
