@@ -136,6 +136,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		if err := vpcpb.RegisterInternalNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register InternalNetworkInterfaceService: %w", err)
 		}
+		// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal projection
+		// of a Network ({network, vpn_id}); backs the admin-UI "jsonint" tab.
+		if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalNetworkService: %w", err)
+		}
 	}
 
 	// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
