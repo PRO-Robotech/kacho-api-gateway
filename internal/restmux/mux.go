@@ -7,11 +7,12 @@
 //   - resourcemanager.v1: Cloud, Folder
 //   - organizationmanager.v1: Organization (backend: resource-manager)
 //   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint
-//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): Region, Zone, AddressPool, Cloud —
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
-//   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone
-//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone —
-//     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md §16.
+//   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
+//     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
+//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
+//     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
@@ -118,16 +119,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
 	}
 
-	// --- vpc admin (Region/Zone/AddressPool/Cloud) — kacho-only, internal-port (9091) ---
+	// --- vpc admin (AddressPool/Cloud) — kacho-only, internal-port (9091) ---
 	// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
-	// на verbatim-YC; путь /vpc/v1/regions, /vpc/v1/zones, /vpc/v1/addressPools.
+	// на verbatim-YC; путь /vpc/v1/addressPools. Region/Zone перенесены в kacho-compute
+	// (эпик KAC-15) — см. блок compute ниже + workspace CLAUDE.md §«Кросс-доменные ссылки».
 	if vpcInternalAddr != "" {
-		if err := vpcpb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalRegionService: %w", err)
-		}
-		if err := vpcpb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalZoneService: %w", err)
-		}
 		if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
 		}
@@ -136,7 +132,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 	}
 
-	// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone (read-only) ---
+	// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
 	if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
 		return nil, fmt.Errorf("register compute DiskService: %w", err)
 	}
@@ -155,8 +151,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
 		return nil, fmt.Errorf("register compute ZoneService: %w", err)
 	}
+	if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		return nil, fmt.Errorf("register compute RegionService: %w", err)
+	}
 
-	// --- compute admin (InternalDiskType/InternalZone) — kacho-only, internal-port (9091) ---
+	// --- compute admin (InternalDiskType/InternalZone/InternalRegion) — kacho-only, internal-port (9091) ---
 	// CRUD справочников DiskType/Zone (POST/PATCH/DELETE на /compute/v1/diskTypes,
 	// /compute/v1/zones). Не верстается на verbatim-YC, доступен только через
 	// cluster-internal REST listener для UI/admin-tooling (CLAUDE.md §запрет 6,
@@ -169,6 +168,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 		if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
+		}
+		if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
 		}
 	}
 
