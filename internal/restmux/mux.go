@@ -6,12 +6,12 @@
 // Активные сервисы:
 //   - resourcemanager.v1: Cloud, Folder
 //   - organizationmanager.v1: Organization (backend: resource-manager)
-//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint
-//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud —
+//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint, NetworkInterface
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetworkInterface —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
 //   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
 //     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
-//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
+//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion, InternalHypervisor —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
@@ -118,6 +118,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
 	}
+	if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
+	}
 
 	// --- vpc admin (AddressPool/Cloud) — kacho-only, internal-port (9091) ---
 	// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
@@ -129,6 +132,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 		if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register InternalCloudService: %w", err)
+		}
+		if err := vpcpb.RegisterInternalNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register InternalNetworkInterfaceService: %w", err)
 		}
 	}
 
@@ -171,6 +177,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 		if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
+		}
+		if err := computepb.RegisterInternalHypervisorServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute InternalHypervisorService: %w", err)
 		}
 	}
 
