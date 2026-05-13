@@ -58,6 +58,40 @@ var AllowedMethods = map[string]struct{}{
 
 **Правило:** методы `*InternalService.*` НИКОГДА не добавляются в список. Функция `HasInternalSuffix` обеспечивает эшелонированную защиту.
 
+## Зарегистрированные сервисы / маршруты (public vs cluster-internal mux)
+
+Gateway держит **два REST listener'а**: external TLS endpoint (advertised для
+внешних клиентов) и cluster-internal listener (для UI / admin-tooling /
+port-forward). `Internal*`-сервисы регистрируются под блоками `vpcInternal` /
+`computeInternal` адресов в `internal/restmux/mux.go` и **никогда** не
+advertised'ятся на external TLS endpoint (workspace `CLAUDE.md` §запрет 6,
+§«Инфра-чувствительные данные»).
+
+**Public** (оба listener'а):
+- `NetworkInterfaceService` (kacho-vpc) — `/vpc/v1/networkInterfaces` (NIC —
+  first-class ресурс kacho-vpc; lean tenant-facing проекция: `{id, instance_id,
+  subnet_id, primary_v4_address, security_group_ids, status, used_by}`).
+- `RegionService` / `ZoneService` (kacho-compute) — `/compute/v1/regions`,
+  `/compute/v1/zones`. **Geography переехала из `/vpc/v1/...` в `/compute/v1/...`**
+  (эпик `KAC-15`): owner — kacho-compute; публичный read; admin-CRUD — через
+  `InternalRegionService` / `InternalZoneService` на cluster-internal mux.
+
+**Cluster-internal mux only** (НЕ на external TLS endpoint):
+- `InternalNetworkInterfaceService` (kacho-vpc, `vpcInternal`) — `GET
+  /vpc/v1/networkInterfaces/{id}/internal` (data-plane-проекция NIC: `hv_id`/
+  placement, `sid`/`sid_seq`, `host_iface`, `netns`, `gateway_ip`, `container_id`,
+  resolved `vpn_id`); плюс `ReportNiDataplane` / `ListByHypervisor` на
+  gRPC-style routes.
+- `InternalNetworkService` (kacho-vpc, `vpcInternal`) — `GET /vpc/v1/networks/{id}/internal`
+  → `{network, vpn_id}` (числовой data-plane-id Network — internal-only).
+- `InternalHypervisorService` (kacho-compute, `computeInternal`) — `GET/POST
+  /compute/v1/hypervisors`, `GET/DELETE /compute/v1/hypervisors/{hypervisor_id}`,
+  `POST /compute/v1/hypervisors/{hypervisor_id}:updateState` (placement / HW
+  инвентарь — инфра-чувствительное; на external endpoint `GET
+  /compute/v1/hypervisors` → 404).
+- `InternalAddressService` (kacho-vpc) — `/vpc/v1/addressPools` + ephemeral-IPAM
+  helper'ы (как было).
+
 ## Переменные окружения
 
 | Переменная | Default | Описание |
