@@ -50,20 +50,17 @@ import (
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
 func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
-	// JSON-marshaller verbatim YC contract:
+	// JSON-marshaller (verbatim-YC parity отложена, см. workspace CLAUDE.md):
 	//   - UseProtoNames=false → camelCase JSON-поля.
-	//   - EmitUnpopulated=true → отдаём явные нулевые значения (`false`/`""`/`{}`)
-	//     для proto-полей; YC так делает (см. YC-DIFF-EMIT-UNPOPULATED.md).
-	//
-	// Поломка прошлой попытки EmitUnpopulated была в том, что protojson не мог
-	// распаковать `BadRequest.field_violations[]` (Any) без зарегистрированного
-	// errdetails-типа в protoregistry. Это решено в `cmd/api-gateway/main.go`
-	// blank-import `_ "google.golang.org/genproto/googleapis/rpc/errdetails"`,
-	// поэтому EmitUnpopulated теперь безопасно включить.
+	//   - EmitUnpopulated=false → empty-defaults (`""`/`{}`/`[]`/`null`) НЕ
+	//     показываем. AWS-стиль response: payload содержит только поля
+	//     которые реально что-то значат для конкретного ресурса (см. AWS EC2
+	//     DescribeNetworkInterfaces — `Description`/`TagSet` появляются только
+	//     когда заполнены, не как пустые маркеры).
 	jsonMarshaler := &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
 			UseProtoNames:   false,
-			EmitUnpopulated: true,
+			EmitUnpopulated: false,
 		},
 		UnmarshalOptions: protojson.UnmarshalOptions{
 			DiscardUnknown: true,
