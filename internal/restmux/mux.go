@@ -72,7 +72,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	mux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonMarshaler),
 	)
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Client-side round-robin; pair with `dns:///<headless-svc>:<port>` dial target.
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
+	}
 
 	var rmAddr, vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr string
 	if addrs != nil {

@@ -35,3 +35,20 @@ ingress:
 # Production: api.kacho.local:443 (or whatever externally resolvable host:port).
 # Dev (kind + port-forward): override to localhost:18443.
 advertisedEndpoint: api.kacho.local:443
+
+# Default replicas=1; HPA autoscales up to 10 on CPU 70%.
+# api-gateway is the request-side bottleneck (~3500 RPS/pod baseline)
+# under the in-cluster 10k load test.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

@@ -66,6 +66,11 @@ func main() {
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
+		// Client-side round-robin across all backend pods. Combined with `dns:///`
+		// scheme on the dial target (or a Headless Service) this opens one subconn
+		// per backend Pod IP and distributes RPCs across them — vs the default
+		// pick_first which pins to one Pod per ClusterIP forever.
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
 	}
 
 	backends := make(proxy.Backends)
