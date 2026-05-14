@@ -50,17 +50,22 @@ import (
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
 func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
-	// JSON-marshaller (verbatim-YC parity отложена, см. workspace CLAUDE.md):
+	// JSON-marshaller (общий для public + internal endpoints — единственный mux):
 	//   - UseProtoNames=false → camelCase JSON-поля.
-	//   - EmitUnpopulated=false → empty-defaults (`""`/`{}`/`[]`/`null`) НЕ
-	//     показываем. AWS-стиль response: payload содержит только поля
-	//     которые реально что-то значат для конкретного ресурса (см. AWS EC2
-	//     DescribeNetworkInterfaces — `Description`/`TagSet` появляются только
-	//     когда заполнены, не как пустые маркеры).
+	//   - EmitUnpopulated=true → отдаём явные нулевые значения (`""`/`{}`/`[]`/`null`)
+	//     для proto-полей. На публичной поверхности (Network/Subnet/Address/NIC/SG/RT/
+	//     Gateway/PE) `description`/`labels`/`cidr_blocks`/`v4_address_ids` и т.п. —
+	//     полезный контракт, клиент должен видеть поле даже если оно пустое.
+	//
+	// TODO: для internal endpoints (`/vpc/v1/.../internal`) имеет смысл
+	// `EmitUnpopulated=false` (там много инфра-полей `vpn_id`/`hv_id`/`sid`/
+	// `host_iface`/`netns`/... которые часто пустые). Сейчас один общий mux,
+	// поэтому marshaller единый. Refactor: split internal на отдельный
+	// `ServeMux` с собственным marshaller'ом (= отдельный тикет).
 	jsonMarshaler := &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
 			UseProtoNames:   false,
-			EmitUnpopulated: false,
+			EmitUnpopulated: true,
 		},
 		UnmarshalOptions: protojson.UnmarshalOptions{
 			DiscardUnknown: true,
