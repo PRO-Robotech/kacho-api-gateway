@@ -139,9 +139,11 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 			return nil, fmt.Errorf("register InternalCloudService: %w", err)
 		}
-		if err := vpcpb.RegisterInternalNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalNetworkInterfaceService: %w", err)
-		}
+		// NB: InternalNetworkInterfaceService — НЕ регистрируется в REST mux
+		// (KAC-49 решение: NIC оставлен только публичной проекцией). Data-plane-
+		// инфо (vpn_id/hv_id/sid/host_iface/netns/...) остаётся доступной только
+		// через gRPC `vpc.kacho.svc:9091` для kacho-vpc-implement — не для UI/CLI.
+		//
 		// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal projection
 		// of a Network ({network, vpn_id}); backs the admin-UI "jsonint" tab.
 		if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
