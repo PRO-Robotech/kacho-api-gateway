@@ -1,42 +1,140 @@
-// Package restmux инициализирует grpc-gateway ServeMux для REST-запросов.
+// Package restmux инициализирует REST-фасад grpc-gateway для api-gateway.
 //
 // Регистрирует активные сервисы Kachō + OperationService через OpsProxy.
 // loadbalancer — НЕ регистрируется (заморожен).
 //
-// Активные сервисы:
+// # Split-mux pattern (KAC-50)
+//
+// Внутри пакета поднимается ДВА grpc-gateway `runtime.ServeMux`-а с разными
+// `protojson.MarshalOptions`:
+//
+//   - public mux   — `EmitUnpopulated=true`. Tenant-facing контракт: клиент
+//     должен видеть поле даже если оно пустое (`description: ""`, `labels: {}`,
+//     `cidrBlocks: []`, `defaultSecurityGroupId: ""`, и т.п.). Это часть
+//     стабильного API.
+//   - internal mux — `EmitUnpopulated=false`. Admin / data-plane-ресурсы и
+//     internal-проекции публичных ресурсов до материализации на гипервизоре
+//     отдают много zero-полей (`vpnId=0`, `hypervisorId=""`, `sid=""`,
+//     `hostIface=""`, `netns=""`, …). На внутренней admin/UI поверхности
+//     этот шум вреден и сбивает админов.
+//
+// Все RPC handlers регистрируются на ОБА mux'а — разница только в JSON
+// маршалинге. Path-based dispatch выбирает нужный mux на основании
+// `request.URL.Path`:
+//
+//   - Любой путь, содержащий сегмент `/internal` (например
+//     `/vpc/v1/networks/{id}/internal`, `/vpc/v1/networkInterfaces/{id}/internal`),
+//     → internal mux.
+//   - Admin-only ресурсы (kacho-only, не tenant-facing) → internal mux:
+//     `/vpc/v1/addressPools` (включая `:check` / `:explainResolution`),
+//     `/vpc/v1/networks/{id}/addressPoolBinding`,
+//     `/vpc/v1/addresses/{id}/addressPoolOverride`,
+//     `/vpc/v1/clouds/{id}/poolSelector`,
+//     `/compute/v1/hypervisors`.
+//   - Всё остальное → public mux.
+//
+// Корневой `http.Handler` (диспетчер) экспонируется как `http.Handler`
+// и передаётся в `httpMux.Handle("/", restHandler)` в `cmd/api-gateway/main.go`.
+//
+// # Активные сервисы
+//
 //   - resourcemanager.v1: Cloud, Folder
 //   - organizationmanager.v1: Organization (backend: resource-manager)
 //   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint, NetworkInterface
-//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetworkInterface —
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetwork —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
 //   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
 //     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
-//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion, InternalHypervisor —
+//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
+//     (InternalHypervisor выпилен в KAC-36 / kacho-proto commit 79e3790.)
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	computepb   "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
-	orgpb       "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
+	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
-	rmpb        "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
-	vpcpb       "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
-	pepb        "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
+	orgpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
+	rmpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	pepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
 
-// NewMux создаёт grpc-gateway ServeMux и регистрирует активные публичные сервисы
-// плюс OperationService (через OpsProxy).
+// isInternalPath решает, какой sub-mux обрабатывает запрос.
+//
+// Правила (в порядке проверки):
+//  1. Любой path-сегмент `/internal` → internal mux. Покрывает
+//     `/vpc/v1/networks/{id}/internal`, `/vpc/v1/networkInterfaces/{id}/internal`,
+//     и любые будущие `*/internal`.
+//  2. `/vpc/v1/addressPools` (и `:check` / `:explainResolution`) → internal.
+//  3. `/vpc/v1/networks/{id}/addressPoolBinding` → internal.
+//  4. `/vpc/v1/addresses/{id}/addressPoolOverride` → internal.
+//  5. `/vpc/v1/clouds/{id}/poolSelector` → internal.
+//  6. `/compute/v1/hypervisors` → internal.
+//  7. Всё остальное → public.
+func isInternalPath(path string) bool {
+	// (1) any `/internal` segment.
+	// strings.Contains покрывает оба варианта:
+	//   /vpc/v1/networks/{id}/internal      (suffix)
+	//   /vpc/v1/.../internal/...            (mid-path, гипотетически)
+	// Защищаемся от ложного срабатывания на сегменте, начинающемся с
+	// "internal" но не равном ему (никаких таких путей нет в Kachō, но на
+	// будущее): требуем именно `/internal` как self-contained сегмент.
+	if strings.Contains(path, "/internal/") || strings.HasSuffix(path, "/internal") {
+		return true
+	}
+
+	// (2) /vpc/v1/addressPools[/...|:...]
+	if path == "/vpc/v1/addressPools" ||
+		strings.HasPrefix(path, "/vpc/v1/addressPools/") ||
+		strings.HasPrefix(path, "/vpc/v1/addressPools:") {
+		return true
+	}
+
+	// (3) /vpc/v1/networks/{id}/addressPoolBinding
+	if strings.HasPrefix(path, "/vpc/v1/networks/") &&
+		strings.HasSuffix(path, "/addressPoolBinding") {
+		return true
+	}
+
+	// (4) /vpc/v1/addresses/{id}/addressPoolOverride
+	if strings.HasPrefix(path, "/vpc/v1/addresses/") &&
+		strings.HasSuffix(path, "/addressPoolOverride") {
+		return true
+	}
+
+	// (5) /vpc/v1/clouds/{id}/poolSelector
+	if strings.HasPrefix(path, "/vpc/v1/clouds/") &&
+		strings.HasSuffix(path, "/poolSelector") {
+		return true
+	}
+
+	// (6) /compute/v1/hypervisors[/...]
+	if path == "/compute/v1/hypervisors" ||
+		strings.HasPrefix(path, "/compute/v1/hypervisors/") {
+		return true
+	}
+
+	return false
+}
+
+// NewMux создаёт grpc-gateway split-mux (public + internal) и регистрирует
+// активные публичные сервисы плюс OperationService (через OpsProxy).
+//
+// Возвращает `http.Handler`-диспетчер, который на каждый request выбирает
+// public или internal sub-mux на основании `isInternalPath(r.URL.Path)`.
 //
 // addrs — карта domain → адрес gRPC backend:
 //
@@ -49,20 +147,19 @@ import (
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
-func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (*runtime.ServeMux, error) {
-	// JSON-marshaller (общий для public + internal endpoints — единственный mux):
-	//   - UseProtoNames=false → camelCase JSON-поля.
-	//   - EmitUnpopulated=true → отдаём явные нулевые значения (`""`/`{}`/`[]`/`null`)
-	//     для proto-полей. На публичной поверхности (Network/Subnet/Address/NIC/SG/RT/
-	//     Gateway/PE) `description`/`labels`/`cidr_blocks`/`v4_address_ids` и т.п. —
-	//     полезный контракт, клиент должен видеть поле даже если оно пустое.
-	//
-	// TODO: для internal endpoints (`/vpc/v1/.../internal`) имеет смысл
-	// `EmitUnpopulated=false` (там много инфра-полей `vpn_id`/`hv_id`/`sid`/
-	// `host_iface`/`netns`/... которые часто пустые). Сейчас один общий mux,
-	// поэтому marshaller единый. Refactor: split internal на отдельный
-	// `ServeMux` с собственным marshaller'ом (= отдельный тикет).
-	jsonMarshaler := &runtime.JSONPb{
+func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (http.Handler, error) {
+	// JSON-marshallers (отличаются ТОЛЬКО `EmitUnpopulated`):
+	//   - public: EmitUnpopulated=true — отдаём явные нулевые значения
+	//     (`""`/`{}`/`[]`/`null`) для proto-полей. На публичной поверхности
+	//     (Network/Subnet/Address/NIC/SG/RT/Gateway/PE) `description`/`labels`/
+	//     `cidr_blocks`/`v4_address_ids` и т.п. — полезный контракт, клиент
+	//     должен видеть поле даже если оно пустое.
+	//   - internal: EmitUnpopulated=false — на internal/admin endpoints
+	//     (`/internal`-projections, AddressPool, Hypervisor) много инфра-полей
+	//     `vpn_id`/`hv_id`/`sid`/`host_iface`/`netns`/... до материализации
+	//     пустые; пустые поля скрываем чтобы UI/админам видеть только реально
+	//     заполненные значения.
+	publicMarshaler := &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
 			UseProtoNames:   false,
 			EmitUnpopulated: true,
@@ -71,9 +168,23 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			DiscardUnknown: true,
 		},
 	}
-	mux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonMarshaler),
+	internalMarshaler := &runtime.JSONPb{
+		MarshalOptions: protojson.MarshalOptions{
+			UseProtoNames:   false,
+			EmitUnpopulated: false,
+		},
+		UnmarshalOptions: protojson.UnmarshalOptions{
+			DiscardUnknown: true,
+		},
+	}
+
+	publicMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, publicMarshaler),
 	)
+	internalMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, internalMarshaler),
+	)
+
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		// Client-side round-robin; pair with `dns:///<headless-svc>:<port>` dial target.
@@ -89,125 +200,149 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		computeInternalAddr = addrs["computeInternal"]
 	}
 
-	// --- resourcemanager: Cloud + Folder ---
-	if err := rmpb.RegisterCloudServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-		return nil, fmt.Errorf("register CloudService: %w", err)
-	}
-	if err := rmpb.RegisterFolderServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-		return nil, fmt.Errorf("register FolderService: %w", err)
+	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
+	// dispatch (isInternalPath) ниже выбирает, какой из них фактически обработает
+	// конкретный запрос — разница только в JSON-маршалинге. Так нам не нужно
+	// заранее знать, какой RPC попадёт на какой путь: grpc-gateway сам разрулит,
+	// а мы лишь подсовываем правильный JSONPb.
+	muxes := []*runtime.ServeMux{publicMux, internalMux}
+
+	for _, mux := range muxes {
+		// --- resourcemanager: Cloud + Folder ---
+		if err := rmpb.RegisterCloudServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+			return nil, fmt.Errorf("register CloudService: %w", err)
+		}
+		if err := rmpb.RegisterFolderServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+			return nil, fmt.Errorf("register FolderService: %w", err)
+		}
+
+		// --- organizationmanager: Organization (backend: resource-manager) ---
+		if err := orgpb.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
+			return nil, fmt.Errorf("register OrganizationService: %w", err)
+		}
+
+		// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway + PrivateEndpoint ---
+		if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register NetworkService: %w", err)
+		}
+		if err := vpcpb.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register SubnetService: %w", err)
+		}
+		if err := vpcpb.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register AddressService: %w", err)
+		}
+		if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register RouteTableService: %w", err)
+		}
+		if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register SecurityGroupService: %w", err)
+		}
+		if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register GatewayService: %w", err)
+		}
+		if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
+		}
+		if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+			return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
+		}
+
+		// --- vpc admin (AddressPool/Cloud) — kacho-only, internal-port (9091) ---
+		// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
+		// на verbatim-YC; путь /vpc/v1/addressPools. Region/Zone перенесены в kacho-compute
+		// (эпик KAC-15) — см. блок compute ниже + workspace CLAUDE.md §«Кросс-доменные ссылки».
+		if vpcInternalAddr != "" {
+			if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
+			}
+			if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register InternalCloudService: %w", err)
+			}
+			// NB: InternalNetworkInterfaceService — НЕ регистрируется в REST mux
+			// (KAC-49 решение: NIC оставлен только публичной проекцией). Data-plane-
+			// инфо (vpn_id/hv_id/sid/host_iface/netns/...) остаётся доступной только
+			// через gRPC `vpc.kacho.svc:9091` для kacho-vpc-implement — не для UI/CLI.
+			//
+			// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal projection
+			// of a Network ({network, vpn_id}); backs the admin-UI "jsonint" tab.
+			if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register InternalNetworkService: %w", err)
+			}
+		}
+
+		// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
+		if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute DiskService: %w", err)
+		}
+		if err := computepb.RegisterImageServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute ImageService: %w", err)
+		}
+		if err := computepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute SnapshotService: %w", err)
+		}
+		if err := computepb.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute InstanceService: %w", err)
+		}
+		if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute DiskTypeService: %w", err)
+		}
+		if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute ZoneService: %w", err)
+		}
+		if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+			return nil, fmt.Errorf("register compute RegionService: %w", err)
+		}
+
+		// --- compute admin (InternalDiskType/InternalZone/InternalRegion) — kacho-only, internal-port (9091) ---
+		// CRUD справочников DiskType/Zone (POST/PATCH/DELETE на /compute/v1/diskTypes,
+		// /compute/v1/zones). Не верстается на verbatim-YC, доступен только через
+		// cluster-internal REST listener для UI/admin-tooling (CLAUDE.md §запрет 6,
+		// kacho-compute/CLAUDE.md §16). InternalWatchService — gRPC server-streaming
+		// (outbox), через grpc-gateway REST не проксируется; consumer'ы ходят в
+		// compute.kacho.svc:9091 напрямую gRPC.
+		if computeInternalAddr != "" {
+			if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
+			}
+			if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
+			}
+			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
+			}
+			// InternalHypervisorService удалён в kacho-proto (commit 79e3790,
+			// KAC-78/KAC-36): ресурс `Hypervisor` целиком выпилен. Path
+			// `/compute/v1/hypervisors` остаётся помеченным как internal в
+			// `isInternalPath` (defense-in-depth — на случай реинтродукции),
+			// но handler здесь больше НЕ регистрируется. См. KAC-50.
+		}
+
+		// --- OperationService (OpsProxy, in-process) ---
+		// Не имеет отдельного backend — живёт in-process как OpsProxy.
+		// Регистрируем через RegisterOperationServiceHandlerServer (локальный вызов, без dial).
+		var opsSrv operationpb.OperationServiceServer
+		if conns != nil {
+			opsSrv = opsproxy.New(conns)
+		} else {
+			opsSrv = operationpb.UnimplementedOperationServiceServer{}
+		}
+		if err := operationpb.RegisterOperationServiceHandlerServer(ctx, mux, opsSrv); err != nil {
+			return nil, fmt.Errorf("register OperationService: %w", err)
+		}
 	}
 
-	// --- organizationmanager: Organization (backend: resource-manager) ---
-	if err := orgpb.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-		return nil, fmt.Errorf("register OrganizationService: %w", err)
-	}
+	// Path-based dispatcher. Решает, какому sub-mux'у скормить запрос. Сами
+	// RPC-роуты внутри grpc-gateway-mux'ов идентичны — отличается только JSON
+	// маршалинг ответа (EmitUnpopulated). Запрос НЕ переадресуется куда-то ещё:
+	// internal sub-mux обработает request тем же handler'ом, что и public, но
+	// сожмёт response пустых полей.
+	dispatcher := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isInternalPath(r.URL.Path) {
+			internalMux.ServeHTTP(w, r)
+			return
+		}
+		publicMux.ServeHTTP(w, r)
+	})
 
-	// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway + PrivateEndpoint ---
-	if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register NetworkService: %w", err)
-	}
-	if err := vpcpb.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register SubnetService: %w", err)
-	}
-	if err := vpcpb.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register AddressService: %w", err)
-	}
-	if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register RouteTableService: %w", err)
-	}
-	if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register SecurityGroupService: %w", err)
-	}
-	if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register GatewayService: %w", err)
-	}
-	if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
-	}
-	if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-		return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
-	}
-
-	// --- vpc admin (AddressPool/Cloud) — kacho-only, internal-port (9091) ---
-	// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
-	// на verbatim-YC; путь /vpc/v1/addressPools. Region/Zone перенесены в kacho-compute
-	// (эпик KAC-15) — см. блок compute ниже + workspace CLAUDE.md §«Кросс-доменные ссылки».
-	if vpcInternalAddr != "" {
-		if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
-		}
-		if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalCloudService: %w", err)
-		}
-		// NB: InternalNetworkInterfaceService — НЕ регистрируется в REST mux
-		// (KAC-49 решение: NIC оставлен только публичной проекцией). Data-plane-
-		// инфо (vpn_id/hv_id/sid/host_iface/netns/...) остаётся доступной только
-		// через gRPC `vpc.kacho.svc:9091` для kacho-vpc-implement — не для UI/CLI.
-		//
-		// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal projection
-		// of a Network ({network, vpn_id}); backs the admin-UI "jsonint" tab.
-		if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register InternalNetworkService: %w", err)
-		}
-	}
-
-	// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
-	if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute DiskService: %w", err)
-	}
-	if err := computepb.RegisterImageServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute ImageService: %w", err)
-	}
-	if err := computepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute SnapshotService: %w", err)
-	}
-	if err := computepb.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute InstanceService: %w", err)
-	}
-	if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute DiskTypeService: %w", err)
-	}
-	if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute ZoneService: %w", err)
-	}
-	if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
-		return nil, fmt.Errorf("register compute RegionService: %w", err)
-	}
-
-	// --- compute admin (InternalDiskType/InternalZone/InternalRegion) — kacho-only, internal-port (9091) ---
-	// CRUD справочников DiskType/Zone (POST/PATCH/DELETE на /compute/v1/diskTypes,
-	// /compute/v1/zones). Не верстается на verbatim-YC, доступен только через
-	// cluster-internal REST listener для UI/admin-tooling (CLAUDE.md §запрет 6,
-	// kacho-compute/CLAUDE.md §16). InternalWatchService — gRPC server-streaming
-	// (outbox), через grpc-gateway REST не проксируется; consumer'ы ходят в
-	// compute.kacho.svc:9091 напрямую gRPC.
-	if computeInternalAddr != "" {
-		if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
-		}
-		if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
-		}
-		if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
-		}
-		if err := computepb.RegisterInternalHypervisorServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
-			return nil, fmt.Errorf("register compute InternalHypervisorService: %w", err)
-		}
-	}
-
-	// --- OperationService (OpsProxy, in-process) ---
-	// Не имеет отдельного backend — живёт in-process как OpsProxy.
-	// Регистрируем через RegisterOperationServiceHandlerServer (локальный вызов, без dial).
-	var opsSrv operationpb.OperationServiceServer
-	if conns != nil {
-		opsSrv = opsproxy.New(conns)
-	} else {
-		opsSrv = operationpb.UnimplementedOperationServiceServer{}
-	}
-	if err := operationpb.RegisterOperationServiceHandlerServer(ctx, mux, opsSrv); err != nil {
-		return nil, fmt.Errorf("register OperationService: %w", err)
-	}
-
-	return mux, nil
+	return dispatcher, nil
 }
