@@ -14,6 +14,9 @@ backends:
   vpcInternal: vpc.kacho.svc.cluster.local:9091
   compute: compute.kacho.svc.cluster.local:9090
   computeInternal: compute.kacho.svc.cluster.local:9091
+  # KAC-105 (IAM E0): kacho-iam public + internal endpoints
+  iam: kacho-iam.kacho.svc.cluster.local:9090
+  iamInternal: kacho-iam-internal.kacho.svc.cluster.local:9091
 
 # TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
 # Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.

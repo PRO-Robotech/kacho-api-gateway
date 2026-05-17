@@ -44,6 +44,14 @@ spec:
             - name: KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC
               value: "{{ .Values.backends.computeInternal }}"
             {{- end }}
+            {{- if .Values.backends.iam }}
+            - name: KACHO_API_GATEWAY_IAM_GRPC
+              value: "{{ .Values.backends.iam }}"
+            {{- end }}
+            {{- if .Values.backends.iamInternal }}
+            - name: KACHO_API_GATEWAY_IAM_INTERNAL_GRPC
+              value: "{{ .Values.backends.iamInternal }}"
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
               value: ":{{ .Values.tlsPort }}"
