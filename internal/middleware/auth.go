@@ -14,6 +14,11 @@
 //   - **production-strict**: Bearer обязателен **всегда** (`Unauthenticated`
 //     без него); все остальные правила — как в production.
 //
+// Архитектура (acceptance §4.3):
+//   ┌─ parse Bearer ─┐    ┌─ JWT validate ─┐    ┌─ SubjectLookup ─┐    ┌─ Principal in ctx ─┐
+//   │ Authorization │ → │ JWKS/HMAC      │ → │ kacho-iam:9091  │ → │ x-kacho-principal-* │
+//   └────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────────┘
+//
 // Loop-prevention запрет #6: InternalIAMService.LookupSubject зовётся
 // **gRPC-direct** (через iamSubjectClient), НЕ через restmux, иначе recursion.
 package middleware
@@ -46,6 +51,8 @@ const (
 
 // SubjectLookuper — port-интерфейс для subject-резолва. Реализация —
 // `internal/clients/iam_subject_client.go` (gRPC-direct к kacho-iam:9091).
+// Декларирован тут, чтобы не тащить proto-dep в middleware (Clean
+// Architecture — handler/middleware layer).
 type SubjectLookuper interface {
 	LookupByExternalID(ctx context.Context, externalID string) (Subject, error)
 }
@@ -60,13 +67,16 @@ type Subject struct {
 // AuthInterceptor — JWT validate + subject lookup + Principal injection.
 type AuthInterceptor struct {
 	mode          AuthMode
-	devSecret     []byte
+	devSecret     []byte // HMAC-secret для mode=dev (если пуст — Bearer reject в dev/production-strict).
 	subjectLookup SubjectLookuper
 	logger        *slog.Logger
 
-	mdKeyPrincipalType    string
-	mdKeyPrincipalID      string
-	mdKeyPrincipalDisplay string
+	// Headers, которые auth-interceptor пропускает в backend metadata
+	// (после успешного auth). Backend через corelib `grpcsrv.PrincipalExtractInterceptor`
+	// прочитает их в ctx.
+	mdKeyPrincipalType    string // "x-kacho-principal-type"
+	mdKeyPrincipalID      string // "x-kacho-principal-id"
+	mdKeyPrincipalDisplay string // "x-kacho-principal-display-name"
 }
 
 // NewAuthInterceptor создаёт interceptor с настройками из конфига.
@@ -106,9 +116,11 @@ func (a *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 	}
 }
 
+// authorize — основной flow: parse → validate → lookup → inject Principal.
 func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (context.Context, error) {
 	bearer := extractBearer(ctx)
 
+	// Empty Bearer handling per mode (D4).
 	if bearer == "" {
 		switch a.mode {
 		case AuthModeProductionStrict:
@@ -118,8 +130,10 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 		}
 	}
 
+	// Validate JWT (HMAC-dev для текущей фазы; Zitadel JWKS — после deploy fix).
 	claims, err := a.validateJWT(bearer)
 	if err != nil {
+		// dev mode: tolerate invalid Bearer → fallback anonymous (backwards-compat).
 		if a.mode == AuthModeDev {
 			a.logger.Debug("auth: invalid Bearer in dev mode, falling back to anonymous",
 				"method", fullMethod, "err", err)
@@ -130,6 +144,7 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 		return nil, status.Errorf(codes.Unauthenticated, "token validation failed: %v", err)
 	}
 
+	// Resolve subject via kacho-iam (gRPC-direct).
 	subjectID, _ := claims["sub"].(string)
 	if subjectID == "" {
 		return nil, status.Error(codes.Unauthenticated, "token missing subject")
@@ -141,14 +156,16 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 		case AuthModeProductionStrict:
 			return nil, status.Errorf(codes.Unauthenticated, "subject not found: %v", err)
 		case AuthModeProduction:
+			// TODO(KAC-107 follow-up): lazy-mirror через UpsertFromIdentity (D10).
 			return nil, status.Errorf(codes.Unauthenticated, "subject not found: %v", err)
-		default:
+		default: // dev
 			a.logger.Debug("auth: subject not in kacho-iam, fallback to anonymous",
 				"method", fullMethod, "external_id", subjectID, "err", err)
 			return a.injectAnonymous(ctx), nil
 		}
 	}
 
+	// Inject Principal в ctx + metadata (backend читает через corelib).
 	return a.injectPrincipal(ctx, subj.Type, subj.ID, subj.DisplayName), nil
 }
 
@@ -160,6 +177,7 @@ func (a *AuthInterceptor) injectPrincipal(ctx context.Context, pType, pID, displ
 	p := operations.Principal{Type: pType, ID: pID, DisplayName: displayName}
 	ctx = operations.WithPrincipal(ctx, p)
 
+	// Inject в outgoing metadata, чтобы proxy-слой передал backend'у.
 	md, _ := metadata.FromOutgoingContext(ctx)
 	if md == nil {
 		md = metadata.MD{}
@@ -175,6 +193,7 @@ func (a *AuthInterceptor) injectPrincipal(ctx context.Context, pType, pID, displ
 func (a *AuthInterceptor) validateJWT(tokenStr string) (jwt.MapClaims, error) {
 	if len(a.devSecret) == 0 {
 		// TODO(KAC-107 follow-up): Zitadel JWKS-validate ветка после фикса Zitadel deploy.
+		// Сейчас в production / production-strict без dev-secret — auth не пройдёт.
 		return nil, fmt.Errorf("no signing key configured (dev secret empty, Zitadel JWKS deferred)")
 	}
 	parsed, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
@@ -212,13 +231,41 @@ func extractBearer(ctx context.Context) string {
 	return ""
 }
 
-// HTTP — middleware для grpc-gateway REST mux. Cookie→Bearer rewrite — KAC-107 follow-up;
-// сейчас no-op pass-through (с заглушкой для kacho_session cookie).
+// HTTPAuth — middleware для grpc-gateway REST mux. Парсит Authorization header
+// и прокидывает его как metadata в gRPC ctx (стандартный grpc-gateway-форвард
+// в `incomingHeaderMatcher`). Здесь мы только логируем — реальная проверка
+// произойдёт в Unary interceptor'е после конвертации REST → gRPC.
+//
+// Также: если есть cookie `kacho_session=...` (UI), переписываем её в
+// Authorization Bearer (acceptance §3.4 D5). Cookie session — отложено в
+// KAC-107 follow-up; пока no-op.
 func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Cookie → Bearer rewrite (D5) — KAC-107 follow-up.
 		if r.Header.Get("Authorization") == "" {
 			if c, err := r.Cookie("kacho_session"); err == nil && c.Value != "" {
 				r.Header.Set("Authorization", "Bearer "+c.Value)
+			}
+		}
+
+		// KAC-107 follow-up #2: REST→backend Principal propagation.
+		// gRPC server interceptor работает только для grpc-proxy path, не для grpc-gateway
+		// REST. Здесь делаем JWT-parse + SubjectLookup + ставим headers
+		// `Grpc-Metadata-X-Kacho-Principal-*` — grpc-gateway runtime по умолчанию
+		// форвардит их как outgoing metadata `x-kacho-principal-*`, которые backend
+		// читает через corelib/grpcsrv.UnaryPrincipalExtract.
+		if auth := r.Header.Get("Authorization"); auth != "" && len(a.devSecret) > 0 {
+			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok {
+				if claims, err := a.validateJWT(tok); err == nil {
+					subjectID, _ := claims["sub"].(string)
+					if subjectID != "" {
+						if subj, err := a.subjectLookup.LookupByExternalID(r.Context(), subjectID); err == nil {
+							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
+							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
+							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+						}
+					}
+				}
 			}
 		}
 		next.ServeHTTP(w, r)
