@@ -43,6 +43,8 @@ var prefixToBackend = map[string]string{
 	"e9b": "vpc", // Subnet / Address
 	// compute domain
 	"epd": "compute", // все операции compute (Instance/Disk/Image/Snapshot — общий op-prefix)
+	// iam domain
+	"iop": "iam", // все операции iam (Account/Project/User/SA/Group/Role/AccessBinding — общий op-prefix, KAC-105)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, всё ещё
