@@ -32,6 +32,7 @@ import (
 	shimendpoint "github.com/PRO-Robotech/kacho-yc-shim/endpoint"
 	shimiam "github.com/PRO-Robotech/kacho-yc-shim/iam"
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/clients"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
@@ -103,6 +104,26 @@ func main() {
 	defer opsLoopback.Close()
 	backends["operation"] = opsLoopback
 
+	// --- IAM subject client (gRPC-direct к kacho-iam:9091 для LookupSubject; KAC-107 E2) ---
+	// Loop-prevention запрет #6: InternalIAMService НЕ регистрируется в restmux,
+	// поэтому subject-lookup идёт напрямую через grpc.NewClient.
+	iamSubjectClient, err := clients.NewIAMSubjectClient(cfg.IAMInternalAddr, logger)
+	if err != nil {
+		log.Fatalf("iam subject client: %v", err)
+	}
+	defer func() { _ = iamSubjectClient.Close() }()
+
+	authInterceptor := middleware.NewAuthInterceptor(
+		middleware.AuthMode(cfg.AuthNMode),
+		cfg.AuthNDevSecret,
+		iamSubjectClient,
+		logger,
+	)
+	logger.Info("auth-interceptor configured",
+		"mode", cfg.AuthNMode,
+		"iam_internal_addr", cfg.IAMInternalAddr,
+		"dev_secret_set", cfg.AuthNDevSecret != "")
+
 	// --- gRPC server ---
 	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
 	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
@@ -111,13 +132,13 @@ func main() {
 		grpc.ChainUnaryInterceptor(
 			middleware.UnaryRequestID,
 			middleware.UnaryRecovery(logger),
-			middleware.UnaryAuthNoop(logger),
+			authInterceptor.Unary(),
 			middleware.UnaryAccessLog(logger),
 		),
 		grpc.ChainStreamInterceptor(
 			middleware.StreamRequestID,
 			middleware.StreamRecovery(logger),
-			middleware.StreamAuthNoop(logger),
+			authInterceptor.Stream(),
 			middleware.StreamAccessLog(logger),
 		),
 	)
@@ -170,7 +191,7 @@ func main() {
 
 	httpHandler := middleware.HTTPRequestID(
 		middleware.HTTPRecovery(logger)(
-			middleware.HTTPAuthNoop(
+			authInterceptor.HTTP(
 				middleware.HTTPAccessLog(logger)(
 					middleware.HTTPIdempotency(idempStore)(httpMux),
 				),
