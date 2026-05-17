@@ -78,8 +78,9 @@ func TestGateway_F3_PanicRecoveryReturnsInternal(t *testing.T) {
 	}
 }
 
-// TestGateway_F7_AuthNoopPassesThrough проверяет сценарий F7: запрос без auth проходит.
-func TestGateway_F7_AuthNoopPassesThrough(t *testing.T) {
+// TestGateway_F7_AuthDevModePassesThrough проверяет сценарий F7 (KAC-107 E2):
+// в mode=dev запрос без Bearer проходит как anonymous (backwards-compat).
+func TestGateway_F7_AuthDevModePassesThrough(t *testing.T) {
 	logger := testLogger()
 	called := false
 	handler := func(ctx context.Context, req any) (any, error) {
@@ -87,10 +88,11 @@ func TestGateway_F7_AuthNoopPassesThrough(t *testing.T) {
 		return nil, nil
 	}
 
-	interceptor := middleware.UnaryAuthNoop(logger)
+	auth := middleware.NewAuthInterceptor(middleware.AuthModeDev, "", nil, logger)
+	interceptor := auth.Unary()
 	_, err := interceptor(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/test/Method"}, handler)
 	if err != nil {
-		t.Fatalf("auth no-op не должен возвращать ошибку: %v", err)
+		t.Fatalf("dev mode без Bearer не должен возвращать ошибку: %v", err)
 	}
 	if !called {
 		t.Error("handler должен быть вызван")

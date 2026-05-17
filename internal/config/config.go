@@ -51,6 +51,20 @@ type Config struct {
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
 	// External clients dial this address. Defaults to api.kacho.local:443.
 	AdvertisedEndpointAddr string `envconfig:"KACHO_API_GATEWAY_ADVERTISED_ENDPOINT" default:"api.kacho.local:443"`
+
+	// AuthNMode — режим auth-interceptor (KAC-107 E2):
+	//   - "dev" (default): backwards-compat. Без Bearer = anonymous; невалидный
+	//     Bearer = fallback anonymous. С валидным Bearer + subject в kacho-iam =
+	//     real Principal.
+	//   - "production": Bearer обязателен. Невалидный или unknown subject =
+	//     Unauthenticated.
+	//   - "production-strict": то же что production + reject missing Bearer.
+	AuthNMode string `envconfig:"KACHO_API_GATEWAY_AUTHN_MODE" default:"dev"`
+
+	// AuthNDevSecret — HMAC-secret для подписи dev-JWT (mode=dev).
+	// Если пуст — Bearer-токены в dev-режиме игнорируются (всегда anonymous).
+	// Production / production-strict — нужен Zitadel JWKS (TODO post-deploy fix).
+	AuthNDevSecret string `envconfig:"KACHO_API_GATEWAY_AUTHN_DEV_SECRET" default:""`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
