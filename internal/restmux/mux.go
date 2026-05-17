@@ -48,6 +48,12 @@
 //   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
 //     (InternalHypervisor выпилен в KAC-36 / kacho-proto commit 79e3790.)
+//   - iam.v1: Account, Project, User (read+delete only), ServiceAccount, Group, Role, AccessBinding —
+//     все RPC public под /iam/v1/* (KAC-105, E0).
+//   - iam.v1 admin (kacho-only): InternalUserService.Get — для admin tooling; зарегистрирован
+//     в internal mux pro-forma (proto-аннотации `google.api.http` отсутствуют → real-трафик
+//     идёт только через gRPC-direct до kacho-iam:9091). E2 добавит REST для UpsertFromIdentity.
+//     InternalIAMService.LookupSubject/ListPermissions — НЕ регистрируется в REST (gRPC-direct).
 //   - operation (без v1!): OperationService (in-process OpsProxy)
 package restmux
 
@@ -63,6 +69,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
+	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	orgpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
 	rmpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
@@ -191,13 +198,15 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
 	}
 
-	var rmAddr, vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr string
+	var rmAddr, vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr string
 	if addrs != nil {
 		rmAddr = addrs["resourcemanager"]
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
 		computeAddr = addrs["compute"]
 		computeInternalAddr = addrs["computeInternal"]
+		iamAddr = addrs["iam"]
+		iamInternalAddr = addrs["iamInternal"]
 	}
 
 	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
@@ -315,6 +324,50 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			// `/compute/v1/hypervisors` остаётся помеченным как internal в
 			// `isInternalPath` (defense-in-depth — на случай реинтродукции),
 			// но handler здесь больше НЕ регистрируется. См. KAC-50.
+		}
+
+		// --- iam.v1: Account + Project + User (read+delete only) + ServiceAccount + Group + Role + AccessBinding ---
+		// Public surface KAC-105 (E0): все 7 сервисов под /iam/v1/*.
+		// User не имеет Create/Update — User'ы создаются через InternalUserService.UpsertFromIdentity
+		// (E2: OIDC-callback в api-gateway), на E0 — admin через grpcurl. Update пользователю не
+		// требуется на E0 (display_name/email берётся из Zitadel при следующем UpsertFromIdentity).
+		if iamAddr != "" {
+			if err := iampb.RegisterAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam AccountService: %w", err)
+			}
+			if err := iampb.RegisterProjectServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam ProjectService: %w", err)
+			}
+			if err := iampb.RegisterUserServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam UserService: %w", err)
+			}
+			if err := iampb.RegisterServiceAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam ServiceAccountService: %w", err)
+			}
+			if err := iampb.RegisterGroupServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam GroupService: %w", err)
+			}
+			if err := iampb.RegisterRoleServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam RoleService: %w", err)
+			}
+			if err := iampb.RegisterAccessBindingServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam AccessBindingService: %w", err)
+			}
+		}
+
+		// --- iam.v1 admin (InternalUserService) — kacho-only, internal-port (9091) ---
+		// E0: Регистрируем InternalUserService для admin tooling. ВАЖНО: его RPC
+		// (Get, UpsertFromIdentity) в proto НЕ имеют `option (google.api.http)`,
+		// поэтому grpc-gateway не создаёт REST-routes для них — реальный трафик
+		// идёт исключительно через gRPC-direct (`grpcurl :9091`). Регистрация в
+		// REST mux — pro-forma reference для будущего E2 (когда добавим http-аннотации
+		// для admin REST UI). InternalIAMService.LookupSubject/ListPermissions — НЕ
+		// регистрируется здесь; auth-interceptor api-gateway зовёт kacho-iam:9091
+		// напрямую через grpc-client (E2, см. middleware/auth_noop.go TODO).
+		if iamInternalAddr != "" {
+			if err := iampb.RegisterInternalUserServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam InternalUserService: %w", err)
+			}
 		}
 
 		// --- OperationService (OpsProxy, in-process) ---

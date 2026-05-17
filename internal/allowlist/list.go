@@ -166,6 +166,59 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.compute.v1.ZoneService/Get":  {},
 	"/kacho.cloud.compute.v1.ZoneService/List": {},
 
+	// iam.v1 — AccountService (KAC-105, E0)
+	"/kacho.cloud.iam.v1.AccountService/Get":            {},
+	"/kacho.cloud.iam.v1.AccountService/List":           {},
+	"/kacho.cloud.iam.v1.AccountService/Create":         {},
+	"/kacho.cloud.iam.v1.AccountService/Update":         {},
+	"/kacho.cloud.iam.v1.AccountService/Delete":         {},
+	"/kacho.cloud.iam.v1.AccountService/ListOperations": {},
+	// iam.v1 — ProjectService
+	"/kacho.cloud.iam.v1.ProjectService/Get":            {},
+	"/kacho.cloud.iam.v1.ProjectService/List":           {},
+	"/kacho.cloud.iam.v1.ProjectService/Create":         {},
+	"/kacho.cloud.iam.v1.ProjectService/Update":         {},
+	"/kacho.cloud.iam.v1.ProjectService/Delete":         {},
+	"/kacho.cloud.iam.v1.ProjectService/Move":           {},
+	"/kacho.cloud.iam.v1.ProjectService/ListOperations": {},
+	// iam.v1 — UserService (НЕТ Create/Update — Users создаются через
+	// InternalUserService.UpsertFromIdentity; см. workspace CLAUDE.md / E0 §5.10)
+	"/kacho.cloud.iam.v1.UserService/Get":    {},
+	"/kacho.cloud.iam.v1.UserService/List":   {},
+	"/kacho.cloud.iam.v1.UserService/Delete": {},
+	// iam.v1 — ServiceAccountService
+	"/kacho.cloud.iam.v1.ServiceAccountService/Get":            {},
+	"/kacho.cloud.iam.v1.ServiceAccountService/List":           {},
+	"/kacho.cloud.iam.v1.ServiceAccountService/Create":         {},
+	"/kacho.cloud.iam.v1.ServiceAccountService/Update":         {},
+	"/kacho.cloud.iam.v1.ServiceAccountService/Delete":         {},
+	"/kacho.cloud.iam.v1.ServiceAccountService/ListOperations": {},
+	// iam.v1 — GroupService
+	"/kacho.cloud.iam.v1.GroupService/Get":            {},
+	"/kacho.cloud.iam.v1.GroupService/List":           {},
+	"/kacho.cloud.iam.v1.GroupService/Create":         {},
+	"/kacho.cloud.iam.v1.GroupService/Update":         {},
+	"/kacho.cloud.iam.v1.GroupService/Delete":         {},
+	"/kacho.cloud.iam.v1.GroupService/AddMember":      {},
+	"/kacho.cloud.iam.v1.GroupService/RemoveMember":   {},
+	"/kacho.cloud.iam.v1.GroupService/ListMembers":    {},
+	"/kacho.cloud.iam.v1.GroupService/ListOperations": {},
+	// iam.v1 — RoleService
+	"/kacho.cloud.iam.v1.RoleService/Get":            {},
+	"/kacho.cloud.iam.v1.RoleService/List":           {},
+	"/kacho.cloud.iam.v1.RoleService/Create":         {},
+	"/kacho.cloud.iam.v1.RoleService/Update":         {},
+	"/kacho.cloud.iam.v1.RoleService/Delete":         {},
+	"/kacho.cloud.iam.v1.RoleService/ListOperations": {},
+	// iam.v1 — AccessBindingService
+	"/kacho.cloud.iam.v1.AccessBindingService/Get":            {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Create":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Delete":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource": {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":  {},
+	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
+	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
+
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},
 	"/kacho.cloud.operation.OperationService/Cancel": {},
