@@ -39,6 +39,29 @@ ingress:
 # Dev (kind + port-forward): override to localhost:18443.
 advertisedEndpoint: api.kacho.local:443
 
+# OIDC (KAC-107) — Zitadel auth-flow handlers /iam/v1/auth/{login,callback,me,logout}.
+# Server-side (token exchange + userinfo) ходит на `issuer` (cluster-internal),
+# browser-redirect — на `externalIssuer` (publicly reachable host).
+# Off-by-default. Включается в per-cluster overrides.
+oidc:
+  enabled: false
+  issuer: ""           # cluster-internal Zitadel URL (token exchange / userinfo)
+  externalIssuer: ""   # public-facing Zitadel URL (browser redirect)
+  clientId: ""
+  # ClientId через k8s Secret (заполняется zitadel-oidc-bootstrap Job из umbrella).
+  # Если задан — перебивает clientId. Optional=true → pod стартует даже если secret
+  # ещё не создан (post-install Job его apply'ит).
+  # clientIdSecretRef:
+  #   name: kacho-iam-oidc-client
+  #   key: client_id
+  #   optional: true
+  clientIdSecretRef: {}
+  redirectUri: ""
+  clientSecret: ""
+
+# Arbitrary env vars escape-hatch (key: value).
+extraEnv: {}
+
 # Default replicas=1; HPA autoscales up to 10 on CPU 70%.
 # api-gateway is the request-side bottleneck (~3500 RPS/pod baseline)
 # under the in-cluster 10k load test.
