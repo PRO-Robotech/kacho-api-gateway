@@ -1,6 +1,14 @@
 package middleware_test
 
 // auth_test.go — unit-тесты AuthInterceptor (KAC-107 E2).
+//
+// Покрытие GWT'ов acceptance §5.4:
+//   - dev mode без Bearer → anonymous pass-through (GWT-17).
+//   - dev mode с валидным Bearer → real Principal в ctx.
+//   - dev mode с невалидным Bearer → fallback anonymous (backwards-compat).
+//   - production-strict без Bearer → Unauthenticated (GWT-10 variant).
+//   - production с валидным Bearer, subject NotFound в kacho-iam → Unauthenticated.
+//   - subject lookup happy → Principal{user, usr-xxx} + headers в outgoing metadata.
 
 import (
 	"context"
@@ -53,7 +61,8 @@ func TestAuth_DevMode_NoBearer_Anonymous(t *testing.T) {
 	called := false
 	handler := func(ctx context.Context, _ any) (any, error) {
 		called = true
-		p := operations.PrincipalFromContext(ctx)
+		p, ok := operations.PrincipalFromContext(ctx), true
+		assert.True(t, ok)
 		assert.Equal(t, "system", p.Type)
 		assert.Equal(t, "anonymous", p.ID)
 		return nil, nil
@@ -79,6 +88,7 @@ func TestAuth_DevMode_ValidBearer_RealPrincipal(t *testing.T) {
 		assert.Equal(t, "user", p.Type)
 		assert.Equal(t, "usr-alice", p.ID)
 		assert.Equal(t, "Alice", p.DisplayName)
+		// Outgoing metadata must contain x-kacho-principal-*.
 		md, _ := metadata.FromOutgoingContext(ctx)
 		assert.Equal(t, []string{"user"}, md.Get("x-kacho-principal-type"))
 		assert.Equal(t, []string{"usr-alice"}, md.Get("x-kacho-principal-id"))
@@ -154,6 +164,7 @@ func TestAuth_Production_InvalidBearer_Rejected(t *testing.T) {
 }
 
 func TestAuth_Production_NoBearer_AllowsAnonymous(t *testing.T) {
+	// production (not strict) — без Bearer → anonymous (для public-endpoints типа auth-callback).
 	auth := middleware.NewAuthInterceptor(middleware.AuthModeProduction, "secret", &fakeLookup{}, authTestLogger())
 	called := false
 	handler := func(ctx context.Context, _ any) (any, error) {

@@ -251,18 +251,35 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 		// KAC-107 follow-up #2: REST→backend Principal propagation.
 		// gRPC server interceptor работает только для grpc-proxy path, не для grpc-gateway
 		// REST. Здесь делаем JWT-parse + SubjectLookup + ставим headers
-		// `Grpc-Metadata-X-Kacho-Principal-*` — grpc-gateway runtime по умолчанию
-		// форвардит их как outgoing metadata `x-kacho-principal-*`, которые backend
-		// читает через corelib/grpcsrv.UnaryPrincipalExtract.
+		// `X-Kacho-Principal-*`. Дальше restmux.NewMux WithMetadata callback явно
+		// читает их из http.Request и кладёт в outgoing gRPC metadata
+		// `x-kacho-principal-*`, которые backend читает через
+		// corelib/grpcsrv.UnaryPrincipalExtract. Также пишем legacy-form
+		// `Grpc-Metadata-X-Kacho-Principal-*` для совместимости с default
+		// grpc-gateway convention (если WithMetadata не работает — fallback path).
 		if auth := r.Header.Get("Authorization"); auth != "" && len(a.devSecret) > 0 {
 			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok {
-				if claims, err := a.validateJWT(tok); err == nil {
+				claims, jwtErr := a.validateJWT(tok)
+				if jwtErr != nil {
+					a.logger.Debug("auth.HTTP: JWT validate failed", "err", jwtErr.Error())
+				} else {
 					subjectID, _ := claims["sub"].(string)
-					if subjectID != "" {
-						if subj, err := a.subjectLookup.LookupByExternalID(r.Context(), subjectID); err == nil {
+					if subjectID == "" {
+						a.logger.Debug("auth.HTTP: JWT has empty sub")
+					} else {
+						subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
+						if lookupErr != nil {
+							a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
+						} else {
+							// Plain headers — WithMetadata callback in restmux форвардит.
+							r.Header.Set("X-Kacho-Principal-Type", subj.Type)
+							r.Header.Set("X-Kacho-Principal-Id", subj.ID)
+							r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+							// Legacy form — grpc-gateway default convention fallback.
 							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
 							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
 							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+							a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
 						}
 					}
 				}

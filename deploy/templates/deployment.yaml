@@ -62,6 +62,16 @@ spec:
             {{- end }}
             - name: KACHO_API_GATEWAY_ADVERTISED_ENDPOINT
               value: "{{ .Values.advertisedEndpoint }}"
+            {{- if .Values.authn }}
+            {{- if .Values.authn.mode }}
+            - name: KACHO_API_GATEWAY_AUTHN_MODE
+              value: "{{ .Values.authn.mode }}"
+            {{- end }}
+            {{- if .Values.authn.devSecret }}
+            - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
+              value: "{{ .Values.authn.devSecret }}"
+            {{- end }}
+            {{- end }}
           {{- if .Values.tls.enabled }}
           volumeMounts:
             - name: tls

@@ -61,6 +61,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"google.golang.org/grpc/metadata"
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -185,11 +187,59 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		},
 	}
 
+	// KAC-107 followup: explicit IncomingHeaderMatcher для x-kacho-principal-*
+	// + WithMetadata callback что явно собирает outgoing metadata из
+	// HTTP middleware-set headers `X-Kacho-Principal-*`. Без WithMetadata
+	// grpc-gateway не пробрасывал кастомные headers, IncomingHeaderMatcher
+	// один не помогал.
+	principalHeaderMatcher := func(key string) (string, bool) {
+		if k, ok := runtime.DefaultHeaderMatcher(key); ok {
+			return k, true
+		}
+		lower := strings.ToLower(key)
+		if strings.HasPrefix(lower, "x-kacho-principal-") {
+			return lower, true
+		}
+		return "", false
+	}
+
+	principalMetadata := func(_ context.Context, r *http.Request) metadata.MD {
+		md := metadata.MD{}
+		// HTTP middleware (`auth.HTTP`) ставит headers с `Grpc-Metadata-` префиксом
+		// — это canonical name в r.Header. Читаем оба варианта (с/без префикса)
+		// чтобы быть robust.
+		get := func(canonical, fallback string) string {
+			if v := r.Header.Get(canonical); v != "" {
+				return v
+			}
+			return r.Header.Get(fallback)
+		}
+		pt := get("Grpc-Metadata-X-Kacho-Principal-Type", "X-Kacho-Principal-Type")
+		pi := get("Grpc-Metadata-X-Kacho-Principal-Id", "X-Kacho-Principal-Id")
+		pd := get("Grpc-Metadata-X-Kacho-Principal-Display-Name", "X-Kacho-Principal-Display-Name")
+		// Debug log to verify callback fires and sees headers.
+		fmt.Printf("[restmux.WithMetadata] path=%s pt=%q pi=%q pd=%q\n", r.URL.Path, pt, pi, pd)
+		if pt != "" {
+			md.Append("x-kacho-principal-type", pt)
+		}
+		if pi != "" {
+			md.Append("x-kacho-principal-id", pi)
+		}
+		if pd != "" {
+			md.Append("x-kacho-principal-display-name", pd)
+		}
+		return md
+	}
+
 	publicMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, publicMarshaler),
+		runtime.WithIncomingHeaderMatcher(principalHeaderMatcher),
+		runtime.WithMetadata(principalMetadata),
 	)
 	internalMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, internalMarshaler),
+		runtime.WithIncomingHeaderMatcher(principalHeaderMatcher),
+		runtime.WithMetadata(principalMetadata),
 	)
 
 	opts := []grpc.DialOption{
