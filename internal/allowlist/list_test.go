@@ -231,6 +231,93 @@ func TestGateway_E1_FolderInternalExistsBlocked(t *testing.T) {
 	}
 }
 
+// TestGateway_KAC105_IamActive проверяет публичные iam.v1 RPC (KAC-105 E0):
+//   - все 7 публичных сервисов (Account/Project/User/ServiceAccount/Group/Role/AccessBinding)
+//     зарегистрированы в allowlist;
+//   - InternalIAMService.* / InternalUserService.* — НЕ в allowlist и блокируются
+//     HasInternalSuffix (запрет #6 workspace CLAUDE.md);
+//   - User не имеет Create/Update (создание через InternalUserService.UpsertFromIdentity).
+func TestGateway_KAC105_IamActive(t *testing.T) {
+	publicMethods := []string{
+		// AccountService
+		"/kacho.cloud.iam.v1.AccountService/Get",
+		"/kacho.cloud.iam.v1.AccountService/Create",
+		"/kacho.cloud.iam.v1.AccountService/Update",
+		"/kacho.cloud.iam.v1.AccountService/Delete",
+		// ProjectService (+ Move)
+		"/kacho.cloud.iam.v1.ProjectService/Get",
+		"/kacho.cloud.iam.v1.ProjectService/Create",
+		"/kacho.cloud.iam.v1.ProjectService/Move",
+		// UserService (read+delete only)
+		"/kacho.cloud.iam.v1.UserService/Get",
+		"/kacho.cloud.iam.v1.UserService/List",
+		"/kacho.cloud.iam.v1.UserService/Delete",
+		// ServiceAccountService
+		"/kacho.cloud.iam.v1.ServiceAccountService/Create",
+		"/kacho.cloud.iam.v1.ServiceAccountService/Delete",
+		// GroupService (+ AddMember/RemoveMember/ListMembers)
+		"/kacho.cloud.iam.v1.GroupService/Create",
+		"/kacho.cloud.iam.v1.GroupService/AddMember",
+		"/kacho.cloud.iam.v1.GroupService/RemoveMember",
+		"/kacho.cloud.iam.v1.GroupService/ListMembers",
+		// RoleService
+		"/kacho.cloud.iam.v1.RoleService/Create",
+		"/kacho.cloud.iam.v1.RoleService/Delete",
+		// AccessBindingService (+ ListByResource/ListBySubject)
+		"/kacho.cloud.iam.v1.AccessBindingService/Create",
+		"/kacho.cloud.iam.v1.AccessBindingService/Delete",
+		"/kacho.cloud.iam.v1.AccessBindingService/ListByResource",
+		"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject",
+	}
+	for _, m := range publicMethods {
+		m := m
+		t.Run("public/"+m, func(t *testing.T) {
+			if !allowlist.IsAllowed(m) {
+				t.Errorf("публичный iam-метод %q должен быть в allowlist", m)
+			}
+			if allowlist.HasInternalSuffix(m) {
+				t.Errorf("публичный iam-метод %q не должен ловиться HasInternalSuffix", m)
+			}
+		})
+	}
+
+	// UserService.Create/Update — отсутствуют by-design: на E0 Users создаются
+	// через InternalUserService.UpsertFromIdentity (admin via grpcurl), на E2 —
+	// из OIDC-callback в api-gateway. Никакого публичного REST POST/PATCH /iam/v1/users.
+	excludedUserMethods := []string{
+		"/kacho.cloud.iam.v1.UserService/Create",
+		"/kacho.cloud.iam.v1.UserService/Update",
+	}
+	for _, m := range excludedUserMethods {
+		m := m
+		t.Run("excluded/"+m, func(t *testing.T) {
+			if allowlist.IsAllowed(m) {
+				t.Errorf("метод %q НЕ должен быть в allowlist — Users создаются через InternalUserService.UpsertFromIdentity", m)
+			}
+		})
+	}
+
+	// InternalIAMService / InternalUserService — internal-only (запрет #6).
+	// auth-interceptor api-gateway зовёт kacho-iam:9091 напрямую через gRPC-client.
+	internalMethods := []string{
+		"/kacho.cloud.iam.v1.InternalIAMService/LookupSubject",
+		"/kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
+		"/kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
+		"/kacho.cloud.iam.v1.InternalUserService/Get",
+	}
+	for _, m := range internalMethods {
+		m := m
+		t.Run("internal/"+m, func(t *testing.T) {
+			if allowlist.IsAllowed(m) {
+				t.Errorf("Internal iam-метод %q НЕ должен быть в allowlist", m)
+			}
+			if !allowlist.HasInternalSuffix(m) {
+				t.Errorf("Internal iam-метод %q должен ловиться HasInternalSuffix", m)
+			}
+		})
+	}
+}
+
 // TestGateway_D10_OldRMOrganizationServiceBlocked проверяет, что старый
 // resourcemanager.v1.OrganizationService заблокирован (перенесён в organizationmanager.v1).
 func TestGateway_D10_OldRMOrganizationServiceBlocked(t *testing.T) {

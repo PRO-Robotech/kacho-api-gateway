@@ -13,6 +13,8 @@ import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
 //	KACHO_API_GATEWAY_VPC_GRPC            — адрес backend vpc
 //	KACHO_API_GATEWAY_COMPUTE_GRPC        — адрес backend compute (public, port 9090)
 //	KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC — адрес backend compute internal-port (9091)
+//	KACHO_API_GATEWAY_IAM_GRPC            — адрес backend iam (public, port 9090)
+//	KACHO_API_GATEWAY_IAM_INTERNAL_GRPC   — адрес backend iam internal-port (9091)
 //
 // TLS требуется для совместимости с CLI-клиентами (yc CLI hardcoded требует TLS).
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
@@ -33,6 +35,17 @@ type Config struct {
 	// ComputeInternalAddr — admin-only internal-port (9091) of compute backend.
 	// Routes InternalDiskType/InternalZone RESTful endpoints (kacho-only, NOT YC-verbatim).
 	ComputeInternalAddr string `envconfig:"KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC" default:"compute.kacho.svc.cluster.local:9091"`
+	// IAMAddr — public gRPC backend of kacho-iam (Account/Project/User/ServiceAccount/Group/Role/AccessBinding).
+	// Все RPC под /iam/v1/* (KAC-105, E0).
+	IAMAddr string `envconfig:"KACHO_API_GATEWAY_IAM_GRPC" default:"iam.kacho.svc.cluster.local:9090"`
+	// IAMInternalAddr — admin-only internal-port (9091) of iam backend.
+	// E0: InternalUserService.Get для admin tooling (gRPC-direct; REST-routing no-op,
+	// proto-аннотации `google.api.http` отсутствуют — handler регистрируется в mux
+	// pro-forma, реальный трафик идёт по gRPC).
+	// E2: добавится REST для InternalUserService.UpsertFromIdentity (OIDC-callback).
+	// InternalIAMService.LookupSubject/ListPermissions — НЕ регистрируется в REST
+	// (auth-interceptor zвонит kacho-iam:9091 напрямую через grpc-client).
+	IAMInternalAddr string `envconfig:"KACHO_API_GATEWAY_IAM_INTERNAL_GRPC" default:"iam.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
@@ -54,6 +67,7 @@ func (c Config) AdvertisedEndpoint() string {
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.
 // "organizationmanager" → тот же resource-manager (реализует OrganizationService).
+// "iam" / "iamInternal" — kacho-iam public (9090) / internal (9091) endpoints (KAC-105).
 func (c Config) BackendAddrs() map[string]string {
 	return map[string]string{
 		"resourcemanager":     c.ResourceManagerAddr,
@@ -62,6 +76,8 @@ func (c Config) BackendAddrs() map[string]string {
 		"vpcInternal":         c.VPCInternalAddr,
 		"compute":             c.ComputeAddr,
 		"computeInternal":     c.ComputeInternalAddr,
+		"iam":                 c.IAMAddr,
+		"iamInternal":         c.IAMInternalAddr,
 	}
 }
 
