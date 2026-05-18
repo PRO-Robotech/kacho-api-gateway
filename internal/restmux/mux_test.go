@@ -133,8 +133,8 @@ func TestIsInternalPath(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "folder get (public)",
-			path: "/resource-manager/v1/folders/f-1",
+			name: "project get (public) — KAC-124: заменили /resource-manager/v1/folders на /iam/v1/projects",
+			path: "/iam/v1/projects/prj-1",
 			want: false,
 		},
 		{

@@ -55,7 +55,8 @@ func main() {
 	defer cancel()
 
 	// --- Backend connections: один постоянный ClientConn на backend ---
-	// Активные backends: resource-manager + vpc + compute (+ их internal-порты).
+	// Активные backends: iam + vpc + compute (+ их internal-порты).
+	// KAC-124: resource-manager упразднён — backend заменён на kacho-iam (Account/Project).
 	// loadbalancer заморожен — dial не выполняется. grpc.NewClient ленив:
 	// фактическое соединение устанавливается при первом RPC, поэтому отсутствие
 	// ещё-не-задеплоенного backend не валит запуск.
@@ -178,8 +179,8 @@ func main() {
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
 	// сервисов через ServerReflection. Видны только сервисы, нативно
 	// зарегистрированные на api-gateway (OperationService + Health). Сервисы
-	// vpc/resource-manager доступны через transparent-proxy и видны в
-	// reflection их собственных backends (если включить там).
+	// vpc/iam доступны через transparent-proxy и видны в reflection их
+	// собственных backends (если включить там).
 	reflection.Register(grpcSrv)
 
 	// --- REST mux (grpc-gateway) ---

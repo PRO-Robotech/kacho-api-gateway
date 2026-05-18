@@ -28,37 +28,23 @@ func makeTestBackends(t *testing.T, domains []string) proxy.Backends {
 	return backends
 }
 
-// TestGateway_A2_DirectorRoutesToResourceManager проверяет маршрутизацию на resource-manager.
-func TestGateway_A2_DirectorRoutesToResourceManager(t *testing.T) {
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
+// TestGateway_A2_DirectorRoutesToIAM — маршрутизация Account/Project (KAC-124: заменили resourcemanager).
+func TestGateway_A2_DirectorRoutesToIAM(t *testing.T) {
+	backends := makeTestBackends(t, []string{"iam", "vpc"})
 	director := proxy.NewDirector(backends)
 
-	_, conn, err := director(context.Background(), "/kacho.cloud.resourcemanager.v1.CloudService/List")
+	_, conn, err := director(context.Background(), "/kacho.cloud.iam.v1.AccountService/List")
 	if err != nil {
 		t.Fatalf("ожидали успех: %v", err)
 	}
-	if conn != backends["resourcemanager"] {
-		t.Error("директор должен вернуть resourcemanager-backend")
-	}
-}
-
-// TestGateway_A2b_DirectorRoutesOrganizationManagerToRM проверяет маршрутизацию OrganizationService.
-func TestGateway_A2b_DirectorRoutesOrganizationManagerToRM(t *testing.T) {
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
-	director := proxy.NewDirector(backends)
-
-	_, conn, err := director(context.Background(), "/kacho.cloud.organizationmanager.v1.OrganizationService/List")
-	if err != nil {
-		t.Fatalf("ожидали успех: %v", err)
-	}
-	if conn != backends["organizationmanager"] {
-		t.Error("директор должен вернуть organizationmanager-backend (alias resource-manager)")
+	if conn != backends["iam"] {
+		t.Error("директор должен вернуть iam-backend")
 	}
 }
 
 // TestGateway_A3_DirectorRoutesToVPC проверяет маршрутизацию на vpc.
 func TestGateway_A3_DirectorRoutesToVPC(t *testing.T) {
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
+	backends := makeTestBackends(t, []string{"iam", "vpc"})
 	director := proxy.NewDirector(backends)
 
 	_, conn, err := director(context.Background(), "/kacho.cloud.vpc.v1.NetworkService/List")
@@ -72,7 +58,7 @@ func TestGateway_A3_DirectorRoutesToVPC(t *testing.T) {
 
 // TestGateway_A5_DirectorUnknownDomainNotFound проверяет сценарий A5.
 func TestGateway_A5_DirectorUnknownDomainNotFound(t *testing.T) {
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
+	backends := makeTestBackends(t, []string{"iam", "vpc"})
 	director := proxy.NewDirector(backends)
 
 	_, _, err := director(context.Background(), "/kacho.cloud.unknown.v1.FooService/Bar")
@@ -88,13 +74,38 @@ func TestGateway_A5_DirectorUnknownDomainNotFound(t *testing.T) {
 	}
 }
 
+// TestGateway_A5b_RemovedResourceManagerMethodsBlocked — KAC-124: resourcemanager/organizationmanager
+// удалены из allowlist; их методы → 404 NOT_FOUND (как unknown method).
+func TestGateway_A5b_RemovedResourceManagerMethodsBlocked(t *testing.T) {
+	removed := []string{
+		"/kacho.cloud.resourcemanager.v1.CloudService/List",
+		"/kacho.cloud.resourcemanager.v1.FolderService/Get",
+		"/kacho.cloud.organizationmanager.v1.OrganizationService/List",
+	}
+	backends := makeTestBackends(t, []string{"iam", "vpc"})
+	director := proxy.NewDirector(backends)
+	for _, m := range removed {
+		m := m
+		t.Run(m, func(t *testing.T) {
+			_, _, err := director(context.Background(), m)
+			if err == nil {
+				t.Fatalf("удалённый метод %q должен быть заблокирован", m)
+			}
+			st, _ := status.FromError(err)
+			if st.Code() != codes.NotFound {
+				t.Errorf("ожидали NOT_FOUND, получили %s", st.Code())
+			}
+		})
+	}
+}
+
 // TestGateway_A6_LoadbalancerFrozenBlocked проверяет, что loadbalancer всё ещё заморожен.
 func TestGateway_A6_LoadbalancerFrozenBlocked(t *testing.T) {
 	frozenMethods := []string{
 		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
 		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
 	}
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc", "compute"})
+	backends := makeTestBackends(t, []string{"iam", "vpc", "compute"})
 	director := proxy.NewDirector(backends)
 
 	for _, m := range frozenMethods {
@@ -115,7 +126,7 @@ func TestGateway_A6_LoadbalancerFrozenBlocked(t *testing.T) {
 // TestGateway_A6b_ComputeRoutesToBackend проверяет, что публичные compute-RPC
 // маршрутизируются на compute-backend, а Internal*-методы compute блокируются.
 func TestGateway_A6b_ComputeRoutesToBackend(t *testing.T) {
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc", "compute"})
+	backends := makeTestBackends(t, []string{"iam", "vpc", "compute"})
 	director := proxy.NewDirector(backends)
 
 	_, conn, err := director(context.Background(), "/kacho.cloud.compute.v1.InstanceService/Get")
@@ -148,12 +159,11 @@ func TestGateway_A6b_ComputeRoutesToBackend(t *testing.T) {
 // TestGateway_E1_DirectorBlocksInternalService проверяет, что InternalService-методы блокируются.
 func TestGateway_E1_DirectorBlocksInternalService(t *testing.T) {
 	internalMethods := []string{
-		"/kacho.cloud.resourcemanager.v1.FolderInternalService/Exists",
-		"/kacho.cloud.organizationmanager.v1.OrganizationInternalService/HasDependents",
 		"/kacho.cloud.vpc.v1.NetworkInternalService/Exists",
+		"/kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
 	}
 
-	backends := makeTestBackends(t, []string{"resourcemanager", "organizationmanager", "vpc"})
+	backends := makeTestBackends(t, []string{"iam", "vpc"})
 	director := proxy.NewDirector(backends)
 
 	for _, m := range internalMethods {

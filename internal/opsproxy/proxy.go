@@ -34,10 +34,8 @@ import (
 )
 
 // prefixToBackend — карта 3-символьного префикса в имя backend-домена.
+// KAC-124: префиксы `b1g` / `bpf` (resource-manager) удалены — backend упразднён.
 var prefixToBackend = map[string]string{
-	// resource-manager domain
-	"b1g": "resourcemanager", // Cloud / Folder / op-root
-	"bpf": "resourcemanager", // Organization
 	// vpc domain
 	"enp": "vpc", // Network / RouteTable / SecurityGroup / vpc op-root
 	"e9b": "vpc", // Subnet / Address
@@ -50,12 +48,9 @@ var prefixToBackend = map[string]string{
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, всё ещё
 // допустимые на чтение (например, если они закешированы в долгоживущих
 // клиентах). Не используется при создании новых операций.
+// KAC-124: rm/resourcemanager/org/organizationmanager удалены — backend упразднён.
 var legacyPrefixToBackend = map[string]string{
-	"rm":                  "resourcemanager",
-	"resourcemanager":     "resourcemanager",
-	"org":                 "resourcemanager",
-	"organizationmanager": "resourcemanager",
-	"vpc":                 "vpc",
+	"vpc": "vpc",
 }
 
 // OpsProxy реализует operationpb.OperationServiceServer, проксируя запросы

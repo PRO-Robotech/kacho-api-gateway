@@ -13,7 +13,8 @@ import (
 )
 
 // Backends — карта «доменное имя → долгоживущий *grpc.ClientConn».
-// Ключи: "resourcemanager", "vpc", "compute", "loadbalancer".
+// Ключи: "iam", "vpc", "compute", "loadbalancer" (KAC-124: resourcemanager
+// удалён — backend упразднён, заменён на kacho-iam Accounts/Projects).
 type Backends map[string]*grpc.ClientConn
 
 // NewDirector возвращает функцию-директор для mwitkow/grpc-proxy (тип StreamDirector).
@@ -43,7 +44,7 @@ func NewDirector(backends Backends) func(context.Context, string) (context.Conte
 		if len(pkgParts) < 4 {
 			return nil, nil, status.Errorf(codes.NotFound, "malformed package: %s", parts[1])
 		}
-		domain := pkgParts[2] // "compute" | "vpc" | "resourcemanager" | "loadbalancer"
+		domain := pkgParts[2] // "compute" | "vpc" | "iam" | "loadbalancer"
 
 		conn, ok := backends[domain]
 		if !ok {

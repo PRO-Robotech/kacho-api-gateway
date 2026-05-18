@@ -59,31 +59,18 @@ func setupMockBackend(t *testing.T, ops map[string]*operationpb.Operation) *grpc
 }
 
 // TestOpsProxy_Get_RoutesToCorrectBackend проверяет роутинг Get по domain-prefix.
+// KAC-124: rm_ legacy prefix удалён; используем vpc + iam (новые активные домены).
 func TestOpsProxy_Get_RoutesToCorrectBackend(t *testing.T) {
-	rmOp := &operationpb.Operation{Id: "rm_abc123", Description: "create cloud"}
 	vpcOp := &operationpb.Operation{Id: "vpc_def456", Description: "create network"}
-
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{"rm_abc123": rmOp})
 	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{"vpc_def456": vpcOp})
 
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{
-		"resourcemanager": rmConn,
-		"vpc":             vpcConn,
+		"vpc": vpcConn,
 	})
 
 	ctx := context.Background()
-
-	// rm_ prefix → resourcemanager backend
-	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: "rm_abc123"})
-	if err != nil {
-		t.Fatalf("Get rm: %v", err)
-	}
-	if resp.Id != "rm_abc123" {
-		t.Errorf("ожидали rm_abc123, получили %q", resp.Id)
-	}
-
-	// vpc_ prefix → vpc backend
-	resp, err = proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: "vpc_def456"})
+	// vpc_ legacy prefix → vpc backend
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: "vpc_def456"})
 	if err != nil {
 		t.Fatalf("Get vpc: %v", err)
 	}
@@ -92,39 +79,26 @@ func TestOpsProxy_Get_RoutesToCorrectBackend(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_OrgPrefixRoutesToResourceManager проверяет, что org_ → resourcemanager.
-func TestOpsProxy_Get_OrgPrefixRoutesToResourceManager(t *testing.T) {
-	orgOp := &operationpb.Operation{Id: "org_org1", Description: "create organization"}
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{"org_org1": orgOp})
+// KAC-124: TestOpsProxy_Get_RmLegacyPrefixesRemoved — rm_/org_/resourcemanager_/
+// organizationmanager_ legacy префиксы удалены; запросы должны возвращать
+// INVALID_ARGUMENT (как и любой неизвестный legacy-prefix).
+func TestOpsProxy_Get_RmLegacyPrefixesRemoved(t *testing.T) {
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{
-		"resourcemanager": rmConn,
-	})
-
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "org_org1"})
-	if err != nil {
-		t.Fatalf("Get org: %v", err)
-	}
-	if resp.Id != "org_org1" {
-		t.Errorf("ожидали org_org1, получили %q", resp.Id)
-	}
-}
-
-// TestOpsProxy_Get_ResourcemanagerPrefixRoutesToRM проверяет resourcemanager_ prefix.
-func TestOpsProxy_Get_ResourcemanagerPrefixRoutesToRM(t *testing.T) {
-	op := &operationpb.Operation{Id: "resourcemanager_op1"}
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{"resourcemanager_op1": op})
-
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{
-		"resourcemanager": rmConn,
-	})
-
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "resourcemanager_op1"})
-	if err != nil {
-		t.Fatalf("Get resourcemanager prefix: %v", err)
-	}
-	if resp.Id != "resourcemanager_op1" {
-		t.Errorf("ожидали resourcemanager_op1, получили %q", resp.Id)
+	removedPrefixes := []string{"rm_abc", "resourcemanager_x", "org_y", "organizationmanager_z"}
+	for _, id := range removedPrefixes {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+			if err == nil {
+				t.Fatalf("ожидали ошибку для удалённого legacy-prefix %q", id)
+			}
+			st, _ := status.FromError(err)
+			if st.Code() != codes.InvalidArgument {
+				t.Errorf("%q: ожидали INVALID_ARGUMENT, получили %s", id, st.Code())
+			}
+		})
 	}
 }
 
@@ -144,21 +118,24 @@ func TestOpsProxy_Get_UnknownDomain(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_NewFormatRM проверяет роутинг новых 20-char id с
-// 3-char prefix b1g (resource-manager).
-func TestOpsProxy_Get_NewFormatRM(t *testing.T) {
-	id := "b1g0123456789abcdefg" // 20 chars
-	op := &operationpb.Operation{Id: id, Description: "create cloud (new fmt)"}
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+// KAC-124: TestOpsProxy_Get_RmPrefixIs_InvalidArgument — b1g/bpf prefixes
+// удалены из known set; 20-char id с ними должен возвращать INVALID_ARGUMENT.
+func TestOpsProxy_Get_RmPrefixIs_InvalidArgument(t *testing.T) {
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
-
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
-	if err != nil {
-		t.Fatalf("Get b1g…: %v", err)
-	}
-	if resp.Id != id {
-		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	for _, id := range []string{"b1g0123456789abcdefg", "bpf0123456789abcdefg"} {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+			if err == nil {
+				t.Fatalf("ожидали ошибку для удалённого prefix %q", id)
+			}
+			st, _ := status.FromError(err)
+			if st.Code() != codes.InvalidArgument {
+				t.Errorf("ожидали INVALID_ARGUMENT, получили %s", st.Code())
+			}
+		})
 	}
 }
 
@@ -205,8 +182,8 @@ func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {
 
 // TestOpsProxy_Get_InvalidIDFormat проверяет INVALID_ARGUMENT для id без prefix.
 func TestOpsProxy_Get_InvalidIDFormat(t *testing.T) {
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
 	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "noprefixid"})
 	if err == nil {
@@ -218,12 +195,10 @@ func TestOpsProxy_Get_InvalidIDFormat(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_UnknownPrefix_20chars: 20-символьный id с неизвестным prefix
-// → InvalidArgument "invalid operation id" (для kacho это не валидный operation id;
-// см. PRO-Robotech/kacho-api-gateway#2 — verbatim-YC выравнивание opsproxy).
+// TestOpsProxy_Get_UnknownPrefix_20chars: 20-символьный id с неизвестным prefix → InvalidArgument.
 func TestOpsProxy_Get_UnknownPrefix_20chars(t *testing.T) {
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{})
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
 	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "zzz0123456789abcdefg"})
 	st, ok := status.FromError(err)
@@ -232,14 +207,14 @@ func TestOpsProxy_Get_UnknownPrefix_20chars(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_KnownPrefixNoBackend: синтаксически валидный id (известный prefix),
-// но соответствующий backend не подключён → NotFound "Operation X not found"
-// (для клиента «такой операции тут нет», как verbatim YC).
+// TestOpsProxy_Get_KnownPrefixNoBackend: enp-prefix известен, но vpc backend не подключён → NotFound.
+// (KAC-124: было b1g/resourcemanager — теперь enp/vpc как пример known-prefix-no-backend.)
 func TestOpsProxy_Get_KnownPrefixNoBackend(t *testing.T) {
-	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn}) // нет resourcemanager
+	// Подключаем ТОЛЬКО compute; запрос на enp-id (vpc) → vpc-backend отсутствует.
+	computeConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"compute": computeConn})
 
-	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "b1g0123456789abcdefg"})
+	_, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: "enp0123456789abcdefg"})
 	st, ok := status.FromError(err)
 	if !ok || st.Code() != codes.NotFound {
 		t.Errorf("ожидали NOT_FOUND, получили %v", err)
@@ -261,17 +236,18 @@ func TestOpsProxy_Cancel_RoutesToCorrectBackend(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Cancel_RmPrefix проверяет Cancel с rm_ prefix.
-func TestOpsProxy_Cancel_RmPrefix(t *testing.T) {
-	op := &operationpb.Operation{Id: "rm_cancel1"}
-	rmConn := setupMockBackend(t, map[string]*operationpb.Operation{"rm_cancel1": op})
-	proxy := opsproxy.New(map[string]*grpc.ClientConn{"resourcemanager": rmConn})
+// KAC-124: rm_cancel test удалён — rm_ legacy prefix больше не подмаппен.
+// TestOpsProxy_Cancel_RmLegacyPrefixRemoved — Cancel с rm_… теперь возвращает InvalidArgument.
+func TestOpsProxy_Cancel_RmLegacyPrefixRemoved(t *testing.T) {
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
-	resp, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: "rm_cancel1"})
-	if err != nil {
-		t.Fatalf("Cancel rm: %v", err)
+	_, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: "rm_cancel1"})
+	if err == nil {
+		t.Fatal("ожидали ошибку для удалённого rm_ legacy-prefix")
 	}
-	if resp.Id != "rm_cancel1" {
-		t.Errorf("ожидали rm_cancel1, получили %q", resp.Id)
+	st, _ := status.FromError(err)
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("ожидали INVALID_ARGUMENT, получили %s", st.Code())
 	}
 }
