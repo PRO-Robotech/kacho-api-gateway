@@ -25,10 +25,11 @@ import (
 )
 
 type IAMSubjectClient struct {
-	conn   *grpc.ClientConn
-	stub   iamv1.InternalIAMServiceClient
-	cache  *cache.SubjectCache
-	logger *slog.Logger
+	conn     *grpc.ClientConn
+	stub     iamv1.InternalIAMServiceClient
+	userStub iamv1.InternalUserServiceClient // KAC-116: для lazy-upsert User mirror от Kratos
+	cache    *cache.SubjectCache
+	logger   *slog.Logger
 }
 
 func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, error) {
@@ -48,10 +49,11 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, e
 		return nil, fmt.Errorf("dial iam internal %s: %w", addr, err)
 	}
 	return &IAMSubjectClient{
-		conn:   conn,
-		stub:   iamv1.NewInternalIAMServiceClient(conn),
-		cache:  cache.NewSubjectCache(10_000, 30*time.Second),
-		logger: logger,
+		conn:     conn,
+		stub:     iamv1.NewInternalIAMServiceClient(conn),
+		userStub: iamv1.NewInternalUserServiceClient(conn),
+		cache:    cache.NewSubjectCache(10_000, 30*time.Second),
+		logger:   logger,
 	}, nil
 }
 
@@ -99,6 +101,83 @@ func (c *IAMSubjectClient) LookupByExternalID(ctx context.Context, externalID st
 	}
 	c.cache.Set(externalID, subj)
 	return subj, nil
+}
+
+// LookupOrUpsertFromKratos — KAC-116: для Kratos session-flow. Если User mirror
+// ещё не существует (NotFound), создаёт его через InternalUserService.UpsertFromIdentity
+// и retry'ит lookup. email обязателен.
+func (c *IAMSubjectClient) LookupOrUpsertFromKratos(ctx context.Context, identityID, email, displayName string) (middleware.Subject, error) {
+	subj, err := c.LookupByExternalID(ctx, identityID)
+	if err == nil {
+		return subj, nil
+	}
+	// Если ошибка — НЕ NotFound (network / other), не пытаемся upsert.
+	if !stderrors.Is(err, errSubjectNotFound) && !isErrSubjectNotFound(err) {
+		return middleware.Subject{}, err
+	}
+	if email == "" {
+		return middleware.Subject{}, fmt.Errorf("lazy-upsert: email is required (identity=%s)", identityID)
+	}
+	// Upsert (async — возвращает Operation, но операция выполняется быстро;
+	// для simplest path просто ждём короткий retry-loop).
+	upsertCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, uErr := c.userStub.UpsertFromIdentity(upsertCtx, &iamv1.UpsertFromIdentityRequest{
+		ExternalId:  identityID,
+		Email:       email,
+		DisplayName: displayName,
+	})
+	if uErr != nil {
+		c.logger.Warn("kratos lazy-upsert failed", "identity_id", identityID, "err", uErr.Error())
+		return middleware.Subject{}, fmt.Errorf("lazy-upsert: %w", uErr)
+	}
+	// Operation выполняется async; SubjectLookup может ещё не видеть. Делаем 3 retry'я по 200ms.
+	c.cache.InvalidateAll() // отбросить negative-cache, чтобы повтор не вернул то же NotFound
+	for i := 0; i < 5; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if subj, err := c.LookupByExternalID(ctx, identityID); err == nil {
+			c.logger.Info("kratos lazy-upsert succeeded", "identity_id", identityID, "user_id", subj.ID, "retries", i+1)
+			return subj, nil
+		}
+	}
+	return middleware.Subject{}, fmt.Errorf("lazy-upsert: subject still not found after upsert (identity=%s)", identityID)
+}
+
+// errSubjectNotFound — sentinel, отличает «не найден» (приемлемо для upsert)
+// от других ошибок (network, panic, и т.п.).
+var errSubjectNotFound = stderrors.New("subject not found")
+
+func isErrSubjectNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return stderrors.Is(err, errSubjectNotFound) ||
+		// LookupByExternalID возвращает fmt.Errorf("subject not found: %s", ...) — text-based fallback.
+		(err.Error() != "" && len(err.Error()) > 16 && err.Error()[:16] == "subject not foun")
+}
+
+// IsSystemAdmin — KAC-123: проверка system-admin tuple через
+// InternalIAMService.Check(kacho_system:root#admin). Subject = "user:<id>" |
+// "service_account:<id>". Возвращает (allowed, error).
+func (c *IAMSubjectClient) IsSystemAdmin(ctx context.Context, subject string) (bool, error) {
+	if subject == "" {
+		return false, nil
+	}
+	timeout, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	resp, err := c.stub.Check(timeout, &iamv1.CheckRequest{
+		SubjectId: subject,
+		Relation:  "admin",
+		Object:    "kacho_system:root",
+	})
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.Unimplemented || st.Code() == codes.PermissionDenied {
+			return false, nil
+		}
+		return false, err
+	}
+	return resp.GetAllowed(), nil
 }
 
 func (c *IAMSubjectClient) InvalidateAll() { c.cache.InvalidateAll() }

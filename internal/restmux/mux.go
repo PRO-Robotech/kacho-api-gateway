@@ -38,8 +38,8 @@
 //
 // # Активные сервисы
 //
-//   - resourcemanager.v1: Cloud, Folder
-//   - organizationmanager.v1: Organization (backend: resource-manager)
+//   - iam.v1: Account, Project, User, ServiceAccount, Group, Role, AccessBinding
+//     (KAC-104; заменили resourcemanager Cloud/Folder и organizationmanager Organization)
 //   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint, NetworkInterface
 //   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetwork —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
@@ -73,8 +73,9 @@ import (
 	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
-	orgpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
-	rmpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	// KAC-124: rmpb/orgpb убраны — kacho-resource-manager заменён на kacho-iam
+	// (Organization/Cloud/Folder → Account/Project). Proto-пакеты
+	// resourcemanager.v1 / organizationmanager.v1 удалены целиком в kacho-proto.
 	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 	pepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
 
@@ -147,8 +148,8 @@ func isInternalPath(path string) bool {
 //
 // addrs — карта domain → адрес gRPC backend:
 //
-//	"resourcemanager"     → resource-manager.kacho.svc.cluster.local:9090
-//	"organizationmanager" → resource-manager.kacho.svc.cluster.local:9090 (тот же backend)
+//	"iam"                 → kacho-iam.kacho.svc.cluster.local:9090
+//	"iamInternal"         → kacho-iam.kacho.svc.cluster.local:9091
 //	"vpc"                 → vpc.kacho.svc.cluster.local:9090
 //	"vpcInternal"         → vpc.kacho.svc.cluster.local:9091 (admin internal-порт)
 //	"compute"             → compute.kacho.svc.cluster.local:9090
@@ -248,9 +249,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
 	}
 
-	var rmAddr, vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr string
+	// KAC-124: rmAddr убран — backend kacho-resource-manager упразднён.
+	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr string
 	if addrs != nil {
-		rmAddr = addrs["resourcemanager"]
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
 		computeAddr = addrs["compute"]
@@ -267,18 +268,8 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	muxes := []*runtime.ServeMux{publicMux, internalMux}
 
 	for _, mux := range muxes {
-		// --- resourcemanager: Cloud + Folder ---
-		if err := rmpb.RegisterCloudServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-			return nil, fmt.Errorf("register CloudService: %w", err)
-		}
-		if err := rmpb.RegisterFolderServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-			return nil, fmt.Errorf("register FolderService: %w", err)
-		}
-
-		// --- organizationmanager: Organization (backend: resource-manager) ---
-		if err := orgpb.RegisterOrganizationServiceHandlerFromEndpoint(ctx, mux, rmAddr, opts); err != nil {
-			return nil, fmt.Errorf("register OrganizationService: %w", err)
-		}
+		// KAC-124: resourcemanager (Cloud/Folder) и organizationmanager (Organization)
+		// удалены целиком — backend заменён на kacho-iam Accounts/Projects.
 
 		// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway + PrivateEndpoint ---
 		if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {

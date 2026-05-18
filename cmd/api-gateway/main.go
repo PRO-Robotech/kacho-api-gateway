@@ -55,7 +55,8 @@ func main() {
 	defer cancel()
 
 	// --- Backend connections: один постоянный ClientConn на backend ---
-	// Активные backends: resource-manager + vpc + compute (+ их internal-порты).
+	// Активные backends: iam + vpc + compute (+ их internal-порты).
+	// KAC-124: resource-manager упразднён — backend заменён на kacho-iam (Account/Project).
 	// loadbalancer заморожен — dial не выполняется. grpc.NewClient ленив:
 	// фактическое соединение устанавливается при первом RPC, поэтому отсутствие
 	// ещё-не-задеплоенного backend не валит запуск.
@@ -119,6 +120,21 @@ func main() {
 		iamSubjectClient,
 		logger,
 	)
+
+	// KAC-116: Kratos session-based auth для SPA (cookie ory_kratos_session).
+	// Env KACHO_API_GATEWAY_KRATOS_PUBLIC_URL — base URL Kratos public API.
+	// Default = cluster-internal kratos-public service.
+	kratosURL := os.Getenv("KACHO_API_GATEWAY_KRATOS_PUBLIC_URL")
+	if kratosURL == "" {
+		kratosURL = "http://kacho-umbrella-kratos-public.kacho.svc.cluster.local:80"
+	}
+	if kratosURL != "disabled" {
+		authInterceptor = authInterceptor.WithKratos(middleware.NewKratosClient(kratosURL))
+		logger.Info("kratos session-auth wired", "kratos_url", kratosURL)
+	} else {
+		logger.Info("kratos session-auth disabled by env")
+	}
+
 	logger.Info("auth-interceptor configured",
 		"mode", cfg.AuthNMode,
 		"iam_internal_addr", cfg.IAMInternalAddr,
@@ -163,8 +179,8 @@ func main() {
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
 	// сервисов через ServerReflection. Видны только сервисы, нативно
 	// зарегистрированные на api-gateway (OperationService + Health). Сервисы
-	// vpc/resource-manager доступны через transparent-proxy и видны в
-	// reflection их собственных backends (если включить там).
+	// vpc/iam доступны через transparent-proxy и видны в reflection их
+	// собственных backends (если включить там).
 	reflection.Register(grpcSrv)
 
 	// --- REST mux (grpc-gateway) ---
@@ -184,6 +200,24 @@ func main() {
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/healthz", health.HTTPHealthz)
 	httpMux.Handle("/readyz", health.HTTPReadyz(backends, logger))
+
+	// OIDC login/callback/me/logout (KAC-107 closeout, KAC-109 DoD #1).
+	// Регистрируется ДО `/` чтобы перебить grpc-gateway catch-all.
+	oidcHandler := middleware.NewOIDCHandler(middleware.OIDCConfig{
+		Issuer:         os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER"),
+		ExternalIssuer: os.Getenv("KACHO_API_GATEWAY_OIDC_EXTERNAL_ISSUER"),
+		ClientID:       os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_ID"),
+		ClientSecret:   os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_SECRET"),
+		RedirectURI:    os.Getenv("KACHO_API_GATEWAY_OIDC_REDIRECT_URI"),
+		Disabled:       os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER") == "",
+	}, logger)
+	// KAC-116: /me читает Kratos session если есть cookie ory_kratos_session.
+	if kratosURL != "disabled" {
+		oidcHandler = oidcHandler.WithKratos(middleware.NewKratosClient(kratosURL), iamSubjectClient).
+			WithAdminChecker(iamSubjectClient) // KAC-123: permissions = ["*","admin"] для system-admin
+	}
+	oidcHandler.Register(httpMux)
+
 	httpMux.Handle("/", restHandler)
 
 	// Idempotency-Key store: in-memory с TTL=24h (как в YC).

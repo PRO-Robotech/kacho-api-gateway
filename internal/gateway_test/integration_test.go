@@ -1,5 +1,7 @@
 package gateway_test
 
+// KAC-124: переписан на iamv1.AccountService (заменили resourcemanager/organizationmanager).
+
 import (
 	"context"
 	"net"
@@ -12,11 +14,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 
-	orgv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/organizationmanager/v1"
-	rmv1  "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/resourcemanager/v1"
+	iamv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
@@ -24,18 +25,13 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/restmux"
 )
 
-// mockOrgServer — простой mock OrganizationService для тестов.
-type mockOrgServer struct {
-	orgv1.UnimplementedOrganizationServiceServer
+// mockAccountServer — простой mock AccountService для тестов.
+type mockAccountServer struct {
+	iamv1.UnimplementedAccountServiceServer
 }
 
-func (m *mockOrgServer) List(_ context.Context, _ *orgv1.ListOrganizationsRequest) (*orgv1.ListOrganizationsResponse, error) {
-	return &orgv1.ListOrganizationsResponse{}, nil
-}
-
-// mockCloudServer — простой mock CloudService для тестов.
-type mockCloudServer struct {
-	rmv1.UnimplementedCloudServiceServer
+func (m *mockAccountServer) List(_ context.Context, _ *iamv1.ListAccountsRequest) (*iamv1.ListAccountsResponse, error) {
+	return &iamv1.ListAccountsResponse{}, nil
 }
 
 // mockHealthServer — mock grpc.health.v1.Health для backends.
@@ -47,8 +43,7 @@ func (m *mockHealthServer) Check(_ context.Context, _ *healthpb.HealthCheckReque
 	return &healthpb.HealthCheckResponse{Status: healthpb.HealthCheckResponse_SERVING}, nil
 }
 
-// setupMockBackend запускает mock gRPC-backend и возвращает его адрес.
-// Регистрирует и OrganizationService, и CloudService — backend один для обоих.
+// setupMockBackend запускает mock gRPC-backend для iam и возвращает его адрес.
 func setupMockBackend(t *testing.T) string {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -56,8 +51,7 @@ func setupMockBackend(t *testing.T) string {
 		t.Fatalf("listen mock backend: %v", err)
 	}
 	srv := grpc.NewServer()
-	orgv1.RegisterOrganizationServiceServer(srv, &mockOrgServer{})
-	rmv1.RegisterCloudServiceServer(srv, &mockCloudServer{})
+	iamv1.RegisterAccountServiceServer(srv, &mockAccountServer{})
 	healthpb.RegisterHealthServer(srv, &mockHealthServer{})
 	go srv.Serve(lis)
 	t.Cleanup(srv.GracefulStop)
@@ -76,7 +70,6 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
 	ctx := context.Background()
-	// conns=nil → OperationService регистрируется через Unimplemented (тесты без operations)
 	restHandler, err := restmux.NewMux(ctx, nil, nil)
 	if err != nil {
 		t.Fatalf("rest mux: %v", err)
@@ -109,7 +102,6 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 	})
 
 	addr := lis.Addr().String()
-	// Ждём готовности
 	for i := 0; i < 20; i++ {
 		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
 		if err == nil {
@@ -121,8 +113,7 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 	return addr
 }
 
-// TestGateway_A1_GrpcProxyForwardsToBackend проверяет сценарий A1:
-// gateway проксирует запрос на правильный backend (OrganizationService).
+// TestGateway_A1_GrpcProxyForwardsToBackend — gateway проксирует запрос на iam-backend.
 func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	backendAddr := setupMockBackend(t)
 
@@ -132,11 +123,7 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	// organizationmanager и resourcemanager — оба на одном backend
-	backends := proxy.Backends{
-		"resourcemanager":     conn,
-		"organizationmanager": conn,
-	}
+	backends := proxy.Backends{"iam": conn}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -145,11 +132,11 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	}
 	t.Cleanup(func() { gwConn.Close() })
 
-	client := orgv1.NewOrganizationServiceClient(gwConn)
+	client := iamv1.NewAccountServiceClient(gwConn)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := client.List(ctx, &orgv1.ListOrganizationsRequest{})
+	resp, err := client.List(ctx, &iamv1.ListAccountsRequest{})
 	if err != nil {
 		t.Fatalf("List через gateway: %v", err)
 	}
@@ -158,15 +145,12 @@ func TestGateway_A1_GrpcProxyForwardsToBackend(t *testing.T) {
 	}
 }
 
-// TestGateway_A5_UnknownDomainReturnsNotFound проверяет сценарий A5.
+// TestGateway_A5_UnknownDomainReturnsNotFound — unknown domain → 404.
 func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	conn, _ := grpc.NewClient("localhost:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{
-		"resourcemanager":     conn,
-		"organizationmanager": conn,
-	}
+	backends := proxy.Backends{"iam": conn}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -175,11 +159,10 @@ func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	}
 	t.Cleanup(func() { gwConn.Close() })
 
-	// Вызываем неизвестный метод через raw invoker
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = gwConn.Invoke(ctx, "/kacho.cloud.unknown.v1.FooService/Bar",
-		&orgv1.ListOrganizationsRequest{}, &orgv1.ListOrganizationsResponse{})
+		&iamv1.ListAccountsRequest{}, &iamv1.ListAccountsResponse{})
 	if err == nil {
 		t.Fatal("ожидали ошибку NOT_FOUND")
 	}
@@ -189,17 +172,13 @@ func TestGateway_A5_UnknownDomainReturnsNotFound(t *testing.T) {
 	}
 }
 
-// TestGateway_E1_InternalServiceBlockedAtGateway проверяет сценарий E1:
-// InternalService метод блокируется до обращения к backend.
+// TestGateway_E1_InternalServiceBlockedAtGateway — Internal*-метод блокируется до backend'а.
 func TestGateway_E1_InternalServiceBlockedAtGateway(t *testing.T) {
 	backendAddr := setupMockBackend(t)
 	conn, _ := grpc.NewClient(backendAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{
-		"resourcemanager":     conn,
-		"organizationmanager": conn,
-	}
+	backends := proxy.Backends{"iam": conn}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -210,8 +189,9 @@ func TestGateway_E1_InternalServiceBlockedAtGateway(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err = gwConn.Invoke(ctx, "/kacho.cloud.resourcemanager.v1.FolderInternalService/Exists",
-		&orgv1.ListOrganizationsRequest{}, &orgv1.ListOrganizationsResponse{})
+	// InternalUserService — admin endpoint, не должен быть доступен через api-gateway public mux.
+	err = gwConn.Invoke(ctx, "/kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
+		&iamv1.ListAccountsRequest{}, &iamv1.ListAccountsResponse{})
 	if err == nil {
 		t.Fatal("ожидали NOT_FOUND для InternalService")
 	}
@@ -231,7 +211,7 @@ func TestGateway_G1_HealthzReturns200(t *testing.T) {
 	}
 }
 
-// TestGateway_G5_GrpcHealthCheck проверяет сценарий G5: gRPC Health.Check возвращает SERVING.
+// TestGateway_G5_GrpcHealthCheck проверяет, что Health.Check возвращает SERVING.
 func TestGateway_G5_GrpcHealthCheck(t *testing.T) {
 	backendAddr := setupMockBackend(t)
 	conn, err := grpc.NewClient(backendAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -240,10 +220,7 @@ func TestGateway_G5_GrpcHealthCheck(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{
-		"resourcemanager":     conn,
-		"organizationmanager": conn,
-	}
+	backends := proxy.Backends{"iam": conn}
 	gwAddr := setupGateway(t, backends)
 
 	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -274,21 +251,16 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 	}
 	t.Cleanup(func() { conn.Close() })
 
-	backends := proxy.Backends{
-		"resourcemanager":     conn,
-		"organizationmanager": conn,
-	}
+	backends := proxy.Backends{"iam": conn}
 	gwAddr := setupGateway(t, backends)
 
-	gwConn, err := grpc.NewClient(gwAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	gwConn, err := grpc.NewClient(gwAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("dial gateway: %v", err)
 	}
 	t.Cleanup(func() { gwConn.Close() })
 
-	client := orgv1.NewOrganizationServiceClient(gwConn)
+	client := iamv1.NewAccountServiceClient(gwConn)
 
 	const n = 20
 	errs := make(chan error, n)
@@ -296,7 +268,7 @@ func TestGateway_J5_ConcurrentRequestsNoRace(t *testing.T) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_, err := client.List(ctx, &orgv1.ListOrganizationsRequest{})
+			_, err := client.List(ctx, &iamv1.ListAccountsRequest{})
 			errs <- err
 		}()
 	}

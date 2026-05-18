@@ -57,6 +57,13 @@ type SubjectLookuper interface {
 	LookupByExternalID(ctx context.Context, externalID string) (Subject, error)
 }
 
+// KratosSubjectLookuper — опциональное расширение SubjectLookuper для Kratos
+// session-flow: при NotFound делает lazy-upsert User mirror'а через
+// InternalUserService.UpsertFromIdentity (KAC-116).
+type KratosSubjectLookuper interface {
+	LookupOrUpsertFromKratos(ctx context.Context, identityID, email, displayName string) (Subject, error)
+}
+
 // Subject — резолвленный subject (User или ServiceAccount).
 type Subject struct {
 	Type        string // "user" | "service_account"
@@ -69,6 +76,7 @@ type AuthInterceptor struct {
 	mode          AuthMode
 	devSecret     []byte // HMAC-secret для mode=dev (если пуст — Bearer reject в dev/production-strict).
 	subjectLookup SubjectLookuper
+	kratos        *KratosClient // KAC-116: optional Ory Kratos /whoami client (nil → disabled)
 	logger        *slog.Logger
 
 	// Headers, которые auth-interceptor пропускает в backend metadata
@@ -90,6 +98,14 @@ func NewAuthInterceptor(mode AuthMode, devSecret string, lookup SubjectLookuper,
 		mdKeyPrincipalID:      "x-kacho-principal-id",
 		mdKeyPrincipalDisplay: "x-kacho-principal-display-name",
 	}
+}
+
+// WithKratos подключает Kratos /whoami client (KAC-116).
+// Если выставлено, HTTP middleware сначала пытается резолвить principal по
+// ory_kratos_session cookie; при отсутствии cookie / 401 — fallback на JWT.
+func (a *AuthInterceptor) WithKratos(c *KratosClient) *AuthInterceptor {
+	a.kratos = c
+	return a
 }
 
 // Unary — gRPC unary server interceptor.
@@ -241,6 +257,43 @@ func extractBearer(ctx context.Context) string {
 // KAC-107 follow-up; пока no-op.
 func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// KAC-116: Kratos session-based auth (cookie ory_kratos_session).
+		// Резолвится ДО JWT-path, чтобы SPA-пользователи (без Bearer) получали
+		// principal. Если whoami возвращает active session — выставляем headers
+		// и пропускаем JWT-блок. Иначе — fallback на JWT.
+		injected := false
+		if a.kratos != nil {
+			cookieHdr := r.Header.Get("Cookie")
+			if strings.Contains(cookieHdr, "ory_kratos_session") {
+				res := a.kratos.Whoami(r.Context(), cookieHdr)
+				if res.Active && res.IdentityID != "" {
+					var subj Subject
+					var err error
+					// KAC-116: если lookuper поддерживает lazy-upsert (Kratos new-user
+					// path) — используем его; иначе обычный lookup.
+					if kl, ok := a.subjectLookup.(KratosSubjectLookuper); ok {
+						subj, err = kl.LookupOrUpsertFromKratos(r.Context(), res.IdentityID, res.Email, res.DisplayName)
+					} else {
+						subj, err = a.subjectLookup.LookupByExternalID(r.Context(), res.IdentityID)
+					}
+					if err != nil {
+						a.logger.Debug("auth.HTTP: Kratos SubjectLookup failed",
+							"identity_id", res.IdentityID, "err", err.Error())
+					} else {
+						r.Header.Set("X-Kacho-Principal-Type", subj.Type)
+						r.Header.Set("X-Kacho-Principal-Id", subj.ID)
+						r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
+						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
+						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+						a.logger.Info("auth.HTTP: Principal injected (Kratos)",
+							"type", subj.Type, "id", subj.ID, "email", res.Email)
+						injected = true
+					}
+				}
+			}
+		}
+
 		// Cookie → Bearer rewrite (D5) — KAC-107 follow-up.
 		if r.Header.Get("Authorization") == "" {
 			if c, err := r.Cookie("kacho_session"); err == nil && c.Value != "" {
@@ -248,7 +301,7 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 			}
 		}
 
-		// KAC-107 follow-up #2: REST→backend Principal propagation.
+		// KAC-107 follow-up #2: REST→backend Principal propagation (JWT path).
 		// gRPC server interceptor работает только для grpc-proxy path, не для grpc-gateway
 		// REST. Здесь делаем JWT-parse + SubjectLookup + ставим headers
 		// `X-Kacho-Principal-*`. Дальше restmux.NewMux WithMetadata callback явно
@@ -257,7 +310,10 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 		// corelib/grpcsrv.UnaryPrincipalExtract. Также пишем legacy-form
 		// `Grpc-Metadata-X-Kacho-Principal-*` для совместимости с default
 		// grpc-gateway convention (если WithMetadata не работает — fallback path).
-		if auth := r.Header.Get("Authorization"); auth != "" && len(a.devSecret) > 0 {
+		if !injected {
+			_ = injected // satisfy unused-var в коротких ветках
+		}
+		if auth := r.Header.Get("Authorization"); !injected && auth != "" && len(a.devSecret) > 0 {
 			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok {
 				claims, jwtErr := a.validateJWT(tok)
 				if jwtErr != nil {

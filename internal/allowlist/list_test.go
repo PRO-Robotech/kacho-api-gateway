@@ -8,16 +8,13 @@ import (
 
 // TestGateway_E_Exists_canonical_AllowlistBlocksAllInternalServices проверяет матрицу Internal-методов:
 // ни один *InternalService-метод не должен проходить через allowlist.
+// KAC-124: resourcemanager/organizationmanager Internal-методы убраны — backend упразднён.
 func TestGateway_E_Exists_canonical_AllowlistBlocksAllInternalServices(t *testing.T) {
 	internalMethods := []string{
-		// resource-manager
-		"/kacho.cloud.resourcemanager.v1.CloudInternalService/Exists",
-		"/kacho.cloud.resourcemanager.v1.CloudInternalService/HasDependents",
-		"/kacho.cloud.resourcemanager.v1.FolderInternalService/Exists",
-		"/kacho.cloud.resourcemanager.v1.FolderInternalService/HasDependents",
-		// organizationmanager
-		"/kacho.cloud.organizationmanager.v1.OrganizationInternalService/Exists",
-		"/kacho.cloud.organizationmanager.v1.OrganizationInternalService/HasDependents",
+		// iam (заменили rm/org)
+		"/kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
+		"/kacho.cloud.iam.v1.InternalIAMService/LookupSubject",
+		"/kacho.cloud.iam.v1.InternalIAMService/Check",
 		// vpc
 		"/kacho.cloud.vpc.v1.NetworkInternalService/Exists",
 		"/kacho.cloud.vpc.v1.NetworkInternalService/HasDependents",
@@ -44,25 +41,20 @@ func TestGateway_E_Exists_canonical_AllowlistBlocksAllInternalServices(t *testin
 
 // TestGateway_D3_AllowlistPublicMethodsPresent проверяет, что все публичные методы 1.0 API
 // присутствуют в allowlist (положительный сценарий).
+// KAC-124: resourcemanager/organizationmanager заменены на iam (Account/Project/...).
 func TestGateway_D3_AllowlistPublicMethodsPresent(t *testing.T) {
 	publicMethods := []string{
-		// resourcemanager.v1 — Cloud/Folder
-		"/kacho.cloud.resourcemanager.v1.CloudService/Get",
-		"/kacho.cloud.resourcemanager.v1.CloudService/List",
-		"/kacho.cloud.resourcemanager.v1.CloudService/Create",
-		"/kacho.cloud.resourcemanager.v1.CloudService/Update",
-		"/kacho.cloud.resourcemanager.v1.CloudService/Delete",
-		"/kacho.cloud.resourcemanager.v1.FolderService/Get",
-		"/kacho.cloud.resourcemanager.v1.FolderService/List",
-		"/kacho.cloud.resourcemanager.v1.FolderService/Create",
-		"/kacho.cloud.resourcemanager.v1.FolderService/Update",
-		"/kacho.cloud.resourcemanager.v1.FolderService/Delete",
-		// organizationmanager.v1
-		"/kacho.cloud.organizationmanager.v1.OrganizationService/Get",
-		"/kacho.cloud.organizationmanager.v1.OrganizationService/List",
-		"/kacho.cloud.organizationmanager.v1.OrganizationService/Create",
-		"/kacho.cloud.organizationmanager.v1.OrganizationService/Update",
-		"/kacho.cloud.organizationmanager.v1.OrganizationService/Delete",
+		// iam.v1 — Account / Project (заменили rm Cloud/Folder и org Organization)
+		"/kacho.cloud.iam.v1.AccountService/Get",
+		"/kacho.cloud.iam.v1.AccountService/List",
+		"/kacho.cloud.iam.v1.AccountService/Create",
+		"/kacho.cloud.iam.v1.AccountService/Update",
+		"/kacho.cloud.iam.v1.AccountService/Delete",
+		"/kacho.cloud.iam.v1.ProjectService/Get",
+		"/kacho.cloud.iam.v1.ProjectService/List",
+		"/kacho.cloud.iam.v1.ProjectService/Create",
+		"/kacho.cloud.iam.v1.ProjectService/Update",
+		"/kacho.cloud.iam.v1.ProjectService/Delete",
 		// vpc.v1
 		"/kacho.cloud.vpc.v1.NetworkService/Get",
 		"/kacho.cloud.vpc.v1.NetworkService/List",
