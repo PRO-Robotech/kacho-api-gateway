@@ -12,6 +12,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -56,6 +57,11 @@ const (
 	sessionMaxAge     = 3600
 )
 
+// AdminChecker — KAC-123: port для проверки system-admin (Keto kacho_system:root#admin).
+type AdminChecker interface {
+	IsSystemAdmin(ctx context.Context, subject string) (bool, error)
+}
+
 // OIDCHandler регистрирует 4 endpoint'а в http.ServeMux.
 type OIDCHandler struct {
 	cfg    OIDCConfig
@@ -65,6 +71,7 @@ type OIDCHandler struct {
 	// kratos — KAC-116: если выставлен, /me читает Kratos session вместо Zitadel userinfo.
 	kratos        *KratosClient
 	subjectLookup SubjectLookuper // для резолва identity.id → User/SA из kacho-iam
+	adminCheck    AdminChecker    // KAC-123: optional admin-tuple lookup
 }
 
 func NewOIDCHandler(cfg OIDCConfig, logger *slog.Logger) *OIDCHandler {
@@ -79,6 +86,13 @@ func NewOIDCHandler(cfg OIDCConfig, logger *slog.Logger) *OIDCHandler {
 func (h *OIDCHandler) WithKratos(c *KratosClient, lookup SubjectLookuper) *OIDCHandler {
 	h.kratos = c
 	h.subjectLookup = lookup
+	return h
+}
+
+// WithAdminChecker — KAC-123: Keto-based system-admin tuple lookup для /me.
+// Возвращает permissions:["*","admin"] если subject имеет kacho_system:root#admin.
+func (h *OIDCHandler) WithAdminChecker(a AdminChecker) *OIDCHandler {
+	h.adminCheck = a
 	return h
 }
 
@@ -234,6 +248,15 @@ func (h *OIDCHandler) Me(w http.ResponseWriter, r *http.Request) {
 						userObj["subjectType"] = subj.Type
 						if subj.DisplayName != "" {
 							userObj["displayName"] = subj.DisplayName
+						}
+						// KAC-123: проверка system-admin через AdminChecker (Keto LookupSubjects).
+						// Если user имеет kacho_system:root#admin tuple → permissions = ["*","admin"].
+						// UI ServiceSidebar показывает "Администрирование" tab по hasPermission("admin").
+						if h.adminCheck != nil {
+							ok, _ := h.adminCheck.IsSystemAdmin(r.Context(), subj.Type+":"+subj.ID)
+							if ok {
+								userObj["permissions"] = []string{"*", "admin"}
+							}
 						}
 					}
 				}

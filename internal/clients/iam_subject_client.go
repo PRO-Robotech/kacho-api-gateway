@@ -156,6 +156,30 @@ func isErrSubjectNotFound(err error) bool {
 		(err.Error() != "" && len(err.Error()) > 16 && err.Error()[:16] == "subject not foun")
 }
 
+// IsSystemAdmin — KAC-123: проверка system-admin tuple через
+// InternalIAMService.Check(kacho_system:root#admin). Subject = "user:<id>" |
+// "service_account:<id>". Возвращает (allowed, error).
+func (c *IAMSubjectClient) IsSystemAdmin(ctx context.Context, subject string) (bool, error) {
+	if subject == "" {
+		return false, nil
+	}
+	timeout, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	resp, err := c.stub.Check(timeout, &iamv1.CheckRequest{
+		SubjectId: subject,
+		Relation:  "admin",
+		Object:    "kacho_system:root",
+	})
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.Unimplemented || st.Code() == codes.PermissionDenied {
+			return false, nil
+		}
+		return false, err
+	}
+	return resp.GetAllowed(), nil
+}
+
 func (c *IAMSubjectClient) InvalidateAll() { c.cache.InvalidateAll() }
 func (c *IAMSubjectClient) Close() error  { return c.conn.Close() }
 

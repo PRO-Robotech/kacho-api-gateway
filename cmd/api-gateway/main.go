@@ -212,7 +212,8 @@ func main() {
 	}, logger)
 	// KAC-116: /me читает Kratos session если есть cookie ory_kratos_session.
 	if kratosURL != "disabled" {
-		oidcHandler = oidcHandler.WithKratos(middleware.NewKratosClient(kratosURL), iamSubjectClient)
+		oidcHandler = oidcHandler.WithKratos(middleware.NewKratosClient(kratosURL), iamSubjectClient).
+			WithAdminChecker(iamSubjectClient) // KAC-123: permissions = ["*","admin"] для system-admin
 	}
 	oidcHandler.Register(httpMux)
 
