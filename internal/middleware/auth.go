@@ -134,6 +134,25 @@ func (a *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 
 // authorize — основной flow: parse → validate → lookup → inject Principal.
 func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (context.Context, error) {
+	// KAC-122 CRIT-8 fix: strip client-supplied x-kacho-principal-* incoming
+	// metadata, чтобы исключить header-injection privilege escalation.
+	if inMD, ok := metadata.FromIncomingContext(ctx); ok {
+		var stripped bool
+		md := inMD.Copy()
+		for k := range md {
+			lk := strings.ToLower(k)
+			if strings.HasPrefix(lk, "x-kacho-principal-") ||
+				strings.HasPrefix(lk, "grpc-metadata-x-kacho-principal-") {
+				delete(md, k)
+				stripped = true
+			}
+		}
+		if stripped {
+			ctx = metadata.NewIncomingContext(ctx, md)
+			a.logger.Warn("auth: stripped client-supplied x-kacho-principal-* metadata",
+				"method", fullMethod)
+		}
+	}
 	bearer := extractBearer(ctx)
 
 	// Empty Bearer handling per mode (D4).
@@ -257,6 +276,20 @@ func extractBearer(ctx context.Context) string {
 // KAC-107 follow-up; пока no-op.
 func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// KAC-122 CRIT-8 fix: strip incoming X-Kacho-Principal-* headers
+		// до auth-flow. Client может передать `X-Kacho-Principal-Type: user`
+		// и обойти auth — это polno privilege escalation. Заголовки
+		// устанавливаются ТОЛЬКО auth-middleware после resolved Bearer/Kratos.
+		// Также чистим `Grpc-Metadata-X-Kacho-Principal-*` (grpc-gateway
+		// canonical convention) и нижне-case варианты.
+		for k := range r.Header {
+			lk := strings.ToLower(k)
+			if strings.HasPrefix(lk, "x-kacho-principal-") ||
+				strings.HasPrefix(lk, "grpc-metadata-x-kacho-principal-") {
+				r.Header.Del(k)
+			}
+		}
+
 		// KAC-116: Kratos session-based auth (cookie ory_kratos_session).
 		// Резолвится ДО JWT-path, чтобы SPA-пользователи (без Bearer) получали
 		// principal. Если whoami возвращает active session — выставляем headers

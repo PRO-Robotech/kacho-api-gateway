@@ -27,10 +27,7 @@ import (
 
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 
-	endpointpb "github.com/PRO-Robotech/kacho-yc-shim/gen/go/yandex/cloud/endpoint"
-	iampb "github.com/PRO-Robotech/kacho-yc-shim/gen/go/yandex/cloud/iam/v1"
-	shimendpoint "github.com/PRO-Robotech/kacho-yc-shim/endpoint"
-	shimiam "github.com/PRO-Robotech/kacho-yc-shim/iam"
+	// KAC-122: kacho-yc-shim удалён (yc CLI compatibility deprecated).
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/clients"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
@@ -166,15 +163,11 @@ func main() {
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
 
-	// yc CLI compatibility shim (kacho-yc-shim repo): register
-	// yandex.cloud.endpoint.ApiEndpointService for service discovery and
-	// yandex.cloud.iam.v1.IamTokenService for OAuth-token exchange. The shim
-	// uses the yandex.cloud.* proto namespace (isolated to that one repo); all
-	// other yandex.cloud.* calls are method-rewritten to kacho.cloud.* by the
-	// unknown-service handler.
-	advertisedEndpoint := cfg.AdvertisedEndpoint()
-	endpointpb.RegisterApiEndpointServiceServer(grpcSrv, shimendpoint.New(advertisedEndpoint))
-	iampb.RegisterIamTokenServiceServer(grpcSrv, shimiam.New())
+	// KAC-122: yc CLI compatibility shim удалён (kacho-yc-shim repo dropped).
+	// yandex.cloud.* path-rewrite остаётся в proxy.Resolver — если внешний клиент
+	// придёт с /yandex.cloud.<svc>/<method>, мы rewrite'ем в kacho.cloud.* и
+	// проксируем. Native YC-services (ApiEndpoint / IamToken) — больше не регистрируются.
+	_ = cfg.AdvertisedEndpoint()
 
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
 	// сервисов через ServerReflection. Видны только сервисы, нативно

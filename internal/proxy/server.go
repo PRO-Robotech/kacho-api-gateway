@@ -5,10 +5,11 @@ import (
 
 	"google.golang.org/grpc"
 
-	shimproxy "github.com/PRO-Robotech/kacho-yc-shim/shimproxy"
-
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 )
+
+// MethodResolver — re-export of local shimproxy.MethodResolver type signature.
+type MethodResolver = methodResolverInternal
 
 // Resolver builds a MethodResolver for the unknown-service handler installed
 // on the gRPC server. Behaviour:
@@ -23,11 +24,11 @@ import (
 // allowlist.HasInternalSuffix and allowlist.IsAllowed are evaluated against
 // the *kacho.cloud.* path (post-rewrite for yandex calls), so adding new
 // public RPCs to allowlist automatically exposes them to yc CLI as well.
-func Resolver(backends Backends) shimproxy.MethodResolver {
+func Resolver(backends Backends) MethodResolver {
 	return func(fullMethod string) (string, grpc.ClientConnInterface, bool) {
 		method := fullMethod
-		if shimproxy.IsYandexMethod(fullMethod) {
-			method = shimproxy.RewriteToKacho(fullMethod)
+		if IsYandexMethod(fullMethod) {
+			method = RewriteToKacho(fullMethod)
 		}
 		if !strings.HasPrefix(method, "/kacho.cloud.") {
 			return "", nil, false
@@ -59,9 +60,9 @@ func Resolver(backends Backends) shimproxy.MethodResolver {
 // Native services registered on this server (Health, OperationService,
 // ApiEndpointService, IamTokenService) take precedence over the unknown-service
 // handler, as per gRPC dispatch semantics.
-func NewServer(resolve shimproxy.MethodResolver, opts ...grpc.ServerOption) *grpc.Server {
+func NewServer(resolve MethodResolver, opts ...grpc.ServerOption) *grpc.Server {
 	base := []grpc.ServerOption{
-		grpc.UnknownServiceHandler(shimproxy.Handler(resolve)),
+		grpc.UnknownServiceHandler(Handler(resolve)),
 	}
 	return grpc.NewServer(append(base, opts...)...)
 }

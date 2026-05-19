@@ -6,12 +6,9 @@ replace github.com/PRO-Robotech/kacho-corelib => ../kacho-corelib
 
 replace github.com/PRO-Robotech/kacho-proto => ../kacho-proto
 
-replace github.com/PRO-Robotech/kacho-yc-shim => ../kacho-yc-shim
-
 require (
 	github.com/PRO-Robotech/kacho-corelib v0.0.0
 	github.com/PRO-Robotech/kacho-proto v0.0.0
-	github.com/PRO-Robotech/kacho-yc-shim v0.0.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
