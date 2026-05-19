@@ -31,6 +31,7 @@ import (
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/clients"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/handler"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
@@ -137,6 +138,90 @@ func main() {
 		"iam_internal_addr", cfg.IAMInternalAddr,
 		"dev_secret_set", cfg.AuthNDevSecret != "")
 
+	// --- KAC-127 Phase 2: DPoP / JWT verifier / mTLS-bound / step-up gate ---
+	//
+	// All wiring is feature-gated by KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP.
+	// When disabled (default) the legacy auth-interceptor path remains the only
+	// authN code path. When enabled we add a second middleware after the legacy
+	// one — verified Hydra-issued tokens flow through it; dev / Kratos / HMAC
+	// tokens pass through unchanged (they're not in JWT alg whitelist and the
+	// JWT verifier rejects them gracefully → middleware passes through as
+	// anonymous when requireForAllRequests=false).
+	var dpopMiddleware *middleware.DPoPMiddleware
+	if cfg.AuthNEnableDPoP {
+		var verifierErr error
+		verifier, verifierErr := middleware.NewJWTVerifier(middleware.JWTVerifierConfig{
+			JWKSURL:          cfg.ResolvedHydraJWKSURL(),
+			JWKSCacheTTL:     time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second,
+			JWKSFetchTimeout: time.Duration(cfg.JWKSFetchTimeoutSeconds) * time.Second,
+			ExpectedIssuer:   cfg.ResolvedHydraIssuer(),
+			ExpectedAudience: cfg.ExpectedAudience(),
+			ClockSkew:        time.Duration(cfg.JWTClockSkewSeconds) * time.Second,
+		})
+		if verifierErr != nil {
+			log.Fatalf("jwt verifier: %v", verifierErr)
+		}
+		replayCache := middleware.NewDPoPReplayCache(middleware.DPoPReplayCacheConfig{
+			MaxEntries: cfg.DPoPReplayCacheSize,
+			TTL:        time.Duration(cfg.DPoPReplayCacheTTLSeconds) * time.Second,
+		})
+		dpopValidator, derr := middleware.NewDPoPValidator(middleware.DPoPValidatorConfig{
+			ReplayCache:  replayCache,
+			IatFreshness: time.Duration(cfg.DPoPIatFreshnessSeconds) * time.Second,
+		})
+		if derr != nil {
+			log.Fatalf("dpop validator: %v", derr)
+		}
+		stepUp := middleware.NewStepUpGate(time.Now)
+
+		var introspection *middleware.IntrospectionCache
+		if cfg.ResolvedHydraIntrospectionURL() != "" {
+			ic, ierr := middleware.NewIntrospectionCache(middleware.IntrospectionCacheConfig{
+				HydraIntrospectionURL: cfg.ResolvedHydraIntrospectionURL(),
+				MaxEntries:            cfg.IntrospectionCacheSize,
+				TTL:                   time.Duration(cfg.IntrospectionCacheTTLSeconds) * time.Second,
+			})
+			if ierr != nil {
+				log.Fatalf("introspection cache: %v", ierr)
+			}
+			introspection = ic
+		}
+
+		dpopMiddleware, verifierErr = middleware.NewDPoPMiddleware(middleware.DPoPMiddlewareConfig{
+			Verifier:              verifier,
+			DPoP:                  dpopValidator,
+			MTLS:                  middleware.NewMTLSBoundValidator(),
+			StepUp:                stepUp,
+			Introspection:         introspection,
+			Logger:                logger,
+			APIDomain:             cfg.APIDomain,
+			RequireForAllRequests: cfg.AuthNMode == string(middleware.AuthModeProductionStrict),
+		})
+		if verifierErr != nil {
+			log.Fatalf("dpop middleware: %v", verifierErr)
+		}
+		logger.Info("dpop-mw wired",
+			"api_domain", cfg.APIDomain,
+			"jwks_url", cfg.ResolvedHydraJWKSURL(),
+			"issuer", cfg.ResolvedHydraIssuer(),
+			"audience", cfg.ExpectedAudience(),
+			"introspection_enabled", introspection != nil,
+		)
+	} else {
+		logger.Info("dpop-mw disabled (set KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP=true to enable)")
+	}
+
+	// --- KAC-127 Phase 2: logout handler ---
+	logoutHandler, lerr := handler.NewLogoutHandler(handler.LogoutHandlerConfig{
+		Logger:          logger,
+		Revocations:     clients.NewSessionRevocationsAdapter(backends["iamInternal"]),
+		HydraAdminURL:   cfg.ResolvedHydraAdminURL(),
+		HookSharedToken: cfg.HookSharedSecret,
+	})
+	if lerr != nil {
+		log.Fatalf("logout handler: %v", lerr)
+	}
+
 	// --- gRPC server ---
 	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
 	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
@@ -211,19 +296,30 @@ func main() {
 	}
 	oidcHandler.Register(httpMux)
 
+	// KAC-127 Phase 2: POST /oauth/logout — RFC 7009 token revocation +
+	// best-effort Hydra session-kill (triggers RFC 8254 back-channel logout
+	// to registered SPs).
+	httpMux.Handle("/oauth/logout", logoutHandler)
+
 	httpMux.Handle("/", restHandler)
 
 	// Idempotency-Key store: in-memory с TTL=24h (как в YC).
 	idempStore := middleware.NewIdempotencyStore(middleware.IdempotencyTTL)
 
+	// Build the HTTP chain. The DPoP middleware (Phase 2) sits between the
+	// legacy auth-interceptor and the access-log: legacy fills principal
+	// from Kratos / dev-HMAC if present; DPoP middleware fills it from a
+	// verified Hydra JWT if present. Anonymous requests pass through both
+	// unless production-strict.
+	var inner http.Handler = httpMux
+	inner = middleware.HTTPIdempotency(idempStore)(inner)
+	inner = middleware.HTTPAccessLog(logger)(inner)
+	if dpopMiddleware != nil {
+		inner = dpopMiddleware.Wrap(inner)
+	}
+	inner = authInterceptor.HTTP(inner)
 	httpHandler := middleware.HTTPRequestID(
-		middleware.HTTPRecovery(logger)(
-			authInterceptor.HTTP(
-				middleware.HTTPAccessLog(logger)(
-					middleware.HTTPIdempotency(idempStore)(httpMux),
-				),
-			),
-		),
+		middleware.HTTPRecovery(logger)(inner),
 	)
 
 	httpSrv := &http.Server{

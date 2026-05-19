@@ -63,8 +63,67 @@ type Config struct {
 
 	// AuthNDevSecret — HMAC-secret для подписи dev-JWT (mode=dev).
 	// Если пуст — Bearer-токены в dev-режиме игнорируются (всегда anonymous).
-	// Production / production-strict — нужен Zitadel JWKS (TODO post-deploy fix).
+	// Production / production-strict — нужен Hydra JWKS (см. KAC-127 Phase 2).
 	AuthNDevSecret string `envconfig:"KACHO_API_GATEWAY_AUTHN_DEV_SECRET" default:""`
+
+	// --- KAC-127 Phase 2: AuthN core (DPoP / JWT / mTLS-bound / step-up / BCL) ---
+
+	// APIDomain — публичный домен kacho-api (используется для построения canonical
+	// `htu` в DPoP-валидации и для resolve issuer/audience). НЕ хардкод. Default
+	// меняется в production helm-values.
+	APIDomain string `envconfig:"KACHO_API_DOMAIN" default:"api.kacho.cloud"`
+
+	// HydraIssuer — issuer URL Ory Hydra; используется как expected `iss` в
+	// access tokens + base URL для JWKS fetch (`{HydraIssuer}/.well-known/jwks.json`).
+	// Пустой → derived as `https://hydra.{APIDomain}`.
+	HydraIssuer string `envconfig:"KACHO_HYDRA_ISSUER" default:""`
+
+	// HydraJWKSURL — explicit JWKS endpoint; пустой → derived from HydraIssuer.
+	HydraJWKSURL string `envconfig:"KACHO_HYDRA_JWKS_URL" default:""`
+
+	// HydraIntrospectionURL — explicit Hydra introspection endpoint (admin API);
+	// пустой → derived as `{HydraIssuer}/oauth2/introspect`.
+	HydraIntrospectionURL string `envconfig:"KACHO_HYDRA_INTROSPECTION_URL" default:""`
+
+	// HydraAdminURL — explicit Hydra admin API base URL (used by logout handler
+	// to revoke sessions via `DELETE /admin/oauth2/auth/sessions/login`); пустой
+	// → derived from HydraIssuer.
+	HydraAdminURL string `envconfig:"KACHO_HYDRA_ADMIN_URL" default:""`
+
+	// JWKSCacheTTL — TTL для JWKS cache (sec); RFC рекомендация 5–60 min.
+	JWKSCacheTTLSeconds int `envconfig:"KACHO_JWKS_CACHE_TTL_SECONDS" default:"300"`
+
+	// JWKSFetchTimeout — таймаут на single JWKS fetch (sec).
+	JWKSFetchTimeoutSeconds int `envconfig:"KACHO_JWKS_FETCH_TIMEOUT_SECONDS" default:"5"`
+
+	// DPoPReplayCacheSize — LRU capacity для DPoP-replay (entries).
+	DPoPReplayCacheSize int `envconfig:"KACHO_DPOP_REPLAY_CACHE_SIZE" default:"100000"`
+
+	// DPoPReplayCacheTTLSeconds — TTL для DPoP-replay entries (sec). Должен быть
+	// ≥ 2× iat-freshness-window (60s × 2 = 120s default).
+	DPoPReplayCacheTTLSeconds int `envconfig:"KACHO_DPOP_REPLAY_CACHE_TTL_SECONDS" default:"120"`
+
+	// DPoPIatFreshnessSeconds — допустимое отклонение DPoP `iat` от now() (sec).
+	// RFC 9449 рекомендация 60s.
+	DPoPIatFreshnessSeconds int `envconfig:"KACHO_DPOP_IAT_FRESHNESS_SECONDS" default:"60"`
+
+	// JWTClockSkewSeconds — допустимый clock skew для JWT `exp`/`nbf` (sec).
+	JWTClockSkewSeconds int `envconfig:"KACHO_JWT_CLOCK_SKEW_SECONDS" default:"30"`
+
+	// IntrospectionCacheTTLSeconds — TTL для introspection-cache entries (sec).
+	IntrospectionCacheTTLSeconds int `envconfig:"KACHO_INTROSPECTION_CACHE_TTL_SECONDS" default:"5"`
+
+	// IntrospectionCacheSize — LRU capacity для introspection cache (entries).
+	IntrospectionCacheSize int `envconfig:"KACHO_INTROSPECTION_CACHE_SIZE" default:"10000"`
+
+	// HookSharedSecret — shared secret для Hydra→kacho-iam back-channel logout
+	// (RFC 8254). Также используется как HMAC для CAEP push payload integrity.
+	HookSharedSecret string `envconfig:"KACHO_IAM_HOOK_TOKEN" default:""`
+
+	// AuthNEnableDPoP — feature toggle; true → требовать DPoP/mTLS-bound для
+	// tokens с `cnf` claim, валидировать. False → skip DPoP проверки (legacy
+	// dev mode без sender-constrained tokens).
+	AuthNEnableDPoP bool `envconfig:"KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP" default:"false"`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
@@ -77,6 +136,51 @@ func (c Config) TLSEnabled() bool {
 // compatibility shim (ApiEndpointService.List response).
 func (c Config) AdvertisedEndpoint() string {
 	return c.AdvertisedEndpointAddr
+}
+
+// ResolvedHydraIssuer returns the Hydra issuer URL, deriving it from APIDomain
+// when explicitly unset. Trailing slash is stripped.
+func (c Config) ResolvedHydraIssuer() string {
+	iss := c.HydraIssuer
+	if iss == "" {
+		iss = "https://hydra." + c.APIDomain
+	}
+	for len(iss) > 0 && iss[len(iss)-1] == '/' {
+		iss = iss[:len(iss)-1]
+	}
+	return iss
+}
+
+// ResolvedHydraJWKSURL returns the JWKS endpoint, deriving from issuer when
+// not explicitly set.
+func (c Config) ResolvedHydraJWKSURL() string {
+	if c.HydraJWKSURL != "" {
+		return c.HydraJWKSURL
+	}
+	return c.ResolvedHydraIssuer() + "/.well-known/jwks.json"
+}
+
+// ResolvedHydraIntrospectionURL returns the Hydra introspection endpoint.
+func (c Config) ResolvedHydraIntrospectionURL() string {
+	if c.HydraIntrospectionURL != "" {
+		return c.HydraIntrospectionURL
+	}
+	return c.ResolvedHydraIssuer() + "/oauth2/introspect"
+}
+
+// ResolvedHydraAdminURL returns the Hydra admin API base.
+func (c Config) ResolvedHydraAdminURL() string {
+	if c.HydraAdminURL != "" {
+		return c.HydraAdminURL
+	}
+	return c.ResolvedHydraIssuer()
+}
+
+// ExpectedAudience returns the audience value injected in tokens for this
+// API gateway — `https://{APIDomain}`. Used as the expected `aud` during JWT
+// validation.
+func (c Config) ExpectedAudience() string {
+	return "https://" + c.APIDomain
 }
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.
