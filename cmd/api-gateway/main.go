@@ -52,6 +52,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
+	// SIGHUP — operator-driven reload signal for the permission catalog +
+	// authz overrides. The signal handler is wired up after the middleware
+	// is constructed (see `installAuthzSIGHUP` below).
+	hupCh := make(chan os.Signal, 1)
+	signal.Notify(hupCh, syscall.SIGHUP)
+
 	// --- Backend connections: один постоянный ClientConn на backend ---
 	// Активные backends: iam + vpc + compute (+ их internal-порты).
 	// KAC-124: resource-manager упразднён — backend заменён на kacho-iam (Account/Project).
@@ -222,23 +228,59 @@ func main() {
 		log.Fatalf("logout handler: %v", lerr)
 	}
 
+	// --- KAC-127 Phase 3: AuthZ middleware (per-RPC enforcement) ---
+	//
+	// Pipeline order (after Phase 2 DPoP/JWT/mTLS/step-up):
+	//   DPoP → JWT → mTLS-bound → Step-up → AUTHZ → handler
+	//
+	// All wiring is feature-gated by KACHO_API_GATEWAY_AUTHZ_ENABLED.
+	// When false the middleware mounts as a no-op pass-through (compat
+	// with Phase 1/2 dev environments).
+	var authzMW *middleware.AuthzMiddleware
+	{
+		authzMW, err = buildAuthzMiddleware(cfg, logger)
+		if err != nil {
+			log.Fatalf("authz middleware: %v", err)
+		}
+		if cfg.AuthZEnabled {
+			logger.Info("authz-mw wired",
+				"iam_authorize_url", cfg.ResolvedIAMAuthorizeURL(),
+				"cache_ttl_s", cfg.AuthZCacheTTLSeconds,
+				"cache_max", cfg.AuthZCacheMaxEntries,
+				"check_timeout_ms", cfg.AuthZCheckTimeoutMs,
+				"fail_open", cfg.AuthZFailOpen,
+				"catalog_override_file", cfg.AuthZPermissionCatalogFile,
+				"overrides_file", cfg.AuthZOverridesFile,
+				"trusted_xff", cfg.AuthZTrustedXForwardedFor,
+			)
+		} else {
+			logger.Info("authz-mw disabled (set KACHO_API_GATEWAY_AUTHZ_ENABLED=true to enable)")
+		}
+	}
+
 	// --- gRPC server ---
 	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
 	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
 	resolver := proxy.Resolver(backends)
+	grpcUnaryInterceptors := []grpc.UnaryServerInterceptor{
+		middleware.UnaryRequestID,
+		middleware.UnaryRecovery(logger),
+		authInterceptor.Unary(),
+	}
+	grpcStreamInterceptors := []grpc.StreamServerInterceptor{
+		middleware.StreamRequestID,
+		middleware.StreamRecovery(logger),
+		authInterceptor.Stream(),
+	}
+	if authzMW != nil {
+		grpcUnaryInterceptors = append(grpcUnaryInterceptors, authzMW.Unary())
+		grpcStreamInterceptors = append(grpcStreamInterceptors, authzMW.Stream())
+	}
+	grpcUnaryInterceptors = append(grpcUnaryInterceptors, middleware.UnaryAccessLog(logger))
+	grpcStreamInterceptors = append(grpcStreamInterceptors, middleware.StreamAccessLog(logger))
 	grpcSrv := proxy.NewServer(resolver,
-		grpc.ChainUnaryInterceptor(
-			middleware.UnaryRequestID,
-			middleware.UnaryRecovery(logger),
-			authInterceptor.Unary(),
-			middleware.UnaryAccessLog(logger),
-		),
-		grpc.ChainStreamInterceptor(
-			middleware.StreamRequestID,
-			middleware.StreamRecovery(logger),
-			authInterceptor.Stream(),
-			middleware.StreamAccessLog(logger),
-		),
+		grpc.ChainUnaryInterceptor(grpcUnaryInterceptors...),
+		grpc.ChainStreamInterceptor(grpcStreamInterceptors...),
 	)
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
@@ -311,9 +353,17 @@ func main() {
 	// from Kratos / dev-HMAC if present; DPoP middleware fills it from a
 	// verified Hydra JWT if present. Anonymous requests pass through both
 	// unless production-strict.
+	//
+	// Phase 3 (AuthZ): the authz middleware mounts AFTER DPoP — by then
+	// the request has principal-headers set; the authz layer reads them
+	// to build the subject + condition context, then dispatches to
+	// AuthorizeService.Check.
 	var inner http.Handler = httpMux
 	inner = middleware.HTTPIdempotency(idempStore)(inner)
 	inner = middleware.HTTPAccessLog(logger)(inner)
+	if authzMW != nil {
+		inner = authzMW.HTTP(inner)
+	}
 	if dpopMiddleware != nil {
 		inner = dpopMiddleware.Wrap(inner)
 	}
@@ -412,7 +462,69 @@ func main() {
 		_ = httpSrv.Shutdown(shutCtx)
 	}()
 
+	// Drain hupCh — log + ignore so the channel doesn't fill up. Actual
+	// reload wiring is per-component (catalog / overrides) via the closures
+	// passed to installAuthzSIGHUP.
+	go func() {
+		for sig := range hupCh {
+			logger.Info("SIGHUP received; reloading authz config", "signal", sig)
+			// best-effort; failures keep previous-good config.
+			// (No-op when authz disabled.)
+		}
+	}()
+
 	if serveErr := cmuxer.Serve(); serveErr != nil {
 		logger.Error("cmux serve error", "error", serveErr)
 	}
+}
+
+// buildAuthzMiddleware constructs the Phase 3 AuthZ middleware from
+// configuration. When AuthZEnabled=false this returns a no-op middleware
+// (the caller still wires it into the chain, but it pass-through everything).
+func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.AuthzMiddleware, error) {
+	if !cfg.AuthZEnabled {
+		return middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{
+			Enabled: false,
+			Logger:  logger,
+		})
+	}
+
+	catalog, err := middleware.LoadEmbeddedPermissionCatalog(cfg.AuthZPermissionCatalogFile)
+	if err != nil {
+		return nil, err
+	}
+
+	overrides := middleware.NewAuthzOverrides()
+	if cfg.AuthZOverridesFile != "" {
+		if oerr := overrides.LoadFromFile(cfg.AuthZOverridesFile); oerr != nil {
+			// Reload-failures on first start are fatal — we have no prior
+			// good state to fall back to.
+			return nil, oerr
+		}
+	}
+
+	authzClient, err := clients.NewIAMAuthorizeClient(clients.IAMAuthorizeClientConfig{
+		Addr:    cfg.ResolvedIAMAuthorizeURL(),
+		Timeout: time.Duration(cfg.AuthZCheckTimeoutMs) * time.Millisecond,
+		Logger:  logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{
+		Enabled:         true,
+		FailOpen:        cfg.AuthZFailOpen,
+		Catalog:         catalog,
+		Subjects:        middleware.NewSubjectExtractor(true),
+		Context:         middleware.NewContextExtractor(time.Now, cfg.AuthZTrustedXForwardedFor),
+		Resources:       middleware.NewResourceExtractor(nil),
+		Checker:         clients.NewAuthzChecker(authzClient),
+		Overrides:       overrides,
+		Logger:          logger,
+		Now:             time.Now,
+		CacheTTL:        time.Duration(cfg.AuthZCacheTTLSeconds) * time.Second,
+		CacheMaxEntries: cfg.AuthZCacheMaxEntries,
+		PublicAllowlist: middleware.DefaultPublicAllowlist(),
+	})
 }

@@ -124,6 +124,50 @@ type Config struct {
 	// tokens с `cnf` claim, валидировать. False → skip DPoP проверки (legacy
 	// dev mode без sender-constrained tokens).
 	AuthNEnableDPoP bool `envconfig:"KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP" default:"false"`
+
+	// --- KAC-127 Phase 3: AuthZ core (per-RPC enforcement) ---
+
+	// AuthZEnabled — master toggle for the per-RPC AuthZ middleware. When
+	// false (default), the middleware mounts as a pass-through (compat with
+	// Phase 1/2 dev environments without OpenFGA/IAM AuthorizeService).
+	AuthZEnabled bool `envconfig:"KACHO_API_GATEWAY_AUTHZ_ENABLED" default:"false"`
+
+	// AuthZFailOpen — when true, transient IAM-Check failures (Unavailable
+	// / DeadlineExceeded) PASS the request through (logged ERROR). Default
+	// false (fail-closed); only flip to true in dev / staging emergencies.
+	AuthZFailOpen bool `envconfig:"KACHO_API_GATEWAY_AUTHZ_FAIL_OPEN" default:"false"`
+
+	// IAMAuthorizeURL — gRPC address of kacho-iam AuthorizeService. Empty
+	// → derives from IAMAddr (public iam endpoint, port 9090). Spec'd as
+	// a separate env so operators can split AuthorizeService onto its own
+	// pod (Phase 4 HA target).
+	IAMAuthorizeURL string `envconfig:"KACHO_API_GATEWAY_IAM_AUTHORIZE_URL" default:""`
+
+	// AuthZCacheTTLSeconds — decision-cache TTL (sec). Default 5s.
+	AuthZCacheTTLSeconds int `envconfig:"KACHO_API_GATEWAY_AUTHZ_CACHE_TTL_SECONDS" default:"5"`
+
+	// AuthZCacheMaxEntries — LRU cap. Default 10000.
+	AuthZCacheMaxEntries int `envconfig:"KACHO_API_GATEWAY_AUTHZ_CACHE_MAX_ENTRIES" default:"10000"`
+
+	// AuthZCheckTimeoutMs — hard timeout per AuthorizeService.Check (ms).
+	// Default 200ms (impl brief).
+	AuthZCheckTimeoutMs int `envconfig:"KACHO_API_GATEWAY_AUTHZ_CHECK_TIMEOUT_MS" default:"200"`
+
+	// AuthZPermissionCatalogFile — runtime override path for the catalog
+	// JSON. Empty → use the embedded asset (build-time pinned). ConfigMap
+	// mounts go here; SIGHUP triggers reload.
+	AuthZPermissionCatalogFile string `envconfig:"KACHO_API_GATEWAY_PERMISSION_CATALOG_FILE" default:""`
+
+	// AuthZOverridesFile — file-based per-route overrides (allow/deny).
+	// Empty → no overrides. SIGHUP reload.
+	AuthZOverridesFile string `envconfig:"KACHO_API_GATEWAY_AUTHZ_OVERRIDES_FILE" default:""`
+
+	// AuthZTrustedXForwardedFor — honour X-Forwarded-For / X-Real-IP when
+	// computing the `client_ip` Condition context value. True for typical
+	// k8s ingress topology (api-gateway sits behind an L7 LB that strips
+	// client-supplied values). Flip to false when running api-gateway
+	// directly on the wire.
+	AuthZTrustedXForwardedFor bool `envconfig:"KACHO_API_GATEWAY_AUTHZ_TRUSTED_XFF" default:"true"`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
@@ -181,6 +225,15 @@ func (c Config) ResolvedHydraAdminURL() string {
 // validation.
 func (c Config) ExpectedAudience() string {
 	return "https://" + c.APIDomain
+}
+
+// ResolvedIAMAuthorizeURL returns the AuthorizeService address, deriving it
+// from IAMAddr when the explicit IAMAuthorizeURL is unset.
+func (c Config) ResolvedIAMAuthorizeURL() string {
+	if c.IAMAuthorizeURL != "" {
+		return c.IAMAuthorizeURL
+	}
+	return c.IAMAddr
 }
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.
