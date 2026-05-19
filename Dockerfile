@@ -4,7 +4,6 @@ WORKDIR /src
 # Копируем зависимые модули (parent-context pattern — сборка из cloud-demo/)
 COPY kacho-corelib /src/kacho-corelib
 COPY kacho-proto /src/kacho-proto
-COPY kacho-yc-shim /src/kacho-yc-shim
 COPY kacho-api-gateway /src/kacho-api-gateway
 
 WORKDIR /src/kacho-api-gateway
