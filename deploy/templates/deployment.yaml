@@ -92,6 +92,24 @@ spec:
               value: {{ .Values.authn.devSecret | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.authz }}
+            - name: KACHO_API_GATEWAY_AUTHZ_ENABLED
+              value: {{ .Values.authz.enabled | default false | quote }}
+            - name: KACHO_API_GATEWAY_AUTHZ_FAIL_OPEN
+              value: {{ .Values.authz.failOpen | default false | quote }}
+            {{- if .Values.authz.iamAuthorizeUrl }}
+            - name: KACHO_API_GATEWAY_IAM_AUTHORIZE_URL
+              value: {{ .Values.authz.iamAuthorizeUrl | quote }}
+            {{- end }}
+            {{- if .Values.authz.cacheTtlSeconds }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CACHE_TTL_SECONDS
+              value: {{ .Values.authz.cacheTtlSeconds | quote }}
+            {{- end }}
+            {{- if .Values.authz.checkTimeoutMs }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CHECK_TIMEOUT_MS
+              value: {{ .Values.authz.checkTimeoutMs | quote }}
+            {{- end }}
+            {{- end }}
             {{- range $k, $v := .Values.extraEnv }}
             - name: {{ $k }}
               value: {{ $v | quote }}

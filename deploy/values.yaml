@@ -78,6 +78,25 @@ oidc:
 # are unaffected. The dev overlay (values.dev.yaml) sets this explicitly.
 authn: {}
 
+# AuthZ — Phase 3 per-RPC authorization middleware (KAC-127 #42).
+#   enabled: when true, every authenticated request is gated by a
+#     `kacho.cloud.iam.v1.AuthorizeService.Check` fan-out. When false (the
+#     Go-config default) the middleware is wired but pass-through — only
+#     anonymous-mutating requests are blocked (by kacho-iam authzguard), so
+#     authenticated-but-unauthorized requests leak through.
+#   failOpen: when true, transient IAM-Check failures (Unavailable / timeout)
+#     ALLOW the request. Production edition MUST set false (fail-closed). The
+#     access-matrix newman suite also needs false so DENY decisions are not
+#     masked by IAM hiccups.
+#   iamAuthorizeUrl: explicit gRPC address of kacho-iam AuthorizeService
+#     (public port 9090). Empty → derived from the `iam` backend address
+#     (KACHO_API_GATEWAY_IAM_GRPC). AuthorizeService is the PUBLIC RPC — it is
+#     NOT routed through the internal :9091 listener (loop-prevention #6).
+#
+# Default {} → no KACHO_API_GATEWAY_AUTHZ_* env emitted; Go-config defaults
+# (enabled=false, failOpen=false) apply. The dev overlay enables it.
+authz: {}
+
 # Arbitrary env vars escape-hatch (key: value).
 extraEnv: {}
 
