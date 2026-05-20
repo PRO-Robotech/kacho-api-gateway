@@ -84,6 +84,14 @@ spec:
               value: {{ .Values.oidc.clientSecret | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.authn }}
+            - name: KACHO_API_GATEWAY_AUTHN_MODE
+              value: {{ .Values.authn.mode | default "dev" | quote }}
+            {{- if .Values.authn.devSecret }}
+            - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
+              value: {{ .Values.authn.devSecret | quote }}
+            {{- end }}
+            {{- end }}
             {{- range $k, $v := .Values.extraEnv }}
             - name: {{ $k }}
               value: {{ $v | quote }}

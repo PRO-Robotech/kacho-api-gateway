@@ -59,6 +59,25 @@ oidc:
   redirectUri: ""
   clientSecret: ""
 
+# AuthN — auth-interceptor configuration (KAC-127 #40).
+#   mode:
+#     - "dev"               : Bearer optional. Valid HS256 Bearer signed with
+#                             `devSecret` → real Principal; missing/invalid →
+#                             anonymous.
+#     - "production"        : Bearer required, Hydra JWKS RS256 validation.
+#     - "production-strict" : production + reject missing Bearer.
+#   devSecret: HS256 signing secret for dev-mode JWT validation. Empty → all
+#     Bearer tokens are ignored in dev-mode (every principal collapses to
+#     anonymous / system:bootstrap). MUST be set on the dev stand so per-user
+#     JWTs are distinguishable. Dev-only — production uses RS256 / Hydra JWKS,
+#     never this secret.
+#
+# Default {} → no KACHO_API_GATEWAY_AUTHN_* env emitted; the api-gateway Go
+# config default (mode=dev, empty devSecret) applies — identical to the
+# behaviour before this block existed, so prod overlays that omit `authn`
+# are unaffected. The dev overlay (values.dev.yaml) sets this explicitly.
+authn: {}
+
 # Arbitrary env vars escape-hatch (key: value).
 extraEnv: {}
 
