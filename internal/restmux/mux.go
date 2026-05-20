@@ -394,6 +394,13 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := iampb.RegisterAccessBindingServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam AccessBindingService: %w", err)
 			}
+			// KAC-127 Phase 5 — SAKeyService (ServiceAccount OAuth keys). Public
+			// under /iam/v1/serviceAccounts/{id}/keys. Без этой регистрации
+			// grpc-gateway не имеет REST-route → POST .../keys → 404, и
+			// SAKeyService.Issue/Revoke недоступны (ломало authz-sa-apitoken suite).
+			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
+			}
 		}
 
 		// --- iam.v1 admin (InternalUserService) — kacho-only, internal-port (9091) ---
