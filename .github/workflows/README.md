@@ -50,67 +50,45 @@ Job `docker-build-arm64` требует `runs-on: self-hosted` arm64-ранне�
 arm64-раннер недоступен — образ соберётся только под amd64 (job arm64 + manifest
 push зафейлятся; amd64-тег при этом валиден).
 
-## newman-trigger.yml — cross-repo newman-e2e gate (KAC-127)
+## newman-e2e.yml — self-contained newman E2E authz gate (KAC-127)
 
 Полный Newman authz E2E (288-кейсовая default-deny матрица + 30-кейсовая
-ServiceAccount/API-token матрица) живёт в `kacho-deploy/.github/workflows/newman-e2e.yml`:
-поднимает реальный kind + helm umbrella-стек и гоняет сьюты через REST
-api-gateway. Тот workflow триггерится только push/PR в сам `kacho-deploy`.
+ServiceAccount/API-token матрица) гоняется **прямо в CI этого репо**: workflow
+`newman-e2e.yml` поднимает реальный kind + helm umbrella-стек (Postgres + Ory +
+OpenFGA + api-gateway + iam + vpc + compute) на локальном kind-кластере, сидит
+shared authz-фикстуры и гоняет сьюты `kacho-iam` через REST api-gateway.
 
-Но authz-код, который эти сьюты проверяют, живёт **здесь** (`kacho-api-gateway` — JWT / API-token auth-interceptor, tenant-interceptor и REST<->gRPC mux, через который проходит каждый authz-запрос).
-PR в этот репо, ломающий access-matrix, иначе прошёл бы CI (`ci.yaml` гоняет
-только per-service unit/integration тесты, не cross-stack authz-матрицу).
-
-`newman-trigger.yml` закрывает этот разрыв: на каждый PR / push в `KAC-127`
-он шлёт `repository_dispatch` (event type `newman-e2e`) в
-`PRO-Robotech/kacho-deploy`, передавая `client_payload` `{repo, ref, sha, source}`,
-затем находит запущенный run, поллит его и зеркалит conclusion — красная
-authz-матрица фейлит PR здесь.
+Раньше этот разрыв закрывал `newman-trigger.yml` — он слал `repository_dispatch`
+в `kacho-deploy` и требовал вручную заданный PAT `WORKFLOW_DISPATCH_TOKEN`. Без
+секрета job молча скипался (`guard` → `has_token=false`), и Newman фактически
+не гонялся на PR. `newman-e2e.yml` **не требует никаких секретов**: весь стек
+билдится и поднимается в одном job на локальном kind — authz-матрица здесь
+реальный блокирующий гейт.
 
 ### Триггеры
 
-- `pull_request` в `main` / `KAC-127`
-- `push` в `KAC-127`
+- `pull_request` в `main`
+- `push` в `main`
 - `workflow_dispatch` (ручной прогон)
 
-### Требуемый GitHub secret
+### Что делает
 
-| Secret | Назначение |
-|---|---|
-| `WORKFLOW_DISPATCH_TOKEN` | PAT с правом POST `repos/PRO-Robotech/kacho-deploy/dispatches` |
+1. Checkout этого репо (ref под тестом) + sibling-репо (`kacho-deploy`,
+   `kacho-corelib`, `kacho-proto`, `kacho-vpc`, `kacho-iam`, `kacho-compute`,
+   `kacho-api-gateway`, `kacho-workspace`) на `ref: main` (KAC-127 смержен —
+   pin снят).
+2. Билд всех `kacho-*:dev` образов, `kind load`.
+3. `helm install` umbrella (`values.dev.yaml`), ожидание openfga-bootstrap.
+4. Сид shared authz-фикстур + прогон 2 newman-сьют (`authz-deny`,
+   `authz-sa-apitoken`) через port-forward api-gateway.
+5. `assert authz suites green` — fail job если хоть один assertion красный.
 
-`GITHUB_TOKEN` по умолчанию **не может** dispatch'ить в чужой репозиторий —
-нужен отдельный PAT:
+Тяжёлый (~15-30 мин) — отдельный workflow, не в быстром `ci.yaml`.
 
-- **classic PAT** — scope `repo`;
-- **fine-grained PAT** — `Actions: read and write` + `Contents: read` на
-  `PRO-Robotech/kacho-deploy` (а для polling статуса run'а — `Actions: read`
-  на том же репо).
+### Секреты
 
-Если secret не задан — job **не фейлится**: шаг `guard — dispatch token
-present` выводит `::notice::` и завершает job с success (логически
-«skipped» — `has_token=false` отключает шаги dispatch/locate/await через
-`if:`-условие). Красный check блокировал бы mergeability PR из-за разрыва,
-который разработчик не может закрыть сам (установка secret — user-action).
-Это **не ослабление gate**: блокирующий Newman E2E всё равно гоняется в
-`kacho-deploy/newman-e2e.yml` на push/PR туда. Cross-repo trigger —
-дополнительный convenience: без токена это no-op, с токеном — реально
-dispatch'ит и зеркалит conclusion.
+Не требуются. `kacho-ui` — приватный репо, его checkout best-effort
+(`continue-on-error`), helm-чарт стабится если checkout не прошёл.
 
-### Установка secret (user-action)
-
-```bash
-gh secret set WORKFLOW_DISPATCH_TOKEN --body "<pat-value>" --repo PRO-Robotech/kacho-api-gateway
-```
-
-Тот же PAT ставится во все 4 authz-репо (`kacho-iam`, `kacho-vpc`,
-`kacho-compute`, `kacho-api-gateway`). Хранить значение PAT — только в GitHub
-Secrets, не в коде / не в vault.
-
-### Как newman-e2e использует payload
-
-`kacho-deploy/newman-e2e.yml` принимает `repository_dispatch` type `newman-e2e`.
-Шаг `resolve sibling refs` читает `client_payload.repo` + `.ref` и переопределяет
-checkout **именно этого** sibling'а на ветку под тестом; остальные siblings
-остаются на pin'е `KAC-127` — PR проверяется против интеграционной ветки всех
-прочих компонентов.
+`kacho-deploy/.github/workflows/newman-e2e.yml` остаётся как есть (он
+self-contained и гоняется на push/PR в сам `kacho-deploy`).
