@@ -8,8 +8,8 @@ tlsPort: 8443
 
 # Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
 # loadbalancer заморожен — его адрес здесь отсутствует.
+# KAC-124/127: resourceManager удалён — backend заменён на kacho-iam (ниже).
 backends:
-  resourceManager: resource-manager.kacho.svc.cluster.local:9090
   vpc: vpc.kacho.svc.cluster.local:9090
   vpcInternal: vpc.kacho.svc.cluster.local:9091
   compute: compute.kacho.svc.cluster.local:9090

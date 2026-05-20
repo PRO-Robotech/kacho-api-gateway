@@ -259,8 +259,8 @@ func main() {
 	}
 
 	// --- gRPC server ---
-	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
-	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
+	// Resolver handles native kacho.cloud.* — performs allowlist + domain
+	// routing. KAC-127: yc-CLI compat shim удалён.
 	resolver := proxy.Resolver(backends)
 	grpcUnaryInterceptors := []grpc.UnaryServerInterceptor{
 		middleware.UnaryRequestID,
@@ -290,10 +290,11 @@ func main() {
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
 
-	// KAC-122: yc CLI compatibility shim удалён (kacho-yc-shim repo dropped).
-	// yandex.cloud.* path-rewrite остаётся в proxy.Resolver — если внешний клиент
-	// придёт с /yandex.cloud.<svc>/<method>, мы rewrite'ем в kacho.cloud.* и
-	// проксируем. Native YC-services (ApiEndpoint / IamToken) — больше не регистрируются.
+	// KAC-127: yandex.cloud.* path-rewrite в proxy.Resolver удалён вслед за
+	// KAC-122 (kacho-yc-shim drop) — backends не expose'ят yandex-services,
+	// и Native YC-services (ApiEndpoint / IamToken) не регистрируются. Если
+	// в будущем понадобится yc-CLI compat, его реализует отдельный
+	// `kacho-yc-shim` сервис.
 	_ = cfg.AdvertisedEndpoint()
 
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список

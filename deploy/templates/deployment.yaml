@@ -28,8 +28,7 @@ spec:
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
-            - name: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC
-              value: "{{ .Values.backends.resourceManager }}"
+            # KAC-124/127: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC удалён — backend заменён на kacho-iam.
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
             {{- if .Values.backends.vpcInternal }}

@@ -9,7 +9,6 @@ import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
 //	KACHO_API_GATEWAY_TLS_LISTEN_ADDR     — адрес для TLS listener (default: пусто — TLS отключён)
 //	KACHO_API_GATEWAY_TLS_CERT_FILE       — путь к TLS-сертификату (PEM)
 //	KACHO_API_GATEWAY_TLS_KEY_FILE        — путь к TLS-приватному ключу (PEM)
-//	KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC — адрес backend resource-manager
 //	KACHO_API_GATEWAY_VPC_GRPC            — адрес backend vpc
 //	KACHO_API_GATEWAY_COMPUTE_GRPC        — адрес backend compute (public, port 9090)
 //	KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC — адрес backend compute internal-port (9091)
@@ -21,12 +20,12 @@ import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
 //
 // loadbalancer заморожен — env vars удалены.
 type Config struct {
-	ListenAddr          string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
-	TLSListenAddr       string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
-	TLSCertFile         string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
-	TLSKeyFile          string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
-	ResourceManagerAddr string `envconfig:"KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC"  default:"resource-manager.kacho.svc.cluster.local:9090"`
-	VPCAddr             string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+	ListenAddr    string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
+	TLSListenAddr string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
+	TLSCertFile   string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
+	TLSKeyFile    string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
+	// KAC-124/127: ResourceManagerAddr удалён — kacho-resource-manager заменён на kacho-iam.
+	VPCAddr string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
 	// VPCInternalAddr — admin-only internal-port (9091) of vpc backend.
 	// Routes Region/Zone/AddressPool RESTful endpoints (kacho-only, NOT YC-verbatim).
 	VPCInternalAddr string `envconfig:"KACHO_API_GATEWAY_VPC_INTERNAL_GRPC" default:"vpc.kacho.svc.cluster.local:9091"`
@@ -237,18 +236,16 @@ func (c Config) ResolvedIAMAuthorizeURL() string {
 }
 
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.
-// "organizationmanager" → тот же resource-manager (реализует OrganizationService).
 // "iam" / "iamInternal" — kacho-iam public (9090) / internal (9091) endpoints (KAC-105).
+// KAC-124/127: "resourcemanager" / "organizationmanager" удалены — заменены на /iam/v1/*.
 func (c Config) BackendAddrs() map[string]string {
 	return map[string]string{
-		"resourcemanager":     c.ResourceManagerAddr,
-		"organizationmanager": c.ResourceManagerAddr,
-		"vpc":                 c.VPCAddr,
-		"vpcInternal":         c.VPCInternalAddr,
-		"compute":             c.ComputeAddr,
-		"computeInternal":     c.ComputeInternalAddr,
-		"iam":                 c.IAMAddr,
-		"iamInternal":         c.IAMInternalAddr,
+		"vpc":             c.VPCAddr,
+		"vpcInternal":     c.VPCInternalAddr,
+		"compute":         c.ComputeAddr,
+		"computeInternal": c.ComputeInternalAddr,
+		"iam":             c.IAMAddr,
+		"iamInternal":     c.IAMInternalAddr,
 	}
 }
 
