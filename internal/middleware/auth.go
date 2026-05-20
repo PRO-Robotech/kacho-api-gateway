@@ -166,14 +166,16 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 	}
 
 	// Validate JWT (HMAC-dev для текущей фазы; Zitadel JWKS — после deploy fix).
+	//
+	// KAC-127 api-token authn pre-gate: a Bearer header that is present but
+	// malformed / expired / signature-invalid is a FAILED authentication
+	// attempt — it must be rejected with `Unauthenticated` (HTTP 401), NOT
+	// silently downgraded to anonymous (which would then hit authz and
+	// surface as 403). authN failures precede authZ. This holds in every
+	// mode: a bad token never grants anonymous access. A *missing* Bearer is
+	// handled above (dev/production → anonymous, strict → 401).
 	claims, err := a.validateJWT(bearer)
 	if err != nil {
-		// dev mode: tolerate invalid Bearer → fallback anonymous (backwards-compat).
-		if a.mode == AuthModeDev {
-			a.logger.Debug("auth: invalid Bearer in dev mode, falling back to anonymous",
-				"method", fullMethod, "err", err)
-			return a.injectAnonymous(ctx), nil
-		}
 		a.logger.Warn("auth: JWT validation failed",
 			"method", fullMethod, "err", err)
 		return nil, status.Errorf(codes.Unauthenticated, "token validation failed: %v", err)
@@ -183,6 +185,20 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 	subjectID, _ := claims["sub"].(string)
 	if subjectID == "" {
 		return nil, status.Error(codes.Unauthenticated, "token missing subject")
+	}
+
+	// KAC-127 models 5-6 — Service Account / API-token principals. A token
+	// minted by the Hydra client_credentials flow (or a static API token)
+	// carries `kacho_principal_type=service_account` + `kacho_sa_id=<svaId>`.
+	// `sub` is the SA id itself, which is NOT a User `external_id`, so the
+	// User LookupByExternalID below would miss and (in dev) downgrade the SA
+	// to anonymous. Resolve the SA principal directly from the typed claims.
+	if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
+		saID, _ := claims["kacho_sa_id"].(string)
+		if saID == "" {
+			saID = subjectID
+		}
+		return a.injectPrincipal(ctx, "service_account", saID, saID), nil
 	}
 
 	subj, err := a.subjectLookup.LookupByExternalID(ctx, subjectID)
@@ -248,6 +264,18 @@ func (a *AuthInterceptor) validateJWT(tokenStr string) (jwt.MapClaims, error) {
 		return nil, errors.New("unexpected claims type")
 	}
 	return claims, nil
+}
+
+// writeHTTPUnauthorized emits a 401 with a gRPC-shaped JSON body (code 16 =
+// Unauthenticated) and a `WWW-Authenticate` challenge. Used by the REST auth
+// path when a Bearer token is present but fails validation — authN failures
+// must surface as 401, never as 403 (which is the authZ verdict).
+func writeHTTPUnauthorized(w http.ResponseWriter, desc string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("WWW-Authenticate",
+		`Bearer error="invalid_token", error_description="`+desc+`"`)
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"code":16,"message":"` + desc + `"}`))
 }
 
 func extractBearer(ctx context.Context) string {
@@ -350,27 +378,56 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok {
 				claims, jwtErr := a.validateJWT(tok)
 				if jwtErr != nil {
-					a.logger.Debug("auth.HTTP: JWT validate failed", "err", jwtErr.Error())
-				} else {
-					subjectID, _ := claims["sub"].(string)
-					if subjectID == "" {
-						a.logger.Debug("auth.HTTP: JWT has empty sub")
-					} else {
-						subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
-						if lookupErr != nil {
-							a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
-						} else {
-							// Plain headers — WithMetadata callback in restmux форвардит.
-							r.Header.Set("X-Kacho-Principal-Type", subj.Type)
-							r.Header.Set("X-Kacho-Principal-Id", subj.ID)
-							r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
-							// Legacy form — grpc-gateway default convention fallback.
-							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
-							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
-							r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
-							a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
-						}
+					// KAC-127 api-token authn pre-gate: a Bearer header that is
+					// present but malformed / expired / signature-invalid is a
+					// failed authN attempt → reject with 401 BEFORE authz, never
+					// pass it through as anonymous (which surfaces as 403).
+					a.logger.Warn("auth.HTTP: JWT validate failed", "err", jwtErr.Error())
+					writeHTTPUnauthorized(w, "token validation failed")
+					return
+				}
+				subjectID, _ := claims["sub"].(string)
+				if subjectID == "" {
+					a.logger.Warn("auth.HTTP: JWT has empty sub")
+					writeHTTPUnauthorized(w, "token missing subject")
+					return
+				}
+				// KAC-127 models 5-6 — Service Account / API-token principals.
+				// A client_credentials / API token carries
+				// `kacho_principal_type=service_account` + `kacho_sa_id`; `sub`
+				// is the SA id, not a User external_id, so the User lookup below
+				// would miss and leave the request principal-less → the authz
+				// layer then denies it as unauthenticated. Resolve the SA
+				// principal directly from the typed claims (parity with the
+				// gRPC intercept path).
+				if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
+					saID, _ := claims["kacho_sa_id"].(string)
+					if saID == "" {
+						saID = subjectID
 					}
+					r.Header.Set("X-Kacho-Principal-Type", "service_account")
+					r.Header.Set("X-Kacho-Principal-Id", saID)
+					r.Header.Set("X-Kacho-Principal-Display-Name", saID)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", "service_account")
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", saID)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", saID)
+					a.logger.Info("auth.HTTP: SA principal injected", "id", saID)
+					next.ServeHTTP(w, r)
+					return
+				}
+				subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
+				if lookupErr != nil {
+					a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
+				} else {
+					// Plain headers — WithMetadata callback in restmux форвардит.
+					r.Header.Set("X-Kacho-Principal-Type", subj.Type)
+					r.Header.Set("X-Kacho-Principal-Id", subj.ID)
+					r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+					// Legacy form — grpc-gateway default convention fallback.
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+					a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
 				}
 			}
 		}

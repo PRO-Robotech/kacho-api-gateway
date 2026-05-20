@@ -1,22 +1,18 @@
-// Package proxy — local shimproxy stub (KAC-122 yc-shim drop).
+// Package proxy — local unknown-service proxy для api-gateway.
 //
 // Ранее эти helpers жили в `github.com/PRO-Robotech/kacho-yc-shim/shimproxy`
-// (отдельный репо). После KAC-122 yc-shim удалён — мы более не поддерживаем
-// `yandex.cloud.*` API compatibility. Поэтому функции — минимальный stub:
+// (отдельный репо). После KAC-122 yc-shim удалён, после KAC-127 yandex.cloud.*
+// path-rewrite тоже удалён — мы поддерживаем только нативный
+// `kacho.cloud.*` API.
 //
-//   - `MethodResolver` — тип-сигнатура остаётся для совместимости с
-//     Resolver() ниже.
-//   - `IsYandexMethod` / `RewriteToKacho` — оставлены работающими (если
-//     потенциальный клиент придёт с yandex.cloud.* — мы rewrite'ем как
-//     раньше), но поскольку backends не expose'ят yandex-services, в
-//     конечном итоге допустимо удалить весь yc-CLI path entirely.
+//   - `MethodResolver` — тип-сигнатура resolver-функции, которую дёргает
+//     UnknownServiceHandler (см. `Handler` ниже).
 //   - `Handler` — простая `grpc.StreamHandler`-обёртка, которая роутит
 //     unknown service-method к backend через `resolve`.
 package proxy
 
 import (
 	"io"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -27,19 +23,6 @@ import (
 // MethodResolver — функция определяет в какой backend forward'ить RPC.
 // (fullMethod, conn, ok). Если ok==false — Unimplemented.
 type methodResolverInternal = func(fullMethod string) (string, grpc.ClientConnInterface, bool)
-
-// IsYandexMethod проверяет начинается ли method с /yandex.cloud.
-func IsYandexMethod(method string) bool {
-	return strings.HasPrefix(method, "/yandex.cloud.")
-}
-
-// RewriteToKacho заменяет /yandex.cloud. → /kacho.cloud.
-func RewriteToKacho(method string) string {
-	if !IsYandexMethod(method) {
-		return method
-	}
-	return "/kacho.cloud." + strings.TrimPrefix(method, "/yandex.cloud.")
-}
 
 // Handler — gRPC StreamHandler для UnknownServiceHandler. Принимает resolver
 // и proxies stream к target backend.
@@ -126,5 +109,5 @@ func (f *emptyFrame) String() string {
 func (f *emptyFrame) ProtoMessage() {}
 
 // Marshal/Unmarshal — proxy через raw payload.
-func (f *emptyFrame) Marshal() ([]byte, error)    { return f.payload, nil }
-func (f *emptyFrame) Unmarshal(d []byte) error    { f.payload = append([]byte(nil), d...); return nil }
+func (f *emptyFrame) Marshal() ([]byte, error) { return f.payload, nil }
+func (f *emptyFrame) Unmarshal(d []byte) error { f.payload = append([]byte(nil), d...); return nil }

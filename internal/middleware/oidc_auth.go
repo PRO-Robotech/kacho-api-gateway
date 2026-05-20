@@ -266,40 +266,9 @@ func (h *OIDCHandler) Me(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Legacy Zitadel-cookie path (для CLI/SA-keys или old sessions).
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil || c.Value == "" || h.cfg.Issuer == "" {
-		_, _ = w.Write([]byte(`{"user":null}`))
-		return
-	}
-	// fetch userinfo
-	uURL := strings.TrimRight(h.cfg.Issuer, "/") + "/oidc/v1/userinfo"
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, uURL, nil)
-	req.Header.Set("Authorization", "Bearer "+c.Value)
-	resp, err := h.http.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
-		_, _ = w.Write([]byte(`{"user":null}`))
-		return
-	}
-	defer resp.Body.Close()
-	var info map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		_, _ = w.Write([]byte(`{"user":null}`))
-		return
-	}
-	// Map Zitadel userinfo to UI shape
-	out := map[string]any{"user": map[string]any{
-		"id":          info["sub"],
-		"email":       info["email"],
-		"displayName": info["name"],
-		// Permissions берутся в KAC-107 v2 из InternalIamService.ListPermissions.
-		// На MVP — пустой массив, IAM-сайдбар будет скрыт (см. ServiceSidebar.tsx).
-		"permissions": []string{},
-	}}
-	_ = json.NewEncoder(w).Encode(out)
+	// KAC-127: Zitadel-cookie fallback удалён — auth-tier перешёл на Kratos
+	// (KAC-116). Если выше не нашли Kratos-сессию, возвращаем anonymous.
+	_, _ = w.Write([]byte(`{"user":null}`))
 }
 
 // Logout — clear cookies + 200.

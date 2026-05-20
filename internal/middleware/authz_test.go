@@ -1,0 +1,493 @@
+package middleware_test
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	iamv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
+)
+
+// fakeChecker — programmable mock implementing middleware.AuthorizeChecker.
+type fakeChecker struct {
+	calls       atomic.Int64
+	allowed     bool
+	reasons     []string
+	returnErr   error
+	delay       time.Duration
+	lastInput   atomic.Pointer[middleware.AuthzCheckInput]
+}
+
+func (f *fakeChecker) Check(ctx context.Context, in middleware.AuthzCheckInput) (middleware.AuthzCheckResult, error) {
+	f.calls.Add(1)
+	cp := in
+	f.lastInput.Store(&cp)
+	if f.delay > 0 {
+		select {
+		case <-time.After(f.delay):
+		case <-ctx.Done():
+			return middleware.AuthzCheckResult{}, ctx.Err()
+		}
+	}
+	if f.returnErr != nil {
+		return middleware.AuthzCheckResult{}, f.returnErr
+	}
+	return middleware.AuthzCheckResult{
+		Allowed:              f.allowed,
+		DenyReasons:          f.reasons,
+		AuthorizationModelID: "model_test",
+		CheckedAt:            time.Now(),
+	}, nil
+}
+
+func silentLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+func buildCatalog(t *testing.T, entries ...string) *middleware.PermissionCatalog {
+	t.Helper()
+	c := middleware.NewPermissionCatalog()
+	raw := "["
+	for i, e := range entries {
+		if i > 0 {
+			raw += ","
+		}
+		raw += e
+	}
+	raw += "]"
+	require.NoError(t, c.LoadFromBytes([]byte(raw)))
+	return c
+}
+
+func buildAuthzMiddleware(t *testing.T, catalog *middleware.PermissionCatalog, checker middleware.AuthorizeChecker, opts ...func(*middleware.AuthzMiddlewareConfig)) *middleware.AuthzMiddleware {
+	t.Helper()
+	cfg := middleware.AuthzMiddlewareConfig{
+		Enabled:         true,
+		Catalog:         catalog,
+		Subjects:        middleware.NewSubjectExtractor(true),
+		Context:         middleware.NewContextExtractor(time.Now, true),
+		Resources:       middleware.NewResourceExtractor(nil),
+		Checker:         checker,
+		Logger:          silentLogger(),
+		CacheTTL:        5 * time.Second,
+		CacheMaxEntries: 100,
+		PublicAllowlist: middleware.DefaultPublicAllowlist(),
+	}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	mw, err := middleware.NewAuthzMiddleware(cfg)
+	require.NoError(t, err)
+	return mw
+}
+
+// withTokenMD — gRPC ctx with principal metadata simulating Phase 2 auth.
+func withTokenMD(subj string, ptype string) context.Context {
+	md := metadata.New(map[string]string{
+		"x-kacho-principal-id":   subj,
+		"x-kacho-principal-type": ptype,
+		"x-kacho-token-acr":      "2",
+	})
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+const (
+	createEntry = `{"fqn":"kacho.cloud.vpc.v1.NetworkService/Create","permission":"vpc.networks.create","required_relation":"editor","scope_extractor":{"object_type":"vpc_network","from_request_field":"folder_id"},"required_acr_min":"2","risk_level":"MEDIUM"}`
+	getEntry    = `{"fqn":"kacho.cloud.vpc.v1.NetworkService/Get","permission":"vpc.networks.get","required_relation":"viewer","scope_extractor":{"object_type":"vpc_network","from_request_field":"network_id"},"required_acr_min":"2","risk_level":"LOW"}`
+	deleteEntry = `{"fqn":"kacho.cloud.vpc.v1.NetworkService/Delete","permission":"vpc.networks.delete","required_relation":"editor","scope_extractor":{"object_type":"vpc_network","from_request_field":"network_id"},"required_acr_min":"3","requires_mfa_fresh":true,"risk_level":"HIGH"}`
+	exemptEntry = `{"fqn":"kacho.cloud.iam.v1.AuthService/Login","permission":"<exempt>"}`
+)
+
+func TestAuthz_GRPC_NoEnabled_PassThrough(t *testing.T) {
+	mw, err := middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{Enabled: false})
+	require.NoError(t, err)
+	called := false
+	handler := func(ctx context.Context, req any) (any, error) {
+		called = true
+		return "ok", nil
+	}
+	_, err = mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		handler)
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+func TestAuthz_GRPC_Allowlist_BypassesChecker(t *testing.T) {
+	checker := &fakeChecker{allowed: false}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/grpc.health.v1.Health/Check"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.NoError(t, err)
+	assert.Zero(t, checker.calls.Load())
+}
+
+func TestAuthz_GRPC_CatalogMiss_Denies(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.unknown.v1.X/Y"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Zero(t, checker.calls.Load())
+}
+
+func TestAuthz_GRPC_ExemptEntry_Allows(t *testing.T) {
+	checker := &fakeChecker{allowed: false}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, exemptEntry), checker)
+	called := false
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.iam.v1.AuthService/Login"},
+		func(ctx context.Context, req any) (any, error) { called = true; return "ok", nil })
+	require.NoError(t, err)
+	assert.True(t, called)
+	assert.Zero(t, checker.calls.Load())
+}
+
+func TestAuthz_GRPC_NoSubject_Denies(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Zero(t, checker.calls.Load())
+}
+
+func TestAuthz_GRPC_Allow(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	called := false
+	req := &iamv1.AuthorizeCheckRequest{Subject: "user:usr_x"}
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), req,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { called = true; return "ok", nil })
+	require.NoError(t, err)
+	assert.True(t, called)
+	assert.Equal(t, int64(1), checker.calls.Load())
+	last := checker.lastInput.Load()
+	require.NotNil(t, last)
+	assert.Equal(t, "user:usr_x", last.Subject)
+	assert.Equal(t, "vpc.networks.create", last.Action)
+}
+
+func TestAuthz_GRPC_Deny_ReturnsPermissionDenied(t *testing.T) {
+	checker := &fakeChecker{allowed: false, reasons: []string{"mfa_fresh: acr=2 (need 3)"}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, deleteEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Delete"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Contains(t, st.Message(), "vpc.networks.delete")
+	// Details should contain a PreconditionFailure.
+	require.NotEmpty(t, st.Details())
+}
+
+func TestAuthz_GRPC_CacheHit_NoSecondCall(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker)
+	ctx := withTokenMD("usr_x", "user")
+	handler := func(ctx context.Context, req any) (any, error) { return "ok", nil }
+	info := &grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"}
+
+	for i := 0; i < 3; i++ {
+		_, err := mw.Unary()(ctx, nil, info, handler)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int64(1), checker.calls.Load(), "second/third calls must hit cache")
+}
+
+func TestAuthz_GRPC_CheckerError_FailClosed(t *testing.T) {
+	checker := &fakeChecker{returnErr: errors.New("backend down")}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unavailable, st.Code())
+}
+
+func TestAuthz_GRPC_CheckerError_FailOpen(t *testing.T) {
+	checker := &fakeChecker{returnErr: errors.New("backend down")}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.FailOpen = true
+	})
+	called := false
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { called = true; return "ok", nil })
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+func TestAuthz_GRPC_CheckerPermissionDeniedFromServer(t *testing.T) {
+	checker := &fakeChecker{returnErr: status.Error(codes.PermissionDenied, "denied by FGA")}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+// fakeRestRouter — explicit path→FQN mapping for HTTP tests.
+type fakeRestRouter struct{ m map[string]string }
+
+func (f *fakeRestRouter) Resolve(method, path string) (string, bool) {
+	if fqn, ok := f.m[method+" "+path]; ok {
+		return fqn, true
+	}
+	// Also try wildcard suffix /<id> stripping.
+	return "", false
+}
+
+func TestAuthz_HTTP_Allow(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	router := &fakeRestRouter{m: map[string]string{
+		"GET /vpc/v1/networks/enp_x": "kacho.cloud.vpc.v1.NetworkService/Get",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	called := false
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/vpc/v1/networks/enp_x", nil)
+	r.Header.Set("X-Kacho-Principal-Id", "usr_x")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAuthz_HTTP_Deny_ReturnsJSON403(t *testing.T) {
+	checker := &fakeChecker{allowed: false, reasons: []string{"no path"}}
+	router := &fakeRestRouter{m: map[string]string{
+		"DELETE /vpc/v1/networks/enp_x": "kacho.cloud.vpc.v1.NetworkService/Delete",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, deleteEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("must not reach handler") }))
+	r := httptest.NewRequest(http.MethodDelete, "/vpc/v1/networks/enp_x", nil)
+	r.Header.Set("X-Kacho-Principal-Id", "usr_x")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+}
+
+func TestAuthz_HTTP_StepUpDeny_AddsWWWAuthenticate(t *testing.T) {
+	checker := &fakeChecker{allowed: false, reasons: []string{"mfa_fresh: acr=2 (need 3)"}}
+	router := &fakeRestRouter{m: map[string]string{
+		"DELETE /vpc/v1/networks/enp_x": "kacho.cloud.vpc.v1.NetworkService/Delete",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, deleteEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("must not reach handler") }))
+	r := httptest.NewRequest(http.MethodDelete, "/vpc/v1/networks/enp_x", nil)
+	r.Header.Set("X-Kacho-Principal-Id", "usr_x")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	chal := w.Header().Get("WWW-Authenticate")
+	assert.Contains(t, chal, "insufficient_user_authentication")
+	assert.Contains(t, chal, `acr_values="3"`)
+}
+
+func TestAuthz_HTTP_Public_BypassesPipeline(t *testing.T) {
+	checker := &fakeChecker{allowed: false}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	called := false
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(http.StatusOK) }))
+	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAuthz_Override_Allow(t *testing.T) {
+	checker := &fakeChecker{allowed: false}
+	overrides := middleware.NewAuthzOverrides()
+	require.NoError(t, overrides.LoadFromBytes([]byte(`
+overrides:
+  - fqn: "kacho.cloud.vpc.v1.NetworkService/Create"
+    decision: "allow"
+`)))
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.Overrides = overrides
+	})
+	called := false
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { called = true; return "ok", nil })
+	require.NoError(t, err)
+	assert.True(t, called)
+	assert.Zero(t, checker.calls.Load(), "override.allow must bypass IAM Check")
+}
+
+func TestAuthz_Override_Deny(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	overrides := middleware.NewAuthzOverrides()
+	require.NoError(t, overrides.LoadFromBytes([]byte(`
+overrides:
+  - fqn: "kacho.cloud.vpc.v1.NetworkService/Get"
+    decision: "deny"
+    reason: "emergency lock"
+`)))
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.Overrides = overrides
+	})
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	assert.Zero(t, checker.calls.Load())
+}
+
+func TestAuthz_Metrics_RecordAllowDenyError(t *testing.T) {
+	checkerAllow := &fakeChecker{allowed: true}
+	mwAllow := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checkerAllow)
+	_, _ = mwAllow.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	snap := mwAllow.Metrics().Snapshot()
+	assert.Equal(t, float64(1), snap[`kacho_api_gateway_authz_check_total{result="allowed"}`])
+
+	checkerDeny := &fakeChecker{allowed: false, reasons: []string{"no path"}}
+	mwDeny := buildAuthzMiddleware(t, buildCatalog(t, deleteEntry), checkerDeny)
+	_, _ = mwDeny.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Delete"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	snap = mwDeny.Metrics().Snapshot()
+	assert.Equal(t, float64(1), snap[`kacho_api_gateway_authz_check_total{result="denied"}`])
+
+	checkerErr := &fakeChecker{returnErr: errors.New("boom")}
+	mwErr := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checkerErr)
+	_, _ = mwErr.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	snap = mwErr.Metrics().Snapshot()
+	assert.Equal(t, float64(1), snap[`kacho_api_gateway_authz_check_total{result="error"}`])
+}
+
+func TestAuthz_Metrics_CacheHitRatio(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker)
+	ctx := withTokenMD("usr_x", "user")
+	info := &grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"}
+	h := func(ctx context.Context, req any) (any, error) { return "ok", nil }
+	for i := 0; i < 5; i++ {
+		_, _ = mw.Unary()(ctx, nil, info, h)
+	}
+	// First call → miss, next 4 → hit. Ratio 4/(4+1) = 0.8.
+	assert.InDelta(t, 0.8, mw.Metrics().CacheHitRatio(), 0.0001)
+}
+
+func TestAuthz_Constructor_RequiresFields(t *testing.T) {
+	_, err := middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{Enabled: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Catalog")
+}
+
+func TestAuthz_Constructor_NoOpWhenDisabled(t *testing.T) {
+	mw, err := middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{Enabled: false})
+	require.NoError(t, err)
+	require.NotNil(t, mw)
+	// HTTP should be a pass-through.
+	called := false
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
+	r := httptest.NewRequest(http.MethodGet, "/any", nil)
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	assert.True(t, called)
+}
+
+func TestAuthz_CheckInputCarriesContext(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker)
+	ctx := withTokenMD("usr_x", "user")
+	_, err := mw.Unary()(ctx, nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.NoError(t, err)
+	last := checker.lastInput.Load()
+	require.NotNil(t, last)
+	assert.Equal(t, "vpc.networks.get", last.Action)
+	assert.Equal(t, "vpc_network", last.ResourceType)
+	// Context should always contain current_time.
+	_, hasNow := last.Context["current_time"]
+	assert.True(t, hasNow)
+	// And acr_value because metadata sets X-Kacho-Token-Acr=2.
+	assert.Equal(t, "2", last.Context["acr_value"])
+}
+
+func TestAuthz_Stream_Allow(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker)
+	// Build a fake server stream context.
+	ss := &fakeServerStream{ctx: withTokenMD("usr_x", "user")}
+	called := false
+	err := mw.Stream()(nil, ss, &grpc.StreamServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+		func(srv any, ss grpc.ServerStream) error { called = true; return nil })
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+func TestAuthz_Stream_Deny(t *testing.T) {
+	checker := &fakeChecker{allowed: false, reasons: []string{"no path"}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, deleteEntry), checker)
+	ss := &fakeServerStream{ctx: withTokenMD("usr_x", "user")}
+	err := mw.Stream()(nil, ss, &grpc.StreamServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Delete"},
+		func(srv any, ss grpc.ServerStream) error { return nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+// fakeServerStream — minimal grpc.ServerStream impl for stream tests.
+type fakeServerStream struct {
+	ctx context.Context
+}
+
+func (f *fakeServerStream) Context() context.Context     { return f.ctx }
+func (f *fakeServerStream) SetHeader(metadata.MD) error  { return nil }
+func (f *fakeServerStream) SendHeader(metadata.MD) error { return nil }
+func (f *fakeServerStream) SetTrailer(metadata.MD)       {}
+func (f *fakeServerStream) SendMsg(m any) error          { return nil }
+func (f *fakeServerStream) RecvMsg(m any) error          { return io.EOF }

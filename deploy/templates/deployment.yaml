@@ -28,8 +28,7 @@ spec:
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
-            - name: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC
-              value: "{{ .Values.backends.resourceManager }}"
+            # KAC-124/127: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC удалён — backend заменён на kacho-iam.
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
             {{- if .Values.backends.vpcInternal }}
@@ -83,6 +82,32 @@ spec:
             {{- if .Values.oidc.clientSecret }}
             - name: KACHO_API_GATEWAY_OIDC_CLIENT_SECRET
               value: {{ .Values.oidc.clientSecret | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.authn }}
+            - name: KACHO_API_GATEWAY_AUTHN_MODE
+              value: {{ .Values.authn.mode | default "dev" | quote }}
+            {{- if .Values.authn.devSecret }}
+            - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
+              value: {{ .Values.authn.devSecret | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.authz }}
+            - name: KACHO_API_GATEWAY_AUTHZ_ENABLED
+              value: {{ .Values.authz.enabled | default false | quote }}
+            - name: KACHO_API_GATEWAY_AUTHZ_FAIL_OPEN
+              value: {{ .Values.authz.failOpen | default false | quote }}
+            {{- if .Values.authz.iamAuthorizeUrl }}
+            - name: KACHO_API_GATEWAY_IAM_AUTHORIZE_URL
+              value: {{ .Values.authz.iamAuthorizeUrl | quote }}
+            {{- end }}
+            {{- if .Values.authz.cacheTtlSeconds }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CACHE_TTL_SECONDS
+              value: {{ .Values.authz.cacheTtlSeconds | quote }}
+            {{- end }}
+            {{- if .Values.authz.checkTimeoutMs }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CHECK_TIMEOUT_MS
+              value: {{ .Values.authz.checkTimeoutMs | quote }}
             {{- end }}
             {{- end }}
             {{- range $k, $v := .Values.extraEnv }}

@@ -8,28 +8,22 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 )
 
-// MethodResolver — re-export of local shimproxy.MethodResolver type signature.
+// MethodResolver — re-export of local proxy MethodResolver type signature.
 type MethodResolver = methodResolverInternal
 
 // Resolver builds a MethodResolver for the unknown-service handler installed
 // on the gRPC server. Behaviour:
 //
-//  1. /yandex.cloud.<rest>  — rewritten to /kacho.cloud.<rest>; then routed
-//     exactly like a native /kacho.cloud.* call. This is the yc CLI compat
-//     bridge; see kacho-yc-shim repo for context.
-//  2. /kacho.cloud.<rest>   — passes through the same allowlist + backend
-//     lookup logic that the previous director used.
-//  3. anything else — Unimplemented.
+//  1. /kacho.cloud.<rest>   — passes through the allowlist + backend lookup
+//     logic that the previous director used.
+//  2. anything else — Unimplemented.
 //
-// allowlist.HasInternalSuffix and allowlist.IsAllowed are evaluated against
-// the *kacho.cloud.* path (post-rewrite for yandex calls), so adding new
-// public RPCs to allowlist automatically exposes them to yc CLI as well.
+// KAC-127: yandex.cloud.* yc-CLI compat shim удалён (yc-shim repo dropped в
+// KAC-122; backends не expose'ят yandex-services). Если в будущем понадобится
+// CLI-совместимость — она будет жить в отдельном `kacho-yc-shim`-сервисе.
 func Resolver(backends Backends) MethodResolver {
 	return func(fullMethod string) (string, grpc.ClientConnInterface, bool) {
 		method := fullMethod
-		if IsYandexMethod(fullMethod) {
-			method = RewriteToKacho(fullMethod)
-		}
 		if !strings.HasPrefix(method, "/kacho.cloud.") {
 			return "", nil, false
 		}
@@ -53,13 +47,12 @@ func Resolver(backends Backends) MethodResolver {
 	}
 }
 
-// NewServer creates a gRPC server whose UnknownServiceHandler routes both
-// kacho.cloud.* (native) and yandex.cloud.* (yc CLI compat) traffic to the
-// appropriate backend, with method-path rewrite when needed.
+// NewServer creates a gRPC server whose UnknownServiceHandler routes
+// kacho.cloud.* traffic to the appropriate backend.
 //
-// Native services registered on this server (Health, OperationService,
-// ApiEndpointService, IamTokenService) take precedence over the unknown-service
-// handler, as per gRPC dispatch semantics.
+// Native services registered on this server (Health, OperationService) take
+// precedence over the unknown-service handler, as per gRPC dispatch
+// semantics.
 func NewServer(resolve MethodResolver, opts ...grpc.ServerOption) *grpc.Server {
 	base := []grpc.ServerOption{
 		grpc.UnknownServiceHandler(Handler(resolve)),

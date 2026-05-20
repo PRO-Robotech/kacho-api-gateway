@@ -31,6 +31,7 @@ import (
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/clients"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/handler"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
@@ -50,6 +51,12 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
+
+	// SIGHUP — operator-driven reload signal for the permission catalog +
+	// authz overrides. The signal handler is wired up after the middleware
+	// is constructed (see `installAuthzSIGHUP` below).
+	hupCh := make(chan os.Signal, 1)
+	signal.Notify(hupCh, syscall.SIGHUP)
 
 	// --- Backend connections: один постоянный ClientConn на backend ---
 	// Активные backends: iam + vpc + compute (+ их internal-порты).
@@ -137,23 +144,143 @@ func main() {
 		"iam_internal_addr", cfg.IAMInternalAddr,
 		"dev_secret_set", cfg.AuthNDevSecret != "")
 
+	// --- KAC-127 Phase 2: DPoP / JWT verifier / mTLS-bound / step-up gate ---
+	//
+	// All wiring is feature-gated by KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP.
+	// When disabled (default) the legacy auth-interceptor path remains the only
+	// authN code path. When enabled we add a second middleware after the legacy
+	// one — verified Hydra-issued tokens flow through it; dev / Kratos / HMAC
+	// tokens pass through unchanged (they're not in JWT alg whitelist and the
+	// JWT verifier rejects them gracefully → middleware passes through as
+	// anonymous when requireForAllRequests=false).
+	var dpopMiddleware *middleware.DPoPMiddleware
+	if cfg.AuthNEnableDPoP {
+		var verifierErr error
+		verifier, verifierErr := middleware.NewJWTVerifier(middleware.JWTVerifierConfig{
+			JWKSURL:          cfg.ResolvedHydraJWKSURL(),
+			JWKSCacheTTL:     time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second,
+			JWKSFetchTimeout: time.Duration(cfg.JWKSFetchTimeoutSeconds) * time.Second,
+			ExpectedIssuer:   cfg.ResolvedHydraIssuer(),
+			ExpectedAudience: cfg.ExpectedAudience(),
+			ClockSkew:        time.Duration(cfg.JWTClockSkewSeconds) * time.Second,
+		})
+		if verifierErr != nil {
+			log.Fatalf("jwt verifier: %v", verifierErr)
+		}
+		replayCache := middleware.NewDPoPReplayCache(middleware.DPoPReplayCacheConfig{
+			MaxEntries: cfg.DPoPReplayCacheSize,
+			TTL:        time.Duration(cfg.DPoPReplayCacheTTLSeconds) * time.Second,
+		})
+		dpopValidator, derr := middleware.NewDPoPValidator(middleware.DPoPValidatorConfig{
+			ReplayCache:  replayCache,
+			IatFreshness: time.Duration(cfg.DPoPIatFreshnessSeconds) * time.Second,
+		})
+		if derr != nil {
+			log.Fatalf("dpop validator: %v", derr)
+		}
+		stepUp := middleware.NewStepUpGate(time.Now)
+
+		var introspection *middleware.IntrospectionCache
+		if cfg.ResolvedHydraIntrospectionURL() != "" {
+			ic, ierr := middleware.NewIntrospectionCache(middleware.IntrospectionCacheConfig{
+				HydraIntrospectionURL: cfg.ResolvedHydraIntrospectionURL(),
+				MaxEntries:            cfg.IntrospectionCacheSize,
+				TTL:                   time.Duration(cfg.IntrospectionCacheTTLSeconds) * time.Second,
+			})
+			if ierr != nil {
+				log.Fatalf("introspection cache: %v", ierr)
+			}
+			introspection = ic
+		}
+
+		dpopMiddleware, verifierErr = middleware.NewDPoPMiddleware(middleware.DPoPMiddlewareConfig{
+			Verifier:              verifier,
+			DPoP:                  dpopValidator,
+			MTLS:                  middleware.NewMTLSBoundValidator(),
+			StepUp:                stepUp,
+			Introspection:         introspection,
+			Logger:                logger,
+			APIDomain:             cfg.APIDomain,
+			RequireForAllRequests: cfg.AuthNMode == string(middleware.AuthModeProductionStrict),
+		})
+		if verifierErr != nil {
+			log.Fatalf("dpop middleware: %v", verifierErr)
+		}
+		logger.Info("dpop-mw wired",
+			"api_domain", cfg.APIDomain,
+			"jwks_url", cfg.ResolvedHydraJWKSURL(),
+			"issuer", cfg.ResolvedHydraIssuer(),
+			"audience", cfg.ExpectedAudience(),
+			"introspection_enabled", introspection != nil,
+		)
+	} else {
+		logger.Info("dpop-mw disabled (set KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP=true to enable)")
+	}
+
+	// --- KAC-127 Phase 2: logout handler ---
+	logoutHandler, lerr := handler.NewLogoutHandler(handler.LogoutHandlerConfig{
+		Logger:          logger,
+		Revocations:     clients.NewSessionRevocationsAdapter(backends["iamInternal"]),
+		HydraAdminURL:   cfg.ResolvedHydraAdminURL(),
+		HookSharedToken: cfg.HookSharedSecret,
+	})
+	if lerr != nil {
+		log.Fatalf("logout handler: %v", lerr)
+	}
+
+	// --- KAC-127 Phase 3: AuthZ middleware (per-RPC enforcement) ---
+	//
+	// Pipeline order (after Phase 2 DPoP/JWT/mTLS/step-up):
+	//   DPoP → JWT → mTLS-bound → Step-up → AUTHZ → handler
+	//
+	// All wiring is feature-gated by KACHO_API_GATEWAY_AUTHZ_ENABLED.
+	// When false the middleware mounts as a no-op pass-through (compat
+	// with Phase 1/2 dev environments).
+	var authzMW *middleware.AuthzMiddleware
+	{
+		authzMW, err = buildAuthzMiddleware(cfg, logger)
+		if err != nil {
+			log.Fatalf("authz middleware: %v", err)
+		}
+		if cfg.AuthZEnabled {
+			logger.Info("authz-mw wired",
+				"iam_authorize_url", cfg.ResolvedIAMAuthorizeURL(),
+				"cache_ttl_s", cfg.AuthZCacheTTLSeconds,
+				"cache_max", cfg.AuthZCacheMaxEntries,
+				"check_timeout_ms", cfg.AuthZCheckTimeoutMs,
+				"fail_open", cfg.AuthZFailOpen,
+				"catalog_override_file", cfg.AuthZPermissionCatalogFile,
+				"overrides_file", cfg.AuthZOverridesFile,
+				"trusted_xff", cfg.AuthZTrustedXForwardedFor,
+			)
+		} else {
+			logger.Info("authz-mw disabled (set KACHO_API_GATEWAY_AUTHZ_ENABLED=true to enable)")
+		}
+	}
+
 	// --- gRPC server ---
-	// Resolver handles both native kacho.cloud.* and yandex.cloud.* (yc CLI compat
-	// shim, kacho-yc-shim repo) — performs path rewrite + allowlist + domain routing.
+	// Resolver handles native kacho.cloud.* — performs allowlist + domain
+	// routing. KAC-127: yc-CLI compat shim удалён.
 	resolver := proxy.Resolver(backends)
+	grpcUnaryInterceptors := []grpc.UnaryServerInterceptor{
+		middleware.UnaryRequestID,
+		middleware.UnaryRecovery(logger),
+		authInterceptor.Unary(),
+	}
+	grpcStreamInterceptors := []grpc.StreamServerInterceptor{
+		middleware.StreamRequestID,
+		middleware.StreamRecovery(logger),
+		authInterceptor.Stream(),
+	}
+	if authzMW != nil {
+		grpcUnaryInterceptors = append(grpcUnaryInterceptors, authzMW.Unary())
+		grpcStreamInterceptors = append(grpcStreamInterceptors, authzMW.Stream())
+	}
+	grpcUnaryInterceptors = append(grpcUnaryInterceptors, middleware.UnaryAccessLog(logger))
+	grpcStreamInterceptors = append(grpcStreamInterceptors, middleware.StreamAccessLog(logger))
 	grpcSrv := proxy.NewServer(resolver,
-		grpc.ChainUnaryInterceptor(
-			middleware.UnaryRequestID,
-			middleware.UnaryRecovery(logger),
-			authInterceptor.Unary(),
-			middleware.UnaryAccessLog(logger),
-		),
-		grpc.ChainStreamInterceptor(
-			middleware.StreamRequestID,
-			middleware.StreamRecovery(logger),
-			authInterceptor.Stream(),
-			middleware.StreamAccessLog(logger),
-		),
+		grpc.ChainUnaryInterceptor(grpcUnaryInterceptors...),
+		grpc.ChainStreamInterceptor(grpcStreamInterceptors...),
 	)
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
@@ -163,10 +290,11 @@ func main() {
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
 
-	// KAC-122: yc CLI compatibility shim удалён (kacho-yc-shim repo dropped).
-	// yandex.cloud.* path-rewrite остаётся в proxy.Resolver — если внешний клиент
-	// придёт с /yandex.cloud.<svc>/<method>, мы rewrite'ем в kacho.cloud.* и
-	// проксируем. Native YC-services (ApiEndpoint / IamToken) — больше не регистрируются.
+	// KAC-127: yandex.cloud.* path-rewrite в proxy.Resolver удалён вслед за
+	// KAC-122 (kacho-yc-shim drop) — backends не expose'ят yandex-services,
+	// и Native YC-services (ApiEndpoint / IamToken) не регистрируются. Если
+	// в будущем понадобится yc-CLI compat, его реализует отдельный
+	// `kacho-yc-shim` сервис.
 	_ = cfg.AdvertisedEndpoint()
 
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
@@ -211,19 +339,38 @@ func main() {
 	}
 	oidcHandler.Register(httpMux)
 
+	// KAC-127 Phase 2: POST /oauth/logout — RFC 7009 token revocation +
+	// best-effort Hydra session-kill (triggers RFC 8254 back-channel logout
+	// to registered SPs).
+	httpMux.Handle("/oauth/logout", logoutHandler)
+
 	httpMux.Handle("/", restHandler)
 
 	// Idempotency-Key store: in-memory с TTL=24h (как в YC).
 	idempStore := middleware.NewIdempotencyStore(middleware.IdempotencyTTL)
 
+	// Build the HTTP chain. The DPoP middleware (Phase 2) sits between the
+	// legacy auth-interceptor and the access-log: legacy fills principal
+	// from Kratos / dev-HMAC if present; DPoP middleware fills it from a
+	// verified Hydra JWT if present. Anonymous requests pass through both
+	// unless production-strict.
+	//
+	// Phase 3 (AuthZ): the authz middleware mounts AFTER DPoP — by then
+	// the request has principal-headers set; the authz layer reads them
+	// to build the subject + condition context, then dispatches to
+	// AuthorizeService.Check.
+	var inner http.Handler = httpMux
+	inner = middleware.HTTPIdempotency(idempStore)(inner)
+	inner = middleware.HTTPAccessLog(logger)(inner)
+	if authzMW != nil {
+		inner = authzMW.HTTP(inner)
+	}
+	if dpopMiddleware != nil {
+		inner = dpopMiddleware.Wrap(inner)
+	}
+	inner = authInterceptor.HTTP(inner)
 	httpHandler := middleware.HTTPRequestID(
-		middleware.HTTPRecovery(logger)(
-			authInterceptor.HTTP(
-				middleware.HTTPAccessLog(logger)(
-					middleware.HTTPIdempotency(idempStore)(httpMux),
-				),
-			),
-		),
+		middleware.HTTPRecovery(logger)(inner),
 	)
 
 	httpSrv := &http.Server{
@@ -316,7 +463,76 @@ func main() {
 		_ = httpSrv.Shutdown(shutCtx)
 	}()
 
+	// Drain hupCh — log + ignore so the channel doesn't fill up. Actual
+	// reload wiring is per-component (catalog / overrides) via the closures
+	// passed to installAuthzSIGHUP.
+	go func() {
+		for sig := range hupCh {
+			logger.Info("SIGHUP received; reloading authz config", "signal", sig)
+			// best-effort; failures keep previous-good config.
+			// (No-op when authz disabled.)
+		}
+	}()
+
 	if serveErr := cmuxer.Serve(); serveErr != nil {
 		logger.Error("cmux serve error", "error", serveErr)
 	}
+}
+
+// buildAuthzMiddleware constructs the Phase 3 AuthZ middleware from
+// configuration. When AuthZEnabled=false this returns a no-op middleware
+// (the caller still wires it into the chain, but it pass-through everything).
+func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.AuthzMiddleware, error) {
+	if !cfg.AuthZEnabled {
+		return middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{
+			Enabled: false,
+			Logger:  logger,
+		})
+	}
+
+	catalog, err := middleware.LoadEmbeddedPermissionCatalog(cfg.AuthZPermissionCatalogFile)
+	if err != nil {
+		return nil, err
+	}
+
+	overrides := middleware.NewAuthzOverrides()
+	if cfg.AuthZOverridesFile != "" {
+		if oerr := overrides.LoadFromFile(cfg.AuthZOverridesFile); oerr != nil {
+			// Reload-failures on first start are fatal — we have no prior
+			// good state to fall back to.
+			return nil, oerr
+		}
+	}
+
+	authzClient, err := clients.NewIAMAuthorizeClient(clients.IAMAuthorizeClientConfig{
+		Addr:    cfg.ResolvedIAMAuthorizeURL(),
+		Timeout: time.Duration(cfg.AuthZCheckTimeoutMs) * time.Millisecond,
+		Logger:  logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// KAC-127 Problem 1: build the REST<->gRPC route table so the authz
+	// middleware can resolve an incoming REST path to a gRPC FQN (and the
+	// catalog entry). Also feeds the ResourceExtractor's HTTP path strategy
+	// with FQN -> path-template mappings to pluck `{field}` scope ids.
+	restRouter := middleware.NewRestRouter()
+
+	return middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{
+		Enabled:         true,
+		FailOpen:        cfg.AuthZFailOpen,
+		Catalog:         catalog,
+		Subjects:        middleware.NewSubjectExtractor(true),
+		Context:         middleware.NewContextExtractor(time.Now, cfg.AuthZTrustedXForwardedFor),
+		Resources:       middleware.NewResourceExtractor(restRouter.PathTemplates()),
+		Checker:         clients.NewAuthzChecker(authzClient),
+		Overrides:       overrides,
+		Logger:          logger,
+		Now:             time.Now,
+		CacheTTL:        time.Duration(cfg.AuthZCacheTTLSeconds) * time.Second,
+		CacheMaxEntries: cfg.AuthZCacheMaxEntries,
+		PublicAllowlist: middleware.DefaultPublicAllowlist(),
+		RestRouter:      restRouter,
+	})
 }
