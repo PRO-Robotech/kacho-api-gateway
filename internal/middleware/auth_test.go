@@ -48,6 +48,19 @@ func makeDevJWT(t *testing.T, secret, sub string) string {
 	return signed
 }
 
+// makeExpiredDevJWT mints a correctly-signed but already-expired HS256 token.
+func makeExpiredDevJWT(t *testing.T, secret, sub string) string {
+	t.Helper()
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": sub,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+	})
+	signed, err := tok.SignedString([]byte(secret))
+	require.NoError(t, err)
+	return signed
+}
+
 func TestAuth_DevMode_NoBearer_Anonymous(t *testing.T) {
 	auth := middleware.NewAuthInterceptor(middleware.AuthModeDev, "", nil, authTestLogger())
 	called := false
@@ -88,7 +101,10 @@ func TestAuth_DevMode_ValidBearer_RealPrincipal(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAuth_DevMode_InvalidBearer_FallbackAnonymous(t *testing.T) {
+// KAC-127 api-token authn pre-gate: a Bearer header that is present but
+// malformed is a failed authN attempt → 401 Unauthenticated. It is NOT
+// downgraded to anonymous (which would then surface as a 403 from authz).
+func TestAuth_DevMode_MalformedBearer_Rejected401(t *testing.T) {
 	auth := middleware.NewAuthInterceptor(middleware.AuthModeDev, "secret", &fakeLookup{}, authTestLogger())
 	ctx := metadata.NewIncomingContext(context.Background(),
 		metadata.Pairs("authorization", "Bearer not-a-jwt"))
@@ -96,14 +112,35 @@ func TestAuth_DevMode_InvalidBearer_FallbackAnonymous(t *testing.T) {
 	called := false
 	handler := func(ctx context.Context, _ any) (any, error) {
 		called = true
-		p := operations.PrincipalFromContext(ctx)
-		assert.Equal(t, "system", p.Type)
-		assert.Equal(t, "anonymous", p.ID)
 		return nil, nil
 	}
 	_, err := auth.Unary()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/test/Method"}, handler)
-	require.NoError(t, err)
-	assert.True(t, called)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	assert.False(t, called, "handler must not run for a malformed token")
+}
+
+// An expired Bearer token is also a failed authN attempt → 401.
+func TestAuth_DevMode_ExpiredBearer_Rejected401(t *testing.T) {
+	const secret = "dev-secret-test"
+	auth := middleware.NewAuthInterceptor(middleware.AuthModeDev, secret, &fakeLookup{}, authTestLogger())
+	expired := makeExpiredDevJWT(t, secret, "zit-expired")
+	ctx := metadata.NewIncomingContext(context.Background(),
+		metadata.Pairs("authorization", "Bearer "+expired))
+
+	called := false
+	handler := func(ctx context.Context, _ any) (any, error) {
+		called = true
+		return nil, nil
+	}
+	_, err := auth.Unary()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/test/Method"}, handler)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	assert.False(t, called, "handler must not run for an expired token")
 }
 
 func TestAuth_ProductionStrict_NoBearer_Rejected(t *testing.T) {
