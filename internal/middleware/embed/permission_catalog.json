@@ -886,6 +886,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.FederationExchangeService/Exchange",
+    "permission": "iam.exchange_tokens.exchange",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.GroupService/AddMember",
     "permission": "iam.group_members.addMember",
     "required_relation": "editor",
@@ -1311,6 +1321,36 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.SAKeyService/Issue",
+    "permission": "iam.issue_s_a_keies.issue",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "iam_service_account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.SAKeyService/List",
+    "permission": "iam.s_a_keyses.list",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_service_account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.SAKeyService/Revoke",
+    "permission": "iam.revoke_s_a_keies.revoke",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "iam_service_account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Create",
     "permission": "iam.service_accounts.create",
     "required_relation": "editor",
@@ -1366,6 +1406,56 @@
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.TrustPolicyService/Create",
+    "permission": "iam.trust_policies.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.TrustPolicyService/Delete",
+    "permission": "iam.trust_policies.delete",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "trust_policy_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.TrustPolicyService/Get",
+    "permission": "iam.trust_policies.get",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "trust_policy_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.TrustPolicyService/List",
+    "permission": "iam.trust_policieses.list",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.TrustPolicyService/Update",
+    "permission": "iam.trust_policies.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "trust_policy_id"
     },
     "required_acr_min": "2"
   },
