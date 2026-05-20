@@ -120,9 +120,15 @@ func (e *ResourceExtractor) ExtractFromHTTP(r *http.Request, fqn string, entry C
 		}
 	}
 	// 2. Query string fallback — also accepted on POST bodies because
-	// admin-UI might append `?scope=...` for explicit gating.
-	if q := r.URL.Query().Get(field); q != "" {
-		return ResourceID(q), true
+	// admin-UI might append `?scope=...` for explicit gating. grpc-gateway
+	// REST query params are camelCase (`?accountId=`), while the catalog
+	// `from_request_field` is the snake_case proto field (`account_id`) — so
+	// we try both spellings (KAC-127: List RPCs scoped by an `account_id`
+	// query param produced a spurious `account:*` wildcard → no-path DENY).
+	for _, key := range []string{field, snakeToCamel(field)} {
+		if q := r.URL.Query().Get(key); q != "" {
+			return ResourceID(q), true
+		}
 	}
 	if q := r.URL.Query().Get("scope_id"); q != "" {
 		return ResourceID(q), true

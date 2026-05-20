@@ -402,6 +402,25 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	// 3. Catalog lookup.
 	entry, found := m.cfg.Catalog.Lookup(dr.FQN)
 	if found && entry.IsExempt() {
+		// KAC-127: `<exempt>` skips the FGA authz check, NOT authentication.
+		// An exempt RPC (scope-filter List, tenant-wide catalog read) still
+		// requires an authenticated principal — the handler's own scope-filter
+		// is meaningless for an anonymous caller. Without this gate an
+		// anonymous request (no Bearer → injected system:anonymous principal)
+		// reached exempt List RPCs and got a 200 empty page instead of 401.
+		exemptVerified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
+		if _, authned := m.cfg.Subjects.Extract(exemptVerified); !authned {
+			m.metrics.RecordDeny()
+			return decision{
+				outcome: outcomeDeny,
+				reasons: []string{"subject: unauthenticated request"},
+				descriptor: permissionDeniedDescriptor{
+					FQN:    dr.FQN,
+					Action: entry.Permission,
+				},
+				entry: entry,
+			}
+		}
 		m.metrics.RecordAllow()
 		return decision{
 			outcome:    outcomeAllow,

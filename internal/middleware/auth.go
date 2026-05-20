@@ -187,6 +187,20 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 		return nil, status.Error(codes.Unauthenticated, "token missing subject")
 	}
 
+	// KAC-127 models 5-6 — Service Account / API-token principals. A token
+	// minted by the Hydra client_credentials flow (or a static API token)
+	// carries `kacho_principal_type=service_account` + `kacho_sa_id=<svaId>`.
+	// `sub` is the SA id itself, which is NOT a User `external_id`, so the
+	// User LookupByExternalID below would miss and (in dev) downgrade the SA
+	// to anonymous. Resolve the SA principal directly from the typed claims.
+	if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
+		saID, _ := claims["kacho_sa_id"].(string)
+		if saID == "" {
+			saID = subjectID
+		}
+		return a.injectPrincipal(ctx, "service_account", saID, saID), nil
+	}
+
 	subj, err := a.subjectLookup.LookupByExternalID(ctx, subjectID)
 	if err != nil {
 		switch a.mode {
@@ -376,6 +390,29 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 				if subjectID == "" {
 					a.logger.Warn("auth.HTTP: JWT has empty sub")
 					writeHTTPUnauthorized(w, "token missing subject")
+					return
+				}
+				// KAC-127 models 5-6 — Service Account / API-token principals.
+				// A client_credentials / API token carries
+				// `kacho_principal_type=service_account` + `kacho_sa_id`; `sub`
+				// is the SA id, not a User external_id, so the User lookup below
+				// would miss and leave the request principal-less → the authz
+				// layer then denies it as unauthenticated. Resolve the SA
+				// principal directly from the typed claims (parity with the
+				// gRPC intercept path).
+				if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
+					saID, _ := claims["kacho_sa_id"].(string)
+					if saID == "" {
+						saID = subjectID
+					}
+					r.Header.Set("X-Kacho-Principal-Type", "service_account")
+					r.Header.Set("X-Kacho-Principal-Id", saID)
+					r.Header.Set("X-Kacho-Principal-Display-Name", saID)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", "service_account")
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", saID)
+					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", saID)
+					a.logger.Info("auth.HTTP: SA principal injected", "id", saID)
+					next.ServeHTTP(w, r)
 					return
 				}
 				subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
