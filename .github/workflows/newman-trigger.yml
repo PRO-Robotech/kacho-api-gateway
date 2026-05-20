@@ -65,20 +65,36 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
           echo "branch under test: ${ref}"
 
+      # guard — graceful skip when WORKFLOW_DISPATCH_TOKEN is absent.
+      #
+      # WORKFLOW_DISPATCH_TOKEN is an org/repo secret a maintainer must set by
+      # hand (a PAT — the default GITHUB_TOKEN cannot cross-repo dispatch).
+      # Until it is set this convenience trigger MUST NOT fail the PR: a red
+      # check would block mergeability for a gap the developer cannot fix.
+      #
+      # So when the token is empty the guard emits a ::notice:: and exits 0;
+      # `has_token=false` makes every downstream step skip, leaving the job
+      # green (logically skipped). This is NOT a weakening of the real gate —
+      # the blocking Newman E2E still runs in kacho-deploy's own newman-e2e.yml
+      # on push/PR there. This cross-repo trigger is an extra convenience that
+      # only activates once the token exists; without it, it is a no-op.
       - name: guard — dispatch token present
+        id: guard
         env:
           TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${TOKEN}" ]; then
-            echo "::error::secret WORKFLOW_DISPATCH_TOKEN is not set — cannot dispatch"
-            echo "::error::see .github/workflows/README.md § cross-repo newman trigger"
-            exit 1
+            echo "::notice::WORKFLOW_DISPATCH_TOKEN not set — skipping cross-repo newman dispatch (set the secret to enable; the blocking gate still runs in kacho-deploy)"
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
           echo "dispatch token present"
 
       - name: dispatch newman-e2e in kacho-deploy
         id: dispatch
+        if: steps.guard.outputs.has_token == 'true'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
           BRANCH_REF: ${{ steps.ref.outputs.ref }}
@@ -102,6 +118,7 @@ jobs:
 
       - name: locate dispatched run
         id: locate
+        if: steps.guard.outputs.has_token == 'true'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
           CUTOFF: ${{ steps.dispatch.outputs.cutoff }}
@@ -128,6 +145,7 @@ jobs:
           echo "run_url=https://github.com/${DEPLOY_REPO}/actions/runs/${run_id}" >> "$GITHUB_OUTPUT"
 
       - name: await newman-e2e conclusion
+        if: steps.guard.outputs.has_token == 'true'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
           RUN_ID: ${{ steps.locate.outputs.run_id }}

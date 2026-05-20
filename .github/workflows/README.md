@@ -87,8 +87,15 @@ authz-матрица фейлит PR здесь.
   `PRO-Robotech/kacho-deploy` (а для polling статуса run'а — `Actions: read`
   на том же репо).
 
-Если secret не задан — job фейлится сразу с понятной ошибкой (шаг
-`guard — dispatch token present`), а не молча.
+Если secret не задан — job **не фейлится**: шаг `guard — dispatch token
+present` выводит `::notice::` и завершает job с success (логически
+«skipped» — `has_token=false` отключает шаги dispatch/locate/await через
+`if:`-условие). Красный check блокировал бы mergeability PR из-за разрыва,
+который разработчик не может закрыть сам (установка secret — user-action).
+Это **не ослабление gate**: блокирующий Newman E2E всё равно гоняется в
+`kacho-deploy/newman-e2e.yml` на push/PR туда. Cross-repo trigger —
+дополнительный convenience: без токена это no-op, с токеном — реально
+dispatch'ит и зеркалит conclusion.
 
 ### Установка secret (user-action)
 
