@@ -36,9 +36,9 @@ jobs:
       - uses: actions/checkout@v6
         with: { path: kacho-api-gateway }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-corelib, ref: KAC-127, path: kacho-corelib }
+        with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-127, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
 
