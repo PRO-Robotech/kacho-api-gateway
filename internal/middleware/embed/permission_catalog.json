@@ -679,39 +679,43 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Delete",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.access_bindings.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Get",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.access_bindings.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByResource",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.access_bindings_by_resources.listByResource",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListBySubject",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.access_bindings_by_subjects.listBySubject",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "subject_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Create",
@@ -884,12 +888,13 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/AddMember",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.group_members.addMember",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Create",
@@ -903,21 +908,23 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Delete",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.groups.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Get",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.groups.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/List",
@@ -931,12 +938,13 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListMembers",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.group_memberses.listMembers",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListOperations",
@@ -950,21 +958,23 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/RemoveMember",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.group_members.removeMember",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Update",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.groups.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalAuthorizeService/GetFGAStoreInfo",
@@ -1313,21 +1323,23 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Delete",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.service_accounts.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Get",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.service_accounts.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/List",
@@ -1351,30 +1363,33 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Update",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.service_accounts.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Delete",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.users.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Get",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.users.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Invite",
