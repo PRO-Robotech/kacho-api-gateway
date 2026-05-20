@@ -92,8 +92,15 @@ func TestPermissionCatalog_LookupMiss(t *testing.T) {
 func TestPermissionCatalog_EmbeddedAsset_Loads(t *testing.T) {
 	c, err := middleware.LoadEmbeddedPermissionCatalog("")
 	require.NoError(t, err)
-	// The embedded asset is the full Phase 3 catalog (~303 entries).
-	assert.GreaterOrEqual(t, c.Size(), 300)
+	// The embedded asset is the full Phase 3 catalog. KAC-124 removed the
+	// resource-manager / organization-manager protos (~39 RPCs); KAC-127
+	// then annotated every remaining RPC, so the catalog carries ~264
+	// entries and EVERY entry must be classified (no empty permission).
+	assert.GreaterOrEqual(t, c.Size(), 240)
+	for _, fqn := range c.FQNs() {
+		e, _ := c.Lookup(fqn)
+		assert.NotEmpty(t, e.Permission, "catalog entry %s has empty permission", fqn)
+	}
 
 	// Spot-check a known-populated entry from the catalog.
 	entry, ok := c.Lookup("kacho.cloud.iam.v1.AuthorizeService/Check")

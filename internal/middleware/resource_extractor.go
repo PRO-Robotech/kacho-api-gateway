@@ -33,6 +33,9 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -124,7 +127,74 @@ func (e *ResourceExtractor) ExtractFromHTTP(r *http.Request, fqn string, entry C
 	if q := r.URL.Query().Get("scope_id"); q != "" {
 		return ResourceID(q), true
 	}
+	// 3. JSON body extraction (KAC-127 Problem 1) — Create/Update RPCs carry
+	// the scope id (`account_id` / `project_id` / `resource_id`) in the
+	// request body, not the URL. The middleware runs before grpc-gateway
+	// decodes the body, so we read + RESTORE it here so the downstream
+	// handler still sees an intact body. REST JSON is camelCase, so we look
+	// the snake_case catalog field up under its camelCase spelling too.
+	if id := extractFromJSONBody(r, field); id != "" {
+		return ResourceID(id), true
+	}
 	return ResourceID("*"), true
+}
+
+// extractFromJSONBody reads a top-level string field out of the request's
+// JSON body and restores the body for downstream consumers. Returns "" when
+// the body is absent / not JSON / the field is missing.
+func extractFromJSONBody(r *http.Request, snakeField string) string {
+	if r.Body == nil || r.ContentLength == 0 {
+		return ""
+	}
+	ct := r.Header.Get("Content-Type")
+	if ct != "" && !strings.Contains(ct, "json") {
+		return ""
+	}
+	// Cap at 1 MiB — request bodies for control-plane RPCs are tiny; this
+	// guards against a malicious oversized body.
+	buf, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	_ = r.Body.Close()
+	// Always restore the body so the downstream handler can decode it.
+	r.Body = io.NopCloser(bytes.NewReader(buf))
+	r.ContentLength = int64(len(buf))
+	if len(buf) == 0 {
+		return ""
+	}
+	var doc map[string]json.RawMessage
+	if err = json.Unmarshal(buf, &doc); err != nil {
+		return ""
+	}
+	for _, key := range []string{snakeField, snakeToCamel(snakeField)} {
+		raw, ok := doc[key]
+		if !ok {
+			continue
+		}
+		var s string
+		if json.Unmarshal(raw, &s) == nil && s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// snakeToCamel converts `account_id` -> `accountId` (REST JSON spelling).
+func snakeToCamel(s string) string {
+	var b strings.Builder
+	up := false
+	for _, r := range s {
+		if r == '_' {
+			up = true
+			continue
+		}
+		if up && r >= 'a' && r <= 'z' {
+			b.WriteRune(r - 'a' + 'A')
+			up = false
+			continue
+		}
+		up = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // protoMessageFromAny tries to assert the supplied interface as a

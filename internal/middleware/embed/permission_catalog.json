@@ -1,439 +1,487 @@
 [
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.diskses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.listAccessBindings",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disk_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/ListSnapshotSchedules",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disk_snapshot_scheduleses.listSnapshotSchedules",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Relocate",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.relocate",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.setAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.disks.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_disk",
+      "from_request_field": "disk_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.updateAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.images.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.images.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_image",
+      "from_request_field": "image_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.images.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_image",
+      "from_request_field": "image_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/GetLatestByFamily",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.image_latest_by_families.getLatestByFamily",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.imageses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.listAccessBindings",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.image_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_image",
+      "from_request_field": "image_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.setAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.images.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_image",
+      "from_request_field": "image_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.updateAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AddOneToOneNat",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_one_to_one_nats.addOneToOneNat",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachDisk",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_disks.attachDisk",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachFilesystem",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_filesystems.attachFilesystem",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachNetworkInterface",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_network_interfaces.attachNetworkInterface",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachDisk",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_disks.detachDisk",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachFilesystem",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_filesystems.detachFilesystem",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachNetworkInterface",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_network_interfaces.detachNetworkInterface",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/GetSerialPortOutput",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_serial_port_outputs.getSerialPortOutput",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instanceses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.listAccessBindings",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Relocate",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.relocate",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/RemoveOneToOneNat",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_one_to_one_nats.removeOneToOneNat",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Restart",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.restart",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.setAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/SimulateMaintenanceEvent",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_maintenance_events.simulateMaintenanceEvent",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Start",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.start",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Stop",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.stop",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instances.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.updateAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/UpdateMetadata",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_metadatas.updateMetadata",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/UpdateNetworkInterface",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.instance_network_interfaces.updateNetworkInterface",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_instance",
+      "from_request_field": "instance_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Create",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -442,7 +490,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Delete",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -451,7 +499,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Update",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -460,7 +508,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Create",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -469,7 +517,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Delete",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -478,7 +526,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Update",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -487,7 +535,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalResourceLifecycleService/Subscribe",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -496,7 +544,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalWatchService/Watch",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -505,7 +553,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Create",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -514,7 +562,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Delete",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -523,7 +571,7 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Update",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -532,133 +580,147 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshots.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshots.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_snapshot",
+      "from_request_field": "snapshot_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshots.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_snapshot",
+      "from_request_field": "snapshot_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshotses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.listAccessBindings",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshot_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_snapshot",
+      "from_request_field": "snapshot_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.setAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.snapshots.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "compute_snapshot",
+      "from_request_field": "snapshot_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
+    "permission": "compute.access_bindingses.updateAccessBindings",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.accessBindings.create",
+    "required_relation": "admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.access_bindings.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.access_bindings.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByResource",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.access_bindings_by_resources.listByResource",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListBySubject",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.access_bindings_by_subjects.listBySubject",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "subject_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Create",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -667,48 +729,53 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.accounts.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.accounts.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.accountses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.account_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.accounts.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AuthorizeService/BatchCheck",
@@ -822,84 +889,93 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/AddMember",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.group_members.addMember",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.groups.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.groups.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.groups.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.groupses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListMembers",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.group_memberses.listMembers",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.group_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/RemoveMember",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.group_members.removeMember",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.groups.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalAuthorizeService/GetFGAStoreInfo",
@@ -957,7 +1033,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/Check",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -984,7 +1060,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -993,7 +1069,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/LookupSubject",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1002,7 +1078,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/WriteCreatorTuple",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1056,7 +1132,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalUserService/Get",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1074,7 +1150,7 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1110,214 +1186,237 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projects.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projects.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projects.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projectses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.project_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projects.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.projects.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.roles.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.roles.delete",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "role_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.roles.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "role_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.roleses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.role_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "role_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.roles.update",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "role_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_accounts.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_accounts.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_accounts.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_accountses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_account_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.service_accounts.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "service_account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.users.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.users.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Invite",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.users.invite",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.UserService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "iam.userses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1326,214 +1425,237 @@
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AddListener",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancer_listeners.addListener",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancer_target_groups.attachTargetGroup",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancer_target_groups.detachTargetGroup",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DisableZones",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.zoneses.disableZones",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/EnableZones",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.zoneses.enableZones",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_stateses.getTargetStates",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancerses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancer_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/RemoveListener",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancer_listeners.removeListener",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.start",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.stop",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.network_load_balancers.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "network_load_balancer_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.targetses.addTargets",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_groups.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_groups.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_groups.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_groupses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_group_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/RemoveTargets",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.targetses.removeTargets",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "loadbalancer.target_groups.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "lb_target_group",
+      "from_request_field": "target_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.operation.OperationService/Cancel",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1542,358 +1664,7 @@
   },
   {
     "fqn": "kacho.cloud.operation.OperationService/Get",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/BindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/Create",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/Delete",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/Get",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/List",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/ListAccessPolicyBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/ListOperations",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/UnbindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/Update",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.organizationmanager.v1.OrganizationService/UpdateAccessPolicyBindingParameters",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/BindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/Create",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/Delete",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/Get",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/List",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/ListAccessPolicyBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/ListOperations",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/UnbindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/Update",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.CloudService/UpdateAccessPolicyBindingParameters",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/BindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/Create",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/Delete",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/Get",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/List",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/ListAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/ListAccessPolicyBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/ListOperations",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/SetAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/UnbindAccessPolicy",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/Update",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/UpdateAccessBindings",
-    "permission": "",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.resourcemanager.v1.FolderService/UpdateAccessPolicyBindingParameters",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -1902,151 +1673,167 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_address",
+      "from_request_field": "address_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_address",
+      "from_request_field": "address_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/GetByValue",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.address_by_values.getByValue",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresseses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/ListBySubnet",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses_by_subnets.listBySubnet",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.address_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_address",
+      "from_request_field": "address_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_address",
+      "from_request_field": "address_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.addresses.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_address",
+      "from_request_field": "address_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewaies.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewaies.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_gateway",
+      "from_request_field": "gateway_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewaies.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_gateway",
+      "from_request_field": "gateway_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewayses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gateway_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_gateway",
+      "from_request_field": "gateway_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewaies.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_gateway",
+      "from_request_field": "gateway_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.gatewaies.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_gateway",
+      "from_request_field": "gateway_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsAddressOverride",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2055,7 +1842,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsNetworkDefault",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2064,7 +1851,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Check",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2073,7 +1860,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Create",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2082,7 +1869,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Delete",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2091,7 +1878,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/ExplainResolution",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2100,7 +1887,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Get",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2109,7 +1896,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/GetUtilization",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2118,7 +1905,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/List",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2127,7 +1914,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/ListAddresses",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2136,7 +1923,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/UnbindAddressOverride",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2145,7 +1932,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/UnbindNetworkDefault",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2154,7 +1941,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Update",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2163,7 +1950,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/AllocateExternalIP",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2172,7 +1959,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/AllocateInternalIP",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2181,7 +1968,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/AllocateInternalIPv6",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2190,7 +1977,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/ClearAddressReference",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2199,7 +1986,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/GetAddressReference",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2208,7 +1995,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/MarkAddressEphemeralInUse",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2217,7 +2004,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/SetAddressReference",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2226,7 +2013,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalCloudService/GetPoolSelector",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2235,7 +2022,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalCloudService/SetPoolSelector",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2244,7 +2031,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalCloudService/UnsetPoolSelector",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2253,7 +2040,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalNetworkService/SetDefaultSecurityGroupId",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2262,7 +2049,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalResourceLifecycleService/Subscribe",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2271,7 +2058,7 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalWatchService/Watch",
-    "permission": "",
+    "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
       "object_type": "",
@@ -2280,461 +2067,512 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/AttachToInstance",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.attachToInstance",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/DetachFromInstance",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.detachFromInstance",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaceses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interface_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_interfaces.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network_interface",
+      "from_request_field": "network_interface_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networks.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networks.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networks.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networkses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListRouteTables",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_route_tableses.listRouteTables",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListSecurityGroups",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_security_groupses.listSecurityGroups",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListSubnets",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.network_subnetses.listSubnets",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networks.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.networks.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_network",
+      "from_request_field": "network_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tables.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tables.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tables.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tableses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_table_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tables.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.route_tables.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groups.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groups.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groups.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groupses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_group_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groups.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_groups.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/UpdateRule",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_group_rules.updateRule",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/UpdateRules",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.security_group_ruleses.updateRules",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_security_group",
+      "from_request_field": "security_group_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/AddCidrBlocks",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnet_cidr_blockses.addCidrBlocks",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnetses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnet_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/ListUsedAddresses",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.used_addresseses.listUsedAddresses",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Move",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.move",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Relocate",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.relocate",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/RemoveCidrBlocks",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnet_cidr_blockses.removeCidrBlocks",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.subnets.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_subnet",
+      "from_request_field": "subnet_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Create",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpoints.create",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Delete",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpoints.delete",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_private_endpoint",
+      "from_request_field": "private_endpoint_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Get",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpoints.get",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_private_endpoint",
+      "from_request_field": "private_endpoint_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/List",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpointses.list",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/ListOperations",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpoint_operationses.listOperations",
+    "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_private_endpoint",
+      "from_request_field": "private_endpoint_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Update",
-    "permission": "",
-    "required_relation": "",
+    "permission": "vpc.private_endpoints.update",
+    "required_relation": "editor",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "vpc_private_endpoint",
+      "from_request_field": "private_endpoint_id"
+    },
+    "required_acr_min": "2"
   }
 ]

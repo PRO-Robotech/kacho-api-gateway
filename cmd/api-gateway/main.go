@@ -513,13 +513,19 @@ func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.A
 		return nil, err
 	}
 
+	// KAC-127 Problem 1: build the REST<->gRPC route table so the authz
+	// middleware can resolve an incoming REST path to a gRPC FQN (and the
+	// catalog entry). Also feeds the ResourceExtractor's HTTP path strategy
+	// with FQN -> path-template mappings to pluck `{field}` scope ids.
+	restRouter := middleware.NewRestRouter()
+
 	return middleware.NewAuthzMiddleware(middleware.AuthzMiddlewareConfig{
 		Enabled:         true,
 		FailOpen:        cfg.AuthZFailOpen,
 		Catalog:         catalog,
 		Subjects:        middleware.NewSubjectExtractor(true),
 		Context:         middleware.NewContextExtractor(time.Now, cfg.AuthZTrustedXForwardedFor),
-		Resources:       middleware.NewResourceExtractor(nil),
+		Resources:       middleware.NewResourceExtractor(restRouter.PathTemplates()),
 		Checker:         clients.NewAuthzChecker(authzClient),
 		Overrides:       overrides,
 		Logger:          logger,
@@ -527,5 +533,6 @@ func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.A
 		CacheTTL:        time.Duration(cfg.AuthZCacheTTLSeconds) * time.Second,
 		CacheMaxEntries: cfg.AuthZCacheMaxEntries,
 		PublicAllowlist: middleware.DefaultPublicAllowlist(),
+		RestRouter:      restRouter,
 	})
 }
