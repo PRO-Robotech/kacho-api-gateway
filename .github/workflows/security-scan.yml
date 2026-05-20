@@ -24,9 +24,9 @@ jobs:
       - uses: actions/checkout@v6
         with: { path: kacho-api-gateway }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+        with: { repository: PRO-Robotech/kacho-corelib, ref: KAC-127, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-127, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
       - run: |
@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with: { path: kacho-api-gateway }
-      - uses: aquasecurity/trivy-action@0.30.0
+      - uses: aquasecurity/trivy-action@master  # KAC-127 — previous "0.30.0" failed (action publishes only v-prefixed tags v0.28.0..v0.36.0; no plain "0.30.0" ref). Using @master per upstream README recommendation.
         with:
           scan-type: 'fs'
           scan-ref: 'kacho-api-gateway'
@@ -62,9 +62,9 @@ jobs:
       - uses: actions/checkout@v6
         with: { path: kacho-api-gateway }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+        with: { repository: PRO-Robotech/kacho-corelib, ref: KAC-127, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-127, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
       - run: |
