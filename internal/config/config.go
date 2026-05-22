@@ -1,6 +1,10 @@
 package config
 
-import corecfg "github.com/PRO-Robotech/kacho-corelib/config"
+import (
+	"time"
+
+	corecfg "github.com/PRO-Robotech/kacho-corelib/config"
+)
 
 // Config хранит конфигурацию api-gateway.
 // Переменные окружения:
@@ -167,6 +171,12 @@ type Config struct {
 	// client-supplied values). Flip to false when running api-gateway
 	// directly on the wire.
 	AuthZTrustedXForwardedFor bool `envconfig:"KACHO_API_GATEWAY_AUTHZ_TRUSTED_XFF" default:"true"`
+
+	// SubjectChangePollInterval — how often the WS-2.3 subject-change watcher
+	// polls kacho-iam InternalIAMService.PollSubjectChanges to flush the authz
+	// decision cache on sibling replicas that did not process the mutation.
+	// Default 2s; set to 0 to use the default.
+	SubjectChangePollInterval time.Duration `envconfig:"KACHO_API_GATEWAY_SUBJECT_CHANGE_POLL_INTERVAL" default:"2s"`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
