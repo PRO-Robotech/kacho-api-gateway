@@ -18,11 +18,11 @@ func TestAuthzMiddleware_MaybeFlushOnMutation(t *testing.T) {
 
 	// Non-mutation / non-2xx — cache untouched.
 	m.MaybeFlushOnMutation("kacho.cloud.iam.v1.ProjectService/Get", 200)
-	require.Equal(t, 1, m.cache.Len())
+	require.Equal(t, 1, m.cache.Size())
 	m.MaybeFlushOnMutation("kacho.cloud.iam.v1.AccessBindingService/Delete", 500)
-	require.Equal(t, 1, m.cache.Len())
+	require.Equal(t, 1, m.cache.Size())
 
 	// Successful AccessBinding mutation — full flush.
 	m.MaybeFlushOnMutation("kacho.cloud.iam.v1.AccessBindingService/Delete", 200)
-	require.Equal(t, 0, m.cache.Len())
+	require.Equal(t, 0, m.cache.Size())
 }

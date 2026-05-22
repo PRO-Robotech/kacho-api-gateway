@@ -220,6 +220,7 @@ func (m *AuthzMiddleware) Metrics() *AuthzMetrics { return m.metrics }
 // On a 2xx response the gateway flushes its decision cache so the new grant
 // state takes effect immediately for this replica (WS-2.3 self-flush). Sibling
 // replicas converge via the subject-change poll-loop (WS-2.3 Task 4).
+// It is read-only after package init — do not mutate at runtime.
 var subjectChangingFQNs = map[string]struct{}{
 	"kacho.cloud.iam.v1.AccessBindingService/Create": {},
 	"kacho.cloud.iam.v1.AccessBindingService/Delete": {},
@@ -239,9 +240,14 @@ func (m *AuthzMiddleware) MaybeFlushOnMutation(fqn string, httpStatus int) {
 	m.cfg.Logger.Info("authz decision-cache flushed on grant mutation", "fqn", fqn)
 }
 
-// Cache exposes the decision cache so the WS-2.3 subject-change watcher (Task 4)
-// can flush it. Returns nil when authz is disabled.
-func (m *AuthzMiddleware) Cache() *decisionCache { return m.cache }
+// InvalidateCache flushes the whole authz decision cache. Used by the WS-2.3
+// subject-change watcher (Task 4) to converge this replica after a grant change
+// observed on another replica. No-op when authz is disabled (cache is nil).
+func (m *AuthzMiddleware) InvalidateCache() {
+	if m.cache != nil {
+		m.cache.Invalidate()
+	}
+}
 
 // Unary returns a gRPC UnaryServerInterceptor enforcing per-RPC authz.
 func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
@@ -943,9 +949,6 @@ func (c *decisionCache) Size() int {
 	defer c.mu.Unlock()
 	return len(c.entries)
 }
-
-// Len returns the number of live cache entries (alias for Size, used in tests).
-func (c *decisionCache) Len() int { c.mu.Lock(); defer c.mu.Unlock(); return len(c.entries) }
 
 // buildCacheKey — stable cache key over (subject, action, resource,
 // principal-binding context). Including `acr`/`mfa_at`/`client_ip` ensures
