@@ -55,14 +55,13 @@ func (w *SubjectChangeWatcher) tick(ctx context.Context) {
 		w.logger.Warn("subject-change poll failed", "err", err)
 		return
 	}
-	// First successful poll on a fresh gateway: adopt head as cursor without
-	// flushing — the cache is empty/cold at startup anyway.
+	// First successful poll on a fresh gateway: adopt headID as the cursor and
+	// do NOT flush. The cache is cold at startup, and jumping straight to headID
+	// skips replaying the historical backlog in subject_change_outbox.
 	if !w.primed {
 		w.primed = true
 		w.cursor = headID
-		if len(ids) == 0 {
-			return
-		}
+		return
 	}
 	if len(ids) == 0 {
 		return
