@@ -268,6 +268,8 @@ func main() {
 		scPoller := clients.NewSubjectChangePoller(backends["iamInternal"])
 		scWatcher := watcher.New(scPoller, authzMW.InvalidateCache,
 			cfg.SubjectChangePollInterval, logger)
+		// The watcher is poll-only with no shutdown cleanup; it exits when ctx is
+		// cancelled (SIGTERM/SIGINT). No WaitGroup join needed — nothing to flush on exit.
 		go scWatcher.Run(ctx)
 		logger.Info("WS-2.3 subject-change watcher started",
 			"interval", cfg.SubjectChangePollInterval)

@@ -137,9 +137,13 @@ func TestSubjectChangeWatcher_PrimingNonEmptyStillDoesNotFlush(t *testing.T) {
 
 // TestSubjectChangeWatcher_NoFlushWhenAllEmpty verifies no flush when every tick is empty.
 func TestSubjectChangeWatcher_NoFlushWhenAllEmpty(t *testing.T) {
+	// advanced is closed after the 3rd poller call (prime + two empty ticks).
+	// Because flush() is called synchronously inside tick(), the channel signal
+	// already implies that any flush triggered by those ticks has completed —
+	// no extra sleep is needed.
 	advanced := make(chan struct{})
 	p := &fakePoller{
-		batches:   [][]int64{{}, {}},
+		batches:   [][]int64{{}, {}, {}},
 		advanced:  advanced,
 		threshold: 3, // three empty calls: prime + two empty ticks
 	}
@@ -158,8 +162,8 @@ func TestSubjectChangeWatcher_NoFlushWhenAllEmpty(t *testing.T) {
 		t.Fatal("fakePoller was not called 3 times within timeout")
 	}
 
-	// Small delay to let any erroneous flush complete before we assert.
-	time.Sleep(30 * time.Millisecond)
+	// flush() is synchronous in tick(); advanced firing means all three tick
+	// calls have returned — cancel and assert immediately, no sleep required.
 	cancel()
 
 	if got := atomic.LoadInt32(&flushCount); got != 0 {

@@ -175,7 +175,7 @@ type Config struct {
 	// SubjectChangePollInterval — how often the WS-2.3 subject-change watcher
 	// polls kacho-iam InternalIAMService.PollSubjectChanges to flush the authz
 	// decision cache on sibling replicas that did not process the mutation.
-	// Default 2s; set to 0 to use the default.
+	// Default 2s. Omit the env var (or set 0) to use the built-in default.
 	SubjectChangePollInterval time.Duration `envconfig:"KACHO_API_GATEWAY_SUBJECT_CHANGE_POLL_INTERVAL" default:"2s"`
 }
 

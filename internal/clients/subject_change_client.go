@@ -4,6 +4,7 @@ package clients
 
 import (
 	"context"
+	"fmt"
 
 	iamv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	"google.golang.org/grpc"
@@ -28,7 +29,7 @@ func (p *SubjectChangePoller) PollSubjectChanges(ctx context.Context, since int6
 		Limit:   1000,
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("poll subject changes: %w", err)
 	}
 	ids := make([]int64, 0, len(resp.GetChanges()))
 	for _, c := range resp.GetChanges() {
