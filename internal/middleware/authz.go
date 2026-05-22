@@ -432,12 +432,30 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		// Production policy: deny when catalog has no entry — every RPC must
 		// be classified. Dev / staging may surface this differently via the
 		// overrides file (explicit allow).
+		//
+		// KAC-127: classify the denial reason based on authentication status
+		// so the caller (and observability) can distinguish:
+		//   - authenticated caller hitting an uncatalogued method →
+		//     PermissionDenied ("catalog: no entry for method") — 403
+		//   - unauthenticated caller hitting an uncatalogued method →
+		//     PermissionDenied ("catalog: no entry for method; unauthenticated")
+		// Both are code 7 (PermissionDenied) — we never reveal internal
+		// resource existence to unauthenticated callers, and we don't upgrade
+		// to Unauthenticated (16) for uncatalogued methods because the method
+		// itself is unknown/denied regardless of auth state.
+		missVerified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
+		_, isAuthed := m.cfg.Subjects.Extract(missVerified)
+		missReason := "catalog: no entry for method"
+		if !isAuthed {
+			missReason = "catalog: no entry for method; unauthenticated"
+		}
 		m.metrics.RecordDeny()
 		m.cfg.Logger.Warn("authz catalog miss, denying",
-			"fqn", dr.FQN)
+			"fqn", dr.FQN,
+			"authenticated", isAuthed)
 		return decision{
 			outcome: outcomeDeny,
-			reasons: []string{"catalog: no entry for method"},
+			reasons: []string{missReason},
 			descriptor: permissionDeniedDescriptor{
 				FQN: dr.FQN,
 			},

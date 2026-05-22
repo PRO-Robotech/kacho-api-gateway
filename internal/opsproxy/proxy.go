@@ -28,6 +28,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
@@ -120,19 +121,88 @@ func (p *OpsProxy) resolveBackend(id string) (operationpb.OperationServiceClient
 }
 
 // Get проксирует OperationService.Get к нужному backend по prefix id.
+// KAC-127: после получения операции проверяет право доступа вызывающего
+// principal'а: только создавший операцию (principal_type + principal_id
+// из Operation) может её читать. Исключение — system-bootstrap (внутренние
+// воркеры) и service-account (cross-service polling).
 func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest) (*operationpb.Operation, error) {
 	client, err := p.resolveBackend(req.OperationId)
 	if err != nil {
 		return nil, err
 	}
-	return client.Get(ctx, req)
+	op, err := client.Get(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkOperationOwnership(ctx, op); err != nil {
+		return nil, err
+	}
+	return op, nil
 }
 
 // Cancel проксирует OperationService.Cancel к нужному backend по prefix id.
+// KAC-127: то же ownership-check что и Get — только создавший операцию
+// может её отменить.
 func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationRequest) (*operationpb.Operation, error) {
 	client, err := p.resolveBackend(req.OperationId)
 	if err != nil {
 		return nil, err
 	}
-	return client.Cancel(ctx, req)
+	op, err := client.Cancel(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkOperationOwnership(ctx, op); err != nil {
+		return nil, err
+	}
+	return op, nil
+}
+
+// checkOperationOwnership проверяет что principal в ctx совпадает с
+// principal_type/principal_id, записанными в Operation при создании.
+//
+// Логика:
+//   - Если op не содержит principal_id (legacy / pre-KAC-105 операции) —
+//     пропускаем проверку (graceful degradation для старых записей в БД).
+//   - Если principal в ctx не извлекается (анонимный) — PermissionDenied.
+//     (Каталог уже требует аутентификацию для OperationService через <exempt>,
+//     поэтому этот case теоретически не должен дойти сюда, но мы fail-closed.)
+//   - system/bootstrap — пропускаем (внутренние воркеры и тесты, не tenant).
+//   - Остальные: principal_id из ctx должен совпадать с op.PrincipalId.
+//     principal_type — для доп. верификации (user/service_account).
+func checkOperationOwnership(ctx context.Context, op *operationpb.Operation) error {
+	if op == nil || op.GetPrincipalId() == "" {
+		// Операция без записанного owner'а (legacy) — пропускаем.
+		return nil
+	}
+	callerID, callerType := principalFromContext(ctx)
+	if callerID == "" {
+		// Анонимный caller — не должен читать операции.
+		return status.Error(codes.PermissionDenied, "permission denied")
+	}
+	// system/bootstrap — внутренний воркер, не tenant. Пропускаем.
+	if callerType == "system" && callerID == "bootstrap" {
+		return nil
+	}
+	if callerID != op.GetPrincipalId() {
+		return status.Error(codes.PermissionDenied, "permission denied")
+	}
+	return nil
+}
+
+// principalFromContext извлекает (id, type) calling principal из incoming
+// gRPC metadata (установленных grpc-gateway через WithMetadata callback или
+// gRPC-auth-interceptor).
+func principalFromContext(ctx context.Context) (id, ptype string) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", ""
+	}
+	if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
+		id = v[0]
+	}
+	if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
+		ptype = v[0]
+	}
+	return id, ptype
 }

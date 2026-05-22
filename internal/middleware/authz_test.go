@@ -3,10 +3,12 @@ package middleware_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -436,6 +438,117 @@ func TestAuthz_Constructor_NoOpWhenDisabled(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/any", nil)
 	h.ServeHTTP(httptest.NewRecorder(), r)
 	assert.True(t, called)
+}
+
+// ---- KAC-127 regression tests ----
+
+// TestAuthz_EmbeddedCatalog_OperationServiceFQNsCorrect — KAC-127 BUG-1:
+// проверяет что встроенный каталог содержит OperationService записи с
+// корректными FQN (без ".v1." — proto package "kacho.cloud.operation").
+// Это гарантирует что allowlist-чек (который тоже использует FQN без v1)
+// совпадёт с маршрутной таблицей.
+func TestAuthz_EmbeddedCatalog_OperationServiceFQNsCorrect(t *testing.T) {
+	cat, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	// OperationService.Get — must be present with <exempt> permission.
+	get, ok := cat.Lookup("kacho.cloud.operation.OperationService/Get")
+	require.True(t, ok, "catalog must have kacho.cloud.operation.OperationService/Get (no .v1.)")
+	assert.True(t, get.IsExempt(), "OperationService/Get must be <exempt>")
+
+	// OperationService.Cancel — must be present with <exempt> permission.
+	cancel, ok := cat.Lookup("kacho.cloud.operation.OperationService/Cancel")
+	require.True(t, ok, "catalog must have kacho.cloud.operation.OperationService/Cancel (no .v1.)")
+	assert.True(t, cancel.IsExempt(), "OperationService/Cancel must be <exempt>")
+
+	// Wrong FQN (with .v1.) must NOT be in catalog.
+	_, badGet := cat.Lookup("kacho.cloud.operation.v1.OperationService/Get")
+	assert.False(t, badGet, "catalog must NOT have the wrong v1-suffixed FQN")
+
+	// AccessBindingService listBy* entries must exist (BUG-8).
+	_, okListByResource := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListByResource")
+	assert.True(t, okListByResource, "catalog must have AccessBindingService/ListByResource")
+
+	_, okListBySubject := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListBySubject")
+	assert.True(t, okListBySubject, "catalog must have AccessBindingService/ListBySubject")
+}
+
+// TestAuthz_DefaultPublicAllowlist_NoOperationV1FQN — KAC-127 BUG-1:
+// allowlist НЕ должен содержать ".v1." FQN для OperationService (они никогда
+// не совпали бы с маршрутной таблицей, из-за чего каталог обрабатывал запрос
+// и мог давать "unauthenticated request" ошибку).
+func TestAuthz_DefaultPublicAllowlist_NoOperationV1FQN(t *testing.T) {
+	for _, fqn := range middleware.DefaultPublicAllowlist() {
+		assert.NotContains(t, fqn, "operation.v1.",
+			"allowlist must not contain wrong v1-namespaced OperationService FQN: %s", fqn)
+		assert.NotContains(t, fqn, "OperationService/List",
+			"allowlist must not contain non-existent OperationService/List: %s", fqn)
+	}
+}
+
+// TestAuthz_GRPC_CatalogMiss_AuthenticatedReason — KAC-127 BUG-1 secondary:
+// authenticated caller на uncatalogued метод получает PermissionDenied с
+// PreconditionFailure violation, description которого НЕ содержит "unauthenticated".
+// Это подтверждает что authenticated caller не классифицируется как анонимный.
+func TestAuthz_GRPC_CatalogMiss_AuthenticatedReason(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.unknown.v1.X/Y"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	// Детали ошибки — PreconditionFailure violations с описанием причины.
+	allDescs := collectViolationDescriptions(t, st)
+	for _, d := range allDescs {
+		assert.NotContains(t, d, "unauthenticated",
+			"authenticated caller on catalog-miss violation description must NOT contain 'unauthenticated': %s", d)
+	}
+	assert.Zero(t, checker.calls.Load())
+}
+
+// TestAuthz_GRPC_CatalogMiss_UnauthenticatedReason — KAC-127 BUG-1 secondary:
+// unauthenticated caller на uncatalogued метод тоже получает PermissionDenied,
+// но violation description содержит "unauthenticated" для observability.
+func TestAuthz_GRPC_CatalogMiss_UnauthenticatedReason(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	// Нет principal-метаданных → анонимный caller.
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.unknown.v1.X/Y"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+	allDescs := collectViolationDescriptions(t, st)
+	found := false
+	for _, d := range allDescs {
+		if strings.Contains(d, "unauthenticated") {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"unauthenticated caller on catalog-miss must have 'unauthenticated' in some violation description; got: %v", allDescs)
+	assert.Zero(t, checker.calls.Load())
+}
+
+// collectViolationDescriptions extracts Description strings from PreconditionFailure
+// details attached to a gRPC status (used by KAC-127 catalog-miss tests).
+func collectViolationDescriptions(t *testing.T, st *status.Status) []string {
+	t.Helper()
+	var descs []string
+	for _, d := range st.Details() {
+		type withViolations interface {
+			GetViolations() interface{ GetDescription() string }
+		}
+		// Use reflection-free approach: assert on the Any-typed detail.
+		// The concrete type is *errdetails.PreconditionFailure but we
+		// avoid importing errdetails in the test — use fmt.Sprint instead.
+		str := fmt.Sprint(d)
+		descs = append(descs, str)
+	}
+	return descs
 }
 
 func TestAuthz_CheckInputCarriesContext(t *testing.T) {

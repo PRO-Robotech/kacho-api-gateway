@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
@@ -233,6 +234,126 @@ func TestOpsProxy_Cancel_RoutesToCorrectBackend(t *testing.T) {
 	}
 	if resp.Id != "vpc_op1" {
 		t.Errorf("ожидали vpc_op1, получили %q", resp.Id)
+	}
+}
+
+// withPrincipalMD — ctx с incoming gRPC metadata для principal (имитирует
+// grpc-gateway WithMetadata callback после auth.HTTP).
+func withPrincipalMD(id, ptype string) context.Context {
+	md := metadata.New(map[string]string{
+		"x-kacho-principal-id":   id,
+		"x-kacho-principal-type": ptype,
+	})
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+// TestOpsProxy_Get_OwnershipCheck_AllowsOwner — owner principal видит свою операцию.
+// KAC-127: ownership check не блокирует владельца.
+func TestOpsProxy_Get_OwnershipCheck_AllowsOwner(t *testing.T) {
+	id := "iop0123456789abcdefg" // 20 chars, iam prefix
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner1",
+	}
+	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("usr_owner1", "user")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get own operation: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+}
+
+// TestOpsProxy_Get_OwnershipCheck_DeniesOther — чужой principal не видит операцию.
+// KAC-127: ownership check блокирует доступ к чужой операции (PermissionDenied).
+func TestOpsProxy_Get_OwnershipCheck_DeniesOther(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner1",
+	}
+	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("usr_other", "user")
+	_, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err == nil {
+		t.Fatal("ожидали ошибку для чужого principal")
+	}
+	st, _ := status.FromError(err)
+	if st.Code() != codes.PermissionDenied {
+		t.Errorf("ожидали PERMISSION_DENIED, получили %s", st.Code())
+	}
+}
+
+// TestOpsProxy_Get_OwnershipCheck_AllowsBootstrap — system/bootstrap пропускается
+// (внутренние воркеры, не tenant).
+func TestOpsProxy_Get_OwnershipCheck_AllowsBootstrap(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner1",
+	}
+	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("bootstrap", "system")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get as bootstrap: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+}
+
+// TestOpsProxy_Get_OwnershipCheck_LegacyNoPrincipal — операция без principal_id
+// (legacy/pre-KAC-105) доступна без ownership-check (graceful degradation).
+func TestOpsProxy_Get_OwnershipCheck_LegacyNoPrincipal(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id: id,
+		// PrincipalType / PrincipalId отсутствуют (legacy op)
+	}
+	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("usr_anyone", "user")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get legacy op: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+}
+
+// TestOpsProxy_Cancel_OwnershipCheck_DeniesOther — Cancel тоже требует ownership.
+func TestOpsProxy_Cancel_OwnershipCheck_DeniesOther(t *testing.T) {
+	id := "enp0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner2",
+	}
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
+
+	ctx := withPrincipalMD("usr_attacker", "user")
+	_, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id})
+	if err == nil {
+		t.Fatal("ожидали ошибку для чужого Cancel")
+	}
+	st, _ := status.FromError(err)
+	if st.Code() != codes.PermissionDenied {
+		t.Errorf("ожидали PERMISSION_DENIED, получили %s", st.Code())
 	}
 }
 
