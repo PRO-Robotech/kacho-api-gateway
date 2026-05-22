@@ -58,13 +58,13 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-124, path: kacho-proto }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-compute, ref: main, path: kacho-compute }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
+        with: { repository: PRO-Robotech/kacho-iam, ref: KAC-124, path: kacho-iam }
       # kacho-workspace carries the shared authz-fixtures bootstrap
       # (tests/authz-fixtures/setup.sh + setup-jwt.py + patch-env.py).
       - uses: actions/checkout@v4
