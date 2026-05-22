@@ -9,231 +9,238 @@ Generated from L2 note `l2-operation-passthrough.md`.
 - `kacho.cloud.operation.OperationService/Cancel`
 - `kacho.cloud.operation.OperationService/Get`
 
+## RPC contract
+
+| RPC | gRPC | REST |
+|-----|------|------|
+| OperationService/Cancel | (CancelOperationRequest) → Operation | POST /operations/{operation_id}:cancel |
+| OperationService/Get | (GetOperationRequest) → Operation | GET /operations/{operation_id} |
+
 ## Call tree
 
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).Get`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).InvalidateAll`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).Set`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.AuthzChecker).Check`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMAuthorizeClient).Check`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMAuthorizeClient).Close`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).Close`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).IsSystemAdmin`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).LookupByExternalID`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).LookupOrUpsertFromKratos`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.SessionRevocationsAdapter).Revoke`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/handler.LogoutHandler).ServeHTTP`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/handler.LogoutHandler).killHydraSession`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).HTTP$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).Stream$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).Unary$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).authorize`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).injectAnonymous`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).injectPrincipal`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).validateJWT`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).validateJWT$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).ObserveLatencyMs`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordAllow`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordCacheHit`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordCacheMiss`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordDeny`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordError`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).HTTP$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).Stream$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).Unary$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).decide`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).decide$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).resolveRestFQN`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzOverrides).LoadFromFile$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzOverrides).Lookup`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).BuildHTTP`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).BuildPeerAddr`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).fillFromToken`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).resolveClientIP`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).resolveIPFromPeer`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPMiddleware).Wrap$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPMiddleware).challenge`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPReplayCache).Add`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPValidator).Validate`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPValidator).Validate$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DefaultPermissionLookup).Lookup`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IdempotencyStore).get`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IdempotencyStore).put`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).Introspect`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).fetchHydra`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).get`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).put`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).AlgForJWT`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).PublicKey`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).Thumbprint`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSCache).Resolve`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSCache).refresh`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSet).FindByKid`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWTVerifier).Verify`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWTVerifier).Verify$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).Whoami`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).evictLocked`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).fetch`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.MTLSBoundValidator).Validate`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Callback`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Callback$bound`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Login`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Login$bound`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Logout`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Logout$bound`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Me`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Me$bound`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.PermissionCatalog).LoadFromFile$1`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.PermissionCatalog).Lookup`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceExtractor).ExtractFromHTTP`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceExtractor).ExtractFromProto`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.RestRouter).Resolve`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StepUpGate).Check`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.SubjectExtractor).Extract`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).Network`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).String`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).addToHead`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).get`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).moveToHead`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).put`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).removeNode`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Header`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Read`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Write`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).WriteHeader`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Flush`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Header`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Write`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).WriteHeader`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).Context`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).RecvMsg`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).SendMsg`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).SetHeader`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).Cancel`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).Get`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).resolveBackend`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Marshal`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Reset`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).String`
-- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Unmarshal`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.CatalogEntry).IsExempt`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DefaultPermissionLookup).Lookup`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCConfig).externalIssuer`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceID).String`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).Network`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).String`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decision).gRPCStatus`
-- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decision).requiredACRMin`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$2`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$3`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$4`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$5`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$6`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$7`
-- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$8`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist.HasInternalSuffix`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist.IsAllowed`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.buildContextStruct`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.coerceProtoVal`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.coerceToProtoVals`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.isErrSubjectNotFound`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.pickDisplayName`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.retryable`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.toResult`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.truncateStr`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/handler.extractAccessToken`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/handler.writeJSON`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/health.HTTPHealthz`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/health.HTTPReadyz$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.BuildStepUpChallenge`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPAccessLog$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPAccessLog$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPIdempotency$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPIdempotency$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRequestID$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ParseJWKHeader`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.RequestIDFromContext`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamAccessLog$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRecovery$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRecovery$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRequestID`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryAccessLog$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRecovery$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRecovery$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRequestID`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.absoluteRequestURL`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.acrRank`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.athThumbprint`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.audienceContains`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.buildCacheKey`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.buildGRPCDenyStatus`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.canonicalHTU`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.canonicaliseIP`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.certThumbprint`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.classifyDenyReasonType`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.classifyPrincipal`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.coerceUnixSeconds`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.defaultIfEmpty`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.defaultIfEmptyStr`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ecdsaFromJWK`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ed25519FromJWK`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractAudience`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractBearer`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByPathTemplate`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByProtoReflect`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByProtoReflect$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByReflect`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractFromJSONBody`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.grpcMetaForwardedFor`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.grpcMethodForPath`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.hasPrivateJWKFields`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.incomingMD`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.injectVerifiedTokenHeaders`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isMutating`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isPlaceholder`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isPublicHTTPPath`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.matchTemplate`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.newResponseWriter`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.normalizeFQN`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.numericTime`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.peerAddr`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.peerAddrToAddr`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.protoMessageFromAny`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.randomState`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.readStringField`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.requestIDFromIncoming`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.resolveClientCert`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.resourceLabel`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.rsaFromJWK`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.sanitizeErr`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.sanitizeReasonToken`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.shouldStepUpChallenge`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.snakeToCamel`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitAuthScheme`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitJWT`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitPath`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitVerb`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.stringSlice`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.subjectKindString`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.toSnakeCase`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.traceFromContext`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.validIP`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.verifiedTokenFromCtxOrHTTP`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.writeHTTPDeny`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.writeHTTPUnauthorized`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1$2`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Resolver$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$2`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$2$1`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$3`
-- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.isInternalPath`
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).Get` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).InvalidateAll` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/cache.SubjectCache).Set` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.AuthzChecker).Check` — Check forwards a middleware-shaped request through the gRPC client.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMAuthorizeClient).Check` — Check executes a single authorization decision with retry-on-Unavailable.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMAuthorizeClient).Close` — Close releases the gRPC connection.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).Close` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).IsSystemAdmin` — IsSystemAdmin — KAC-123: проверка system-admin tuple через InternalIAMService.Check(kacho_system:root#admin).
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).LookupByExternalID` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.IAMSubjectClient).LookupOrUpsertFromKratos` — LookupOrUpsertFromKratos — KAC-116: для Kratos session-flow.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/clients.SessionRevocationsAdapter).Revoke` — Revoke invokes InternalSessionRevocationsService.Revoke and discards the Operation envelope.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/handler.LogoutHandler).ServeHTTP` — ServeHTTP implements net/http.Handler.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/handler.LogoutHandler).killHydraSession` — killHydraSession invokes `DELETE /admin/oauth2/auth/sessions/login?subject={sub}`.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).HTTP$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).Stream$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).Unary$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).authorize` — authorize — основной flow: parse → validate → lookup → inject Principal.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).injectAnonymous` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).injectPrincipal` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).validateJWT` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthInterceptor).validateJWT$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).ObserveLatencyMs` — ObserveLatencyMs adds a latency sample to the histogram.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordAllow` — RecordAllow increments the allowed counter.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordCacheHit` — RecordCacheHit / RecordCacheMiss — decision cache.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordCacheMiss` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordDeny` — RecordDeny increments the denied counter.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMetrics).RecordError` — RecordError increments the error counter (Check call failed — Unavailable / Timeout / parser-failure / etc.).
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).HTTP$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).Stream$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).Unary$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).decide` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).decide$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzMiddleware).resolveRestFQN` — resolveRestFQN best-effort maps an incoming HTTP request to a gRPC FQN the catalog can look up.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzOverrides).LoadFromFile$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.AuthzOverrides).Lookup` — Lookup returns (decision, true) when an override applies.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).BuildHTTP` — BuildHTTP composes the context map for an HTTP request path.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).BuildPeerAddr` — BuildPeerAddr is the gRPC counterpart of BuildHTTP — when there is no http.Request, only a `net.Addr` from the peer.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).fillFromToken` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).resolveClientIP` — resolveClientIP returns the canonical client IP literal for an HTTP request, honouring X-Forwarded-For / X-Real-IP only when trustedXForwardedFor is set.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ContextExtractor).resolveIPFromPeer` — resolveIPFromPeer is the gRPC peer.Addr equivalent of resolveClientIP.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPMiddleware).Wrap$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPMiddleware).challenge` — challenge writes a 401 with a single WWW-Authenticate header + JSON body.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPReplayCache).Add` — Add registers a new jti.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPValidator).Validate` — Validate runs the full pipeline.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DPoPValidator).Validate$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DefaultPermissionLookup).Lookup` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IdempotencyStore).get` — get возвращает сохранённый entry или (zero, false) если ключа нет/expired.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IdempotencyStore).put` — put сохраняет entry с TTL.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).Introspect` — Introspect returns the cached or freshly-fetched introspection result.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).fetchHydra` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).get` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.IntrospectionCache).put` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).AlgForJWT` — AlgForJWT returns the JWS alg this key MUST be used for (RFC 7517 §4.4 "alg" when present; otherwise derived from kty+crv).
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).PublicKey` — PublicKey converts the JWK to a stdlib crypto.PublicKey, validating shape.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWK).Thumbprint` — Thumbprint — RFC 7638 §3 SHA-256 JWK thumbprint (base64url, no padding).
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSCache).Resolve` — Resolve looks up a JWK by kid, refreshing the cache when stale or when the kid is unknown.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSCache).refresh` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWKSet).FindByKid` — FindByKid returns the first JWK with matching kid.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWTVerifier).Verify` — Verify parses and validates the access token.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.JWTVerifier).Verify$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).Whoami` — Whoami извлекает identity из Kratos session по cookie-string (целиком Cookie-header).
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).evictLocked` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.KratosClient).fetch` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.MTLSBoundValidator).Validate` — Validate runs RFC 8705 verification.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Callback` — Callback ?code=&state= → exchange + set session.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Callback$bound` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Login` — Login → 302 на Zitadel.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Login$bound` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Logout` — Logout — clear cookies + 200.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Logout$bound` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Me` — Me — UI hook /me.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCHandler).Me$bound` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.PermissionCatalog).LoadFromFile$1` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.PermissionCatalog).Lookup` — Lookup returns the catalog entry for the given gRPC FQN, e.g.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceExtractor).ExtractFromHTTP` — ExtractFromHTTP extracts the resource id from an HTTP request when the proto body hasn't been decoded yet.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceExtractor).ExtractFromProto` — ExtractFromProto applies the catalog `from_request_field` directive to a typed proto request, returning the resolved ResourceID + ok.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.RestRouter).Resolve` — Resolve maps an HTTP (method, path) to a gRPC FQN.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StepUpGate).Check` — Check enforces both `acr` floor and `auth_time` freshness.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.SubjectExtractor).Extract` — Extract reads kacho_principal_* / kacho_user_id / kacho_sa_id / kacho_workload_id from the verified token's ext_claims and returns the most-specific resolution.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).Network` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).String` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).addToHead` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).get` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).moveToHead` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).put` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decisionCache).removeNode` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Header` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Read` — Read удовлетворяет io.Reader, на случай если кто-то вызовет на нём Read.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).Write` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseRecorder).WriteHeader` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Flush` — Flush — для grpc-gateway server-streaming.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Header` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).Write` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.responseWriter).WriteHeader` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).Context` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).RecvMsg` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).SendMsg` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.wrappedStream).SetHeader` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).Cancel` — Cancel проксирует OperationService.Cancel к нужному backend по prefix id.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).Get` — Get проксирует OperationService.Get к нужному backend по prefix id.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy.OpsProxy).resolveBackend` — resolveBackend парсит domain-prefix из Operation.id и возвращает либо клиент нужного backend, либо gRPC-ошибку, как её отдал бы verbatim YC (probe 2026-05-11):
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Marshal` — Marshal/Unmarshal — proxy через raw payload.
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Reset` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).String` — (undocumented — see C4)
+- `(*github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.emptyFrame).Unmarshal` — (undocumented — see C4)
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.CatalogEntry).IsExempt` — IsExempt reports whether this entry is the wildcard public-allowlist marker.
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.DefaultPermissionLookup).Lookup` — Lookup always returns the no-op requirement.
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.OIDCConfig).externalIssuer` — externalIssuer возвращает endpoint для browser-redirect (или Issuer как fallback).
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ResourceID).String` — String renders the id as a plain string (no prefix).
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).Network` — (undocumented — see C4)
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.addrShim).String` — (undocumented — see C4)
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decision).gRPCStatus` — (undocumented — see C4)
+- `(github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.decision).requiredACRMin` — requiredACRMin returns the catalog-declared ACR floor (default "2").
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$2` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$3` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$4` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$5` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$6` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$7` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/cmd/api-gateway.main$8` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist.HasInternalSuffix` — HasInternalSuffix — эшелонированная защита: любой метод, чей gRPC-service помечен как internal, блокируется автоматически, даже если он случайно попал в AllowedMethods.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist.IsAllowed` — IsAllowed проверяет, что метод находится в списке разрешённых публичных RPC.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.buildContextStruct` — buildContextStruct converts a Go context map into a *structpb.Struct.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.coerceProtoVal` — coerceProtoVal is the per-value variant of coerceToProtoVals; recurses into slices and maps.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.coerceToProtoVals` — coerceToProtoVals normalises Go types that structpb cannot directly encode (e.g.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.isErrSubjectNotFound` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.pickDisplayName` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.retryable` — retryable returns true for transient gRPC codes that warrant a single retry.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.toResult` — toResult converts proto response → caller-facing struct.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/clients.truncateStr` — truncateStr clamps a string to maxLen runes safely.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/handler.extractAccessToken` — extractAccessToken pulls the bearer/DPoP token from the Authorization header.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/handler.writeJSON` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/health.HTTPHealthz` — HTTPHealthz обрабатывает GET /healthz.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/health.HTTPReadyz$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.BuildStepUpChallenge` — BuildStepUpChallenge produces an RFC 9470 §3 / RFC 6750 challenge header value for the given requirement.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPAccessLog$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPAccessLog$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPIdempotency$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPIdempotency$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRecovery$1$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.HTTPRequestID$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ParseJWKHeader` — ParseJWKHeader decodes an embedded `jwk` JSON object from a DPoP JWT header.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.RequestIDFromContext` — RequestIDFromContext возвращает request-id из контекста (используется в логировании).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamAccessLog$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRecovery$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRecovery$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.StreamRequestID` — StreamRequestID — streaming gRPC interceptor.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryAccessLog$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRecovery$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRecovery$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.UnaryRequestID` — UnaryRequestID — unary gRPC interceptor: обеспечивает x-request-id в контексте и прокидывает его в trailing metadata ответа.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.absoluteRequestURL` — absoluteRequestURL reconstructs the canonical URL the client used to address this request.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.acrRank` — acrRank maps ACR strings to a comparable integer.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.athThumbprint` — athThumbprint returns base64url-no-pad SHA-256 of the raw access token (RFC 9449 §4.3 — "ath: access token hash").
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.audienceContains` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.buildCacheKey` — buildCacheKey — stable cache key over (subject, action, resource, principal-binding context).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.buildGRPCDenyStatus` — buildGRPCDenyStatus constructs a *status.Status with attached PreconditionFailure violations.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.canonicalHTU` — canonicalHTU normalises a URL per RFC 9449 §4.3 / RFC 3986 §6.2:
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.canonicaliseIP` — canonicaliseIP normalises an IP literal (trims, lowercases IPv6) so cache keys derived from it are stable.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.certThumbprint` — certThumbprint computes base64url-no-pad SHA-256 of the raw DER bytes — the same definition Hydra uses when injecting cnf.x5t#S256 (RFC 8705 §3.1).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.classifyDenyReasonType` — classifyDenyReasonType inspects a deny reason string and assigns it a machine-readable type.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.classifyPrincipal` — classifyPrincipal maps the kacho-native principal-type string to a Kind and the matching FGA prefix.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.coerceUnixSeconds` — coerceUnixSeconds reads a JSON-decoded value (likely float64 from JWT claims) into a Unix-seconds int64.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.defaultIfEmpty` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.defaultIfEmptyStr` — defaultIfEmptyStr — tiny helper.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ecdsaFromJWK` — ecdsaFromJWK reconstructs *ecdsa.PublicKey from RFC 7518 §6.2.1 fields.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.ed25519FromJWK` — ed25519FromJWK reconstructs ed25519.PublicKey from RFC 8037 §2 fields.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractAudience` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractBearer` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByPathTemplate` — extractByPathTemplate parses a grpc-gateway-style path template (`/iam/v1/projects/{project_id}`) against the incoming URL path and returns the value of the placeholder matching the catalog's `from_request_field` (`project_id` in this example).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByProtoReflect` — extractByProtoReflect walks the message fields looking up the named field.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByProtoReflect$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractByReflect` — extractByReflect — non-proto fallback for tests / handwritten request types.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.extractFromJSONBody` — extractFromJSONBody reads a top-level string field out of the request's JSON body and restores the body for downstream consumers.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.grpcMetaForwardedFor` — grpcMetaForwardedFor extracts the X-Forwarded-For from grpc-gateway- rewritten metadata.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.grpcMethodForPath` — grpcMethodForPath converts a REST path (`/iam/v1/users/abc`) to its approximate gRPC FQN (`/kacho.cloud.iam.v1.UserService/Get`) for permission catalog lookup.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.hasPrivateJWKFields` — hasPrivateJWKFields detects `d`, `p`, `q`, `dp`, `dq`, `qi` — any of these in a public JWK indicates leaked private material.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.incomingMD` — incomingMD returns the gRPC incoming metadata or nil.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.injectVerifiedTokenHeaders` — injectVerifiedTokenHeaders adds X-Kacho-Principal-* headers from a verified JWT.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isMutating` — isMutating — true если HTTP метод изменяет state.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isPlaceholder` — isPlaceholder reports whether a template segment is a `{field}` capture.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.isPublicHTTPPath` — isPublicHTTPPath returns true for fixed public endpoints (healthz, readyz, oauth flows).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.matchTemplate` — matchTemplate reports whether reqPath matches a grpc-gateway path template.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.newResponseWriter` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.normalizeFQN` — normalizeFQN strips the leading `/` from gRPC FullMethod and turns the `pkg.Service/Method` portion into the canonical FQN shape used by the catalog ("kacho.cloud.iam.v1.AuthorizeService/Check").
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.numericTime` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.peerAddr` — peerAddr returns the client peer.Addr.String() from a gRPC context, or "" when no peer is attached.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.peerAddrToAddr` — peerAddrToAddr — wraps a raw "ip:port" string in net.Addr (we use a thin shim because peer.Peer keeps the original net.Addr; the wrapper avoids re-parsing for the metric path).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.protoMessageFromAny` — protoMessageFromAny tries to assert the supplied interface as a proto.Message.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.randomState` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.readStringField` — readStringField extracts a string-typed field, recursing into pointers / nested structs (taking the first non-empty string field) so a `*ResourceRef{Id:"X"}` resolves to "X".
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.requestIDFromIncoming` — requestIDFromIncoming извлекает x-request-id из входящих gRPC metadata.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.resolveClientCert` — resolveClientCert returns the leaf certificate from either the TLS conn state or an explicit parameter.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.resourceLabel` — resourceLabel returns the canonical "<type>:<id>" string used as the violation Subject.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.rsaFromJWK` — rsaFromJWK reconstructs *rsa.PublicKey from RFC 7518 §6.3.1 fields.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.sanitizeErr` — sanitizeErr returns a single-line human description suitable for HTTP header value.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.sanitizeReasonToken` — sanitizeReasonToken — stable lower-case identifier (alnum + underscore).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.shouldStepUpChallenge` — shouldStepUpChallenge reports whether the deny reasons indicate the client can satisfy the gate by re-authenticating with a stronger ACR.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.snakeToCamel` — snakeToCamel converts `account_id` -> `accountId` (REST JSON spelling).
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitAuthScheme` — splitAuthScheme returns (token, scheme) where scheme ∈ {"Bearer","DPoP"}.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitJWT` — splitJWT decodes the three base64url segments of a compact JWS.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitPath` — splitPath tokenizes a path into its non-empty slash-separated segments.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.splitVerb` — splitVerb separates an optional grpc-gateway `:verb` suffix-action from the last path segment.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.stringSlice` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.subjectKindString` — subjectKindString — stable string label for SubjectKind.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.toSnakeCase` — toSnakeCase — minimal CamelCase → snake_case for field-name normalisation.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.traceFromContext` — traceFromContext extracts the request-id for correlation, prioritising metadata over the gRPC context-key.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.validIP` — validIP reports whether s parses as an IP literal.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.verifiedTokenFromCtxOrHTTP` — verifiedTokenFromCtxOrHTTP — Phase 2 stores the verified token in the request headers (X-Kacho-Token-Acr / Jti / Scope / Exp) and in the gRPC metadata after the DPoP middleware ran.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.writeHTTPDeny` — writeHTTPDeny renders a 403 response with the same descriptor / reasons.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/middleware.writeHTTPUnauthorized` — writeHTTPUnauthorized emits a 401 with a gRPC-shaped JSON body (code 16 = Unauthenticated) and a `WWW-Authenticate` challenge.
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Handler$1$2` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/proxy.Resolver$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$2` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$2$1` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.NewMux$3` — (undocumented — see C4)
+- `github.com/PRO-Robotech/kacho-api-gateway/internal/restmux.isInternalPath` — isInternalPath решает, какой sub-mux обрабатывает запрос.
 
 ## Exported signatures
 
