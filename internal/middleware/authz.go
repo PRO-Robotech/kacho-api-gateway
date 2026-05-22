@@ -216,6 +216,33 @@ func NewAuthzMiddleware(cfg AuthzMiddlewareConfig) (*AuthzMiddleware, error) {
 // Metrics returns the metrics sink; used by `/metrics` rendering elsewhere.
 func (m *AuthzMiddleware) Metrics() *AuthzMetrics { return m.metrics }
 
+// subjectChangingFQNs — gRPC FQNs whose success changes a subject's grants.
+// On a 2xx response the gateway flushes its decision cache so the new grant
+// state takes effect immediately for this replica (WS-2.3 self-flush). Sibling
+// replicas converge via the subject-change poll-loop (WS-2.3 Task 4).
+var subjectChangingFQNs = map[string]struct{}{
+	"kacho.cloud.iam.v1.AccessBindingService/Create": {},
+	"kacho.cloud.iam.v1.AccessBindingService/Delete": {},
+}
+
+// MaybeFlushOnMutation flushes the decision cache when fqn is a grant-changing
+// RPC and the proxied response was successful (HTTP 2xx). Safe to call on every
+// request — it is a no-op for non-mutating FQNs and non-2xx responses.
+func (m *AuthzMiddleware) MaybeFlushOnMutation(fqn string, httpStatus int) {
+	if m.cache == nil || httpStatus < 200 || httpStatus >= 300 {
+		return
+	}
+	if _, ok := subjectChangingFQNs[normalizeFQN(fqn)]; !ok {
+		return
+	}
+	m.cache.Invalidate()
+	m.cfg.Logger.Info("authz decision-cache flushed on grant mutation", "fqn", fqn)
+}
+
+// Cache exposes the decision cache so the WS-2.3 subject-change watcher (Task 4)
+// can flush it. Returns nil when authz is disabled.
+func (m *AuthzMiddleware) Cache() *decisionCache { return m.cache }
+
 // Unary returns a gRPC UnaryServerInterceptor enforcing per-RPC authz.
 func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -224,14 +251,18 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 		}
 		fqn := normalizeFQN(info.FullMethod)
 		decision := m.decide(ctx, decisionRequest{
-			FQN:       fqn,
-			ProtoReq:  req,
-			GRPCPeer:  peerAddr(ctx),
-			GRPCMeta:  incomingMD(ctx),
+			FQN:      fqn,
+			ProtoReq: req,
+			GRPCPeer: peerAddr(ctx),
+			GRPCMeta: incomingMD(ctx),
 		})
 		switch decision.outcome {
 		case outcomeAllow:
-			return handler(ctx, req)
+			resp, hErr := handler(ctx, req)
+			if hErr == nil {
+				m.MaybeFlushOnMutation(fqn, 200)
+			}
+			return resp, hErr
 		case outcomeDeny:
 			return nil, decision.gRPCStatus().Err()
 		case outcomeError:
@@ -258,10 +289,10 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 		}
 		fqn := normalizeFQN(info.FullMethod)
 		decision := m.decide(ss.Context(), decisionRequest{
-			FQN:       fqn,
-			ProtoReq:  nil, // stream requests aren't materialised yet
-			GRPCPeer:  peerAddr(ss.Context()),
-			GRPCMeta:  incomingMD(ss.Context()),
+			FQN:      fqn,
+			ProtoReq: nil, // stream requests aren't materialised yet
+			GRPCPeer: peerAddr(ss.Context()),
+			GRPCMeta: incomingMD(ss.Context()),
 		})
 		switch decision.outcome {
 		case outcomeAllow:
@@ -303,7 +334,9 @@ func (m *AuthzMiddleware) HTTP(next http.Handler) http.Handler {
 		})
 		switch decision.outcome {
 		case outcomeAllow:
-			next.ServeHTTP(w, r)
+			rw := newResponseWriter(w)
+			next.ServeHTTP(rw, r)
+			m.MaybeFlushOnMutation(fqn, rw.statusCode)
 		case outcomeDeny:
 			challenge := ""
 			if shouldStepUpChallenge(decision.reasons) {
@@ -769,13 +802,13 @@ type decisionCacheEntry struct {
 
 // decisionCache — LRU-with-TTL, safe for concurrent use.
 type decisionCache struct {
-	mu       sync.Mutex
-	entries  map[string]*cacheNode
-	head     *cacheNode // most-recently-used
-	tail     *cacheNode // least-recently-used
-	maxSize  int
-	ttl      time.Duration
-	now      func() time.Time
+	mu      sync.Mutex
+	entries map[string]*cacheNode
+	head    *cacheNode // most-recently-used
+	tail    *cacheNode // least-recently-used
+	maxSize int
+	ttl     time.Duration
+	now     func() time.Time
 }
 
 type cacheNode struct {
@@ -911,6 +944,9 @@ func (c *decisionCache) Size() int {
 	return len(c.entries)
 }
 
+// Len returns the number of live cache entries (alias for Size, used in tests).
+func (c *decisionCache) Len() int { c.mu.Lock(); defer c.mu.Unlock(); return len(c.entries) }
+
 // buildCacheKey — stable cache key over (subject, action, resource,
 // principal-binding context). Including `acr`/`mfa_at`/`client_ip` ensures
 // step-up changes invalidate naturally; excluding `current_time`/`jti`
@@ -938,4 +974,3 @@ func buildCacheKey(subject, action, resourceType, resourceID string, contextMap 
 	// Format: "<subject>|<sha256-hex>".
 	return subject + "|" + hex.EncodeToString(sum[:])
 }
-
