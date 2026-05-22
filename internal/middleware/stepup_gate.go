@@ -119,6 +119,7 @@ func BuildStepUpChallenge(req PermissionRequirement, presentedACR string) string
 	return out
 }
 
+// defaultIfEmpty возвращает s, а если она пуста — значение def.
 func defaultIfEmpty(s, def string) string {
 	if s == "" {
 		return def

@@ -96,6 +96,8 @@ func (c *KratosClient) Whoami(ctx context.Context, cookieHeader string) KratosWh
 	return res
 }
 
+// fetch вызывает Kratos /sessions/whoami с переданным Cookie-заголовком и
+// возвращает identity-данные сессии (пустой результат при ошибке/неактивной сессии).
 func (c *KratosClient) fetch(ctx context.Context, cookieHeader string) KratosWhoamiResult {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.BaseURL+"/sessions/whoami", nil)
@@ -130,6 +132,8 @@ func (c *KratosClient) fetch(ctx context.Context, cookieHeader string) KratosWho
 	}
 }
 
+// evictLocked удаляет протухшие записи из позитивного и негативного кэшей;
+// вызывается под уже взятым c.mu.
 func (c *KratosClient) evictLocked(now time.Time) {
 	for k, e := range c.posCache {
 		if now.After(e.expiry) {

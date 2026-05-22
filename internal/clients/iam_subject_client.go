@@ -32,6 +32,8 @@ type IAMSubjectClient struct {
 	logger   *slog.Logger
 }
 
+// NewIAMSubjectClient устанавливает gRPC-соединение с kacho-iam (internal-port)
+// и возвращает клиент с keepalive и встроенным TTL-кэшем Subject.
 func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, error) {
 	if addr == "" {
 		return nil, fmt.Errorf("iam internal addr empty")
@@ -57,6 +59,9 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, e
 	}, nil
 }
 
+// LookupByExternalID резолвит external-id в Subject через
+// InternalIAMService.LookupSubject; результат кэшируется, NotFound маппится в
+// текстовую ошибку "subject not found: ...".
 func (c *IAMSubjectClient) LookupByExternalID(ctx context.Context, externalID string) (middleware.Subject, error) {
 	if externalID == "" {
 		return middleware.Subject{}, stderrors.New("external_id empty")
@@ -147,6 +152,8 @@ func (c *IAMSubjectClient) LookupOrUpsertFromKratos(ctx context.Context, identit
 // от других ошибок (network, panic, и т.п.).
 var errSubjectNotFound = stderrors.New("subject not found")
 
+// isErrSubjectNotFound сообщает, является ли err ошибкой «subject не найден» —
+// по sentinel-у errSubjectNotFound либо по текстовому префиксу.
 func isErrSubjectNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -180,9 +187,14 @@ func (c *IAMSubjectClient) IsSystemAdmin(ctx context.Context, subject string) (b
 	return resp.GetAllowed(), nil
 }
 
+// InvalidateAll сбрасывает встроенный кэш Subject целиком.
 func (c *IAMSubjectClient) InvalidateAll() { c.cache.InvalidateAll() }
-func (c *IAMSubjectClient) Close() error  { return c.conn.Close() }
 
+// Close закрывает gRPC-соединение с kacho-iam.
+func (c *IAMSubjectClient) Close() error { return c.conn.Close() }
+
+// pickDisplayName возвращает displayName, а при его отсутствии — email
+// как fallback-имя для отображения.
 func pickDisplayName(displayName, email string) string {
 	if displayName != "" {
 		return displayName

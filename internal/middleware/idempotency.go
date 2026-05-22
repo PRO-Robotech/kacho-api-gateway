@@ -163,6 +163,7 @@ type responseRecorder struct {
 	wroteHdr   bool
 }
 
+// WriteHeader запоминает статус-код и проксирует его в нижележащий writer (однократно).
 func (r *responseRecorder) WriteHeader(code int) {
 	if r.wroteHdr {
 		return
@@ -172,6 +173,7 @@ func (r *responseRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Write копит тело ответа в буфер (для кеширования) и проксирует его клиенту.
 func (r *responseRecorder) Write(b []byte) (int, error) {
 	if !r.wroteHdr {
 		r.WriteHeader(http.StatusOK)

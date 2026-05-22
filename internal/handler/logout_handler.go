@@ -206,6 +206,7 @@ func extractAccessToken(r *http.Request) string {
 	return ""
 }
 
+// writeJSON сериализует body в JSON и пишет его в ответ с указанным HTTP-статусом.
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

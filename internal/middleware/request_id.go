@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// requestIDKey — имя metadata/HTTP-заголовка, несущего request-id.
 const requestIDKey = "x-request-id"
 
 // requestIDFromIncoming извлекает x-request-id из входящих gRPC metadata.
@@ -70,6 +71,7 @@ type wrappedStream struct {
 	ctx context.Context
 }
 
+// Context возвращает подменённый контекст обёрнутого ServerStream.
 func (w *wrappedStream) Context() context.Context { return w.ctx }
 
 // HTTPRequestID — HTTP middleware: обеспечивает X-Request-ID в HTTP-запросах.

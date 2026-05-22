@@ -51,10 +51,14 @@ func (c OIDCConfig) externalIssuer() string {
 }
 
 const (
-	stateCookieName   = "kacho_oauth_state"
+	// stateCookieName — имя cookie с OAuth2 state-параметром (CSRF-защита signin-flow).
+	stateCookieName = "kacho_oauth_state"
+	// sessionCookieName — имя cookie с session-токеном после успешного входа.
 	sessionCookieName = "kacho_session"
-	stateCookieMaxAge = 600 // 10 минут на signin flow
-	sessionMaxAge     = 3600
+	// stateCookieMaxAge — TTL state-cookie в секундах (10 минут на signin flow).
+	stateCookieMaxAge = 600
+	// sessionMaxAge — TTL session-cookie в секундах (1 час).
+	sessionMaxAge = 3600
 )
 
 // AdminChecker — KAC-123: port для проверки system-admin (Keto kacho_system:root#admin).
@@ -74,6 +78,8 @@ type OIDCHandler struct {
 	adminCheck    AdminChecker    // KAC-123: optional admin-tuple lookup
 }
 
+// NewOIDCHandler создаёт OIDC-хендлер (signin/callback/me/logout endpoint'ы)
+// с заданной конфигурацией и HTTP-клиентом с таймаутом.
 func NewOIDCHandler(cfg OIDCConfig, logger *slog.Logger) *OIDCHandler {
 	return &OIDCHandler{
 		cfg:    cfg,
@@ -279,6 +285,7 @@ func (h *OIDCHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
 
+// randomState генерирует криптослучайный base64url-state для OAuth2 signin-flow.
 func randomState() (string, error) {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {

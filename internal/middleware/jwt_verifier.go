@@ -185,6 +185,8 @@ func (c *JWKSCache) Resolve(ctx context.Context, kid string) (*JWK, error) {
 	return c.set.FindByKid(kid)
 }
 
+// refresh перезагружает JWKS-набор с провайдера под mutex'ом; делает double-check,
+// чтобы не дублировать fetch, если другая горутина уже обновила набор.
 func (c *JWKSCache) refresh(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -380,6 +382,8 @@ func splitJWT(token string) (header, payload, sig []byte, err error) {
 	return header, payload, sig, nil
 }
 
+// extractAudience извлекает claim "aud" как срез строк, принимая и string,
+// и массив; неподходящий тип — ошибка.
 func extractAudience(claims jwt.MapClaims) ([]string, error) {
 	v, ok := claims["aud"]
 	if !ok {
@@ -403,6 +407,7 @@ func extractAudience(claims jwt.MapClaims) ([]string, error) {
 	}
 }
 
+// audienceContains сообщает, присутствует ли want среди audience-значений auds.
 func audienceContains(auds []string, want string) bool {
 	for _, a := range auds {
 		if a == want {
@@ -412,6 +417,8 @@ func audienceContains(auds []string, want string) bool {
 	return false
 }
 
+// numericTime интерпретирует JWT-claim как Unix-секунды (float64/int64/json.Number)
+// и возвращает time.Time; ok=false при неподходящем типе.
 func numericTime(v any) (time.Time, bool) {
 	switch n := v.(type) {
 	case float64:
@@ -427,6 +434,8 @@ func numericTime(v any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// stringSlice приводит claim-значение к срезу строк, принимая []any, []string
+// или одиночную string; иные типы дают nil.
 func stringSlice(v any) []string {
 	switch t := v.(type) {
 	case []any:

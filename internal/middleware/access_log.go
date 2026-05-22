@@ -70,10 +70,13 @@ type responseWriter struct {
 	wroteHeader bool
 }
 
+// newResponseWriter оборачивает http.ResponseWriter для перехвата статус-кода
+// (дефолт — 200 OK).
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 }
 
+// WriteHeader запоминает статус-код для access-лога и проксирует его (однократно).
 func (rw *responseWriter) WriteHeader(code int) {
 	if rw.wroteHeader {
 		return
@@ -83,6 +86,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Write проксирует тело ответа клиенту, фиксируя факт записи заголовка.
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if !rw.wroteHeader {
 		rw.wroteHeader = true

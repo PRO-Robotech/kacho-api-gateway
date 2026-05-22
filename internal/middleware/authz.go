@@ -342,8 +342,11 @@ type decisionRequest struct {
 type decisionOutcome int
 
 const (
+	// outcomeAllow — authz-проверка разрешила запрос.
 	outcomeAllow decisionOutcome = iota
+	// outcomeDeny — authz-проверка отклонила запрос (PermissionDenied).
 	outcomeDeny
+	// outcomeError — проверку не удалось выполнить (Check failed: Unavailable/timeout/parse).
 	outcomeError
 )
 
@@ -355,6 +358,7 @@ type decision struct {
 	entry      CatalogEntry
 }
 
+// gRPCStatus строит gRPC-status PermissionDenied из дескриптора и причин отказа.
 func (d decision) gRPCStatus() *status.Status {
 	return buildGRPCDenyStatus(d.descriptor, d.reasons)
 }
@@ -367,6 +371,8 @@ func (d decision) requiredACRMin() string {
 	return d.entry.RequiredACRMin
 }
 
+// decide выносит authz-решение по запросу: allowlist short-circuit, кэш,
+// override-правила и вызов IAM Check; замеряет latency в метрики.
 func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decision {
 	start := m.now()
 	defer func() {
@@ -613,8 +619,11 @@ func peerAddrToAddr(s string) addrShim {
 
 type addrShim string
 
+// Network возвращает "tcp" — addrShim реализует net.Addr для peer-адреса.
 func (a addrShim) Network() string { return "tcp" }
-func (a addrShim) String() string  { return string(a) }
+
+// String возвращает строковое представление peer-адреса.
+func (a addrShim) String() string { return string(a) }
 
 // incomingMD returns the gRPC incoming metadata or nil.
 func incomingMD(ctx context.Context) metadata.MD {
@@ -786,6 +795,7 @@ type cacheNode struct {
 	next      *cacheNode
 }
 
+// newDecisionCache создаёт LRU+TTL кэш authz-решений; nil-now заменяется на time.Now.
 func newDecisionCache(maxSize int, ttl time.Duration, now func() time.Time) *decisionCache {
 	if now == nil {
 		now = time.Now
@@ -798,6 +808,8 @@ func newDecisionCache(maxSize int, ttl time.Duration, now func() time.Time) *dec
 	}
 }
 
+// get возвращает закэшированное authz-решение; протухшая по TTL запись
+// удаляется и считается промахом.
 func (c *decisionCache) get(key string) (decisionCacheEntry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -814,6 +826,8 @@ func (c *decisionCache) get(key string) (decisionCacheEntry, bool) {
 	return n.value, true
 }
 
+// put кладёт authz-решение в кэш, обновляя TTL и LRU-позицию; при переполнении
+// вытесняет хвостовую (давно использованную) запись.
 func (c *decisionCache) put(key string, v decisionCacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -869,6 +883,7 @@ func (c *decisionCache) InvalidateSubject(subject string) int {
 	return removed
 }
 
+// moveToHead перемещает узел в голову LRU-списка (отметка «недавно использован»).
 func (c *decisionCache) moveToHead(n *cacheNode) {
 	if n == c.head {
 		return
@@ -877,6 +892,7 @@ func (c *decisionCache) moveToHead(n *cacheNode) {
 	c.addToHead(n)
 }
 
+// addToHead вставляет узел в голову LRU-списка.
 func (c *decisionCache) addToHead(n *cacheNode) {
 	n.prev = nil
 	n.next = c.head
@@ -889,6 +905,7 @@ func (c *decisionCache) addToHead(n *cacheNode) {
 	}
 }
 
+// removeNode отцепляет узел от LRU-списка, чиня связи head/tail.
 func (c *decisionCache) removeNode(n *cacheNode) {
 	if n.prev != nil {
 		n.prev.next = n.next

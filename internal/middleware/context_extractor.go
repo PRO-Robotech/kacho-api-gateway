@@ -108,6 +108,8 @@ func (e *ContextExtractor) BuildPeerAddr(t *VerifiedToken, peerAddr net.Addr, he
 	return out
 }
 
+// fillFromToken добавляет в out атрибуты из verified-токена (acr/amr/auth_time)
+// для использования в authz-решении.
 func (e *ContextExtractor) fillFromToken(out map[string]any, t *VerifiedToken) {
 	if t == nil {
 		return

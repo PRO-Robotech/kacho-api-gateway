@@ -25,6 +25,8 @@ type subjectEntry struct {
 	expiresAt time.Time
 }
 
+// NewSubjectCache создаёт LRU-bounded + TTL кэш Subject; нулевые/отрицательные
+// maxSize и ttl заменяются дефолтами (10000 записей / 30s).
 func NewSubjectCache(maxSize int, ttl time.Duration) *SubjectCache {
 	if maxSize <= 0 {
 		maxSize = 10_000
@@ -41,6 +43,8 @@ func NewSubjectCache(maxSize int, ttl time.Duration) *SubjectCache {
 	}
 }
 
+// Get возвращает закэшированный Subject по ключу; протухшая по TTL запись
+// удаляется и считается промахом (ok=false).
 func (c *SubjectCache) Get(key string) (middleware.Subject, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -58,6 +62,8 @@ func (c *SubjectCache) Get(key string) (middleware.Subject, bool) {
 	return e.value, true
 }
 
+// Set кладёт Subject в кэш, обновляя TTL и LRU-позицию; при переполнении
+// вытесняет самую давно использованную запись.
 func (c *SubjectCache) Set(key string, v middleware.Subject) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -80,6 +86,7 @@ func (c *SubjectCache) Set(key string, v middleware.Subject) {
 	}
 }
 
+// Invalidate удаляет одну запись из кэша по ключу.
 func (c *SubjectCache) Invalidate(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -89,6 +96,7 @@ func (c *SubjectCache) Invalidate(key string) {
 	}
 }
 
+// InvalidateAll полностью очищает кэш.
 func (c *SubjectCache) InvalidateAll() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -96,6 +104,7 @@ func (c *SubjectCache) InvalidateAll() {
 	c.order = list.New()
 }
 
+// Len возвращает текущее число записей в кэше.
 func (c *SubjectCache) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()

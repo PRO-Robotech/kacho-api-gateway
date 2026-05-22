@@ -76,7 +76,9 @@ func (m *AuthzMetrics) RecordDeny() { m.deniedTotal.Add(1) }
 func (m *AuthzMetrics) RecordError() { m.errorTotal.Add(1) }
 
 // RecordCacheHit / RecordCacheMiss — decision cache.
-func (m *AuthzMetrics) RecordCacheHit()  { m.cacheHitTotal.Add(1) }
+func (m *AuthzMetrics) RecordCacheHit() { m.cacheHitTotal.Add(1) }
+
+// RecordCacheMiss increments the decision-cache miss counter.
 func (m *AuthzMetrics) RecordCacheMiss() { m.cacheMissTotal.Add(1) }
 
 // ObserveLatencyMs adds a latency sample to the histogram.

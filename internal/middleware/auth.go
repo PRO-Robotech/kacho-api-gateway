@@ -44,8 +44,11 @@ import (
 type AuthMode string
 
 const (
-	AuthModeDev              AuthMode = "dev"
-	AuthModeProduction       AuthMode = "production"
+	// AuthModeDev — dev-режим: JWT валидируется HMAC dev-secret'ом, без Zitadel JWKS.
+	AuthModeDev AuthMode = "dev"
+	// AuthModeProduction — production-режим: невалидный/отсутствующий токен → anonymous-принципал.
+	AuthModeProduction AuthMode = "production"
+	// AuthModeProductionStrict — строгий production: невалидный токен отклоняется (без anonymous-fallback).
 	AuthModeProductionStrict AuthMode = "production-strict"
 )
 
@@ -220,10 +223,14 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 	return a.injectPrincipal(ctx, subj.Type, subj.ID, subj.DisplayName), nil
 }
 
+// injectAnonymous помещает в ctx анонимный принципал (system:anonymous) —
+// для запросов без валидного токена в нестрогом режиме.
 func (a *AuthInterceptor) injectAnonymous(ctx context.Context) context.Context {
 	return a.injectPrincipal(ctx, "system", "anonymous", "")
 }
 
+// injectPrincipal кладёт принципал и в ctx (corelib), и в outgoing gRPC-metadata,
+// чтобы proxy-слой передал backend'у тип/id/display-имя субъекта.
 func (a *AuthInterceptor) injectPrincipal(ctx context.Context, pType, pID, displayName string) context.Context {
 	p := operations.Principal{Type: pType, ID: pID, DisplayName: displayName}
 	ctx = operations.WithPrincipal(ctx, p)
@@ -241,6 +248,8 @@ func (a *AuthInterceptor) injectPrincipal(ctx context.Context, pType, pID, displ
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
+// validateJWT парсит и проверяет JWT HMAC dev-secret'ом, возвращая его claims;
+// без сконфигурированного ключа возвращает ошибку.
 func (a *AuthInterceptor) validateJWT(tokenStr string) (jwt.MapClaims, error) {
 	if len(a.devSecret) == 0 {
 		// TODO(KAC-107 follow-up): Zitadel JWKS-validate ветка после фикса Zitadel deploy.
@@ -278,6 +287,8 @@ func writeHTTPUnauthorized(w http.ResponseWriter, desc string) {
 	_, _ = w.Write([]byte(`{"code":16,"message":"` + desc + `"}`))
 }
 
+// extractBearer извлекает токен из заголовка authorization входящего gRPC-metadata,
+// снимая префикс Bearer/bearer; возвращает "" если токена нет.
 func extractBearer(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

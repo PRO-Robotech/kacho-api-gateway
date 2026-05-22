@@ -207,6 +207,8 @@ func (o *AuthzOverrides) Size() int {
 	return len(*m)
 }
 
+// parseOverrideDecision парсит строковое override-решение ("allow"/"permit" или
+// "deny"/"forbid") в OverrideDecision; неизвестное значение — ошибка.
 func parseOverrideDecision(s string) (OverrideDecision, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "allow", "permit":

@@ -102,12 +102,19 @@ type emptyFrame struct {
 	payload []byte
 }
 
+// Reset — no-op, реализует proto.Message для raw frame pass-through.
 func (f *emptyFrame) Reset() {}
+
+// String возвращает пустую строку (raw frame не имеет текстового представления).
 func (f *emptyFrame) String() string {
 	return ""
 }
+
+// ProtoMessage — маркер-метод интерфейса proto.Message.
 func (f *emptyFrame) ProtoMessage() {}
 
 // Marshal/Unmarshal — proxy через raw payload.
 func (f *emptyFrame) Marshal() ([]byte, error) { return f.payload, nil }
+
+// Unmarshal сохраняет копию raw-байтов frame в payload.
 func (f *emptyFrame) Unmarshal(d []byte) error { f.payload = append([]byte(nil), d...); return nil }

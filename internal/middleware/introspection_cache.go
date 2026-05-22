@@ -187,6 +187,8 @@ func (c *IntrospectionCache) Len() int {
 	return c.lru.Len()
 }
 
+// get возвращает закэшированный результат интроспекции по jti; протухшая по TTL
+// запись удаляется и считается промахом.
 func (c *IntrospectionCache) get(jti string) (IntrospectionResult, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -204,6 +206,8 @@ func (c *IntrospectionCache) get(jti string) (IntrospectionResult, bool) {
 	return entry.result, true
 }
 
+// put кладёт результат интроспекции в LRU-кэш с заданным TTL, при переполнении
+// вытесняя самые давние записи.
 func (c *IntrospectionCache) put(jti string, res IntrospectionResult, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -230,6 +234,8 @@ func (c *IntrospectionCache) put(jti string, res IntrospectionResult, ttl time.D
 	c.entries[jti] = el
 }
 
+// fetchHydra выполняет OAuth2 token-introspection запрос к Hydra и возвращает
+// разобранный результат.
 func (c *IntrospectionCache) fetchHydra(ctx context.Context, rawToken string) (IntrospectionResult, error) {
 	form := url.Values{}
 	form.Set("token", rawToken)
