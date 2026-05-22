@@ -4,6 +4,10 @@
 
 Generated inventory of the repository's exported domain types, fields, variables and constants — each with its doc-comment synopsis and its structural links to the code.
 
+## Функциональности
+
+- [[l3-l2-operation-passthrough]]
+
 ## Types
 
 | Type | Kind | Synopsis | Fields | Used by |

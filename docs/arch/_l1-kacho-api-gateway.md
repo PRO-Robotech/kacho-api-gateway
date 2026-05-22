@@ -116,3 +116,11 @@ poll-loop для кросс-репликовой инвалидации authz-de
 
 То есть это не доменный воркер и не часть Operations — чисто edge-механизм
 консистентности authz-кэша между репликами gateway.
+
+## Связанные заметки
+
+<!-- archgraph:links -->
+- ↑ Проект: [[_l0-kacho]]
+- ↓ Функциональность: [[l2-operation-passthrough]]
+- Переменные: [[l4-kacho-api-gateway]]
+<!-- /archgraph:links -->

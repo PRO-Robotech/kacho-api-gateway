@@ -72,3 +72,11 @@ KAC-122/127).
   только generic `Get` / `Cancel`.
 - `status: planned` / `source_sha: ""` — L3/L4 ещё не зафиксированы
   archgraph'ом на конкретном sha.
+
+## Связанные заметки
+
+<!-- archgraph:links -->
+- ↑ Приклад: [[_l1-kacho-api-gateway]]
+- ↓ Функции (call-дерево, RPC contract): [[l3-l2-operation-passthrough]]
+- Переменные: [[l4-kacho-api-gateway]]
+<!-- /archgraph:links -->
