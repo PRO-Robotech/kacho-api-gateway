@@ -234,6 +234,9 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		case outcomeDeny:
 			return nil, decision.gRPCStatus().Err()
+		case outcomeUnauthenticated:
+			// KAC-130 BUG-2: no credentials → Unauthenticated(16), not PermissionDenied(7).
+			return nil, decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing request despite error",
@@ -267,6 +270,9 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 		case outcomeAllow:
 			return handler(srv, ss)
 		case outcomeDeny:
+			return decision.gRPCStatus().Err()
+		case outcomeUnauthenticated:
+			// KAC-130 BUG-2: no credentials → Unauthenticated(16), not PermissionDenied(7).
 			return decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
@@ -313,6 +319,10 @@ func (m *AuthzMiddleware) HTTP(next http.Handler) http.Handler {
 					decision.requiredACRMin() + `"`
 			}
 			writeHTTPDeny(w, decision.descriptor, decision.reasons, challenge)
+		case outcomeUnauthenticated:
+			// KAC-130 BUG-2: no credentials → 401 Unauthorized + code 16,
+			// not 403 Forbidden + code 7.
+			writeHTTPUnauth(w, decision.descriptor, decision.reasons)
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing http request despite error",
@@ -345,6 +355,15 @@ const (
 	outcomeAllow decisionOutcome = iota
 	outcomeDeny
 	outcomeError
+	// outcomeUnauthenticated — request carries NO credentials at all (no valid
+	// JWT / no authenticated subject). Maps to gRPC Unauthenticated(16) / HTTP
+	// 401. Distinct from outcomeDeny, which is reserved for authenticated
+	// subjects whose FGA check was denied (→ 7/403).
+	//
+	// KAC-130 BUG-2: gRPC/HTTP convention (RFC 7235, gRPC status code guide):
+	//   missing/invalid credentials → 16 UNAUTHENTICATED → HTTP 401
+	//   authenticated subject, access denied → 7 PERMISSION_DENIED → HTTP 403
+	outcomeUnauthenticated
 )
 
 type decision struct {
@@ -356,6 +375,9 @@ type decision struct {
 }
 
 func (d decision) gRPCStatus() *status.Status {
+	if d.outcome == outcomeUnauthenticated {
+		return buildGRPCUnauthStatus(d.descriptor, d.reasons)
+	}
 	return buildGRPCDenyStatus(d.descriptor, d.reasons)
 }
 
@@ -410,9 +432,13 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		// reached exempt List RPCs and got a 200 empty page instead of 401.
 		exemptVerified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
 		if _, authned := m.cfg.Subjects.Extract(exemptVerified); !authned {
+			// KAC-130 BUG-2: no credentials on an exempt RPC → Unauthenticated(16),
+			// not PermissionDenied(7). The request was not even authenticated; a
+			// "deny" response would mislead callers into thinking they are
+			// authenticated but forbidden.
 			m.metrics.RecordDeny()
 			return decision{
-				outcome: outcomeDeny,
+				outcome: outcomeUnauthenticated,
 				reasons: []string{"subject: unauthenticated request"},
 				descriptor: permissionDeniedDescriptor{
 					FQN:    dr.FQN,
@@ -448,9 +474,13 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	verified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
 	subj, ok := m.cfg.Subjects.Extract(verified)
 	if !ok {
+		// KAC-130 BUG-2: no authenticated subject (no JWT / invalid JWT) →
+		// Unauthenticated(16) / 401, not PermissionDenied(7) / 403.
+		// gRPC convention: UNAUTHENTICATED means "the caller is not identified";
+		// PERMISSION_DENIED means "identified caller has no access to the resource".
 		m.metrics.RecordDeny()
 		return decision{
-			outcome: outcomeDeny,
+			outcome: outcomeUnauthenticated,
 			reasons: []string{"subject: unauthenticated request"},
 			descriptor: permissionDeniedDescriptor{
 				FQN:    dr.FQN,
