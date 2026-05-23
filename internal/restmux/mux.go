@@ -401,6 +401,20 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
 			}
+			// KAC-132: JitPendingService + ComplianceReportService + AuthorizeService.
+			// All under /iam/v1/; без этих регистраций grpc-gateway не создаёт REST-routes
+			// → все POST /jitPending/:approve, GET /jitPending, POST /complianceReports:generate
+			// и POST /authorize:check → 404 (breaking iam-jit-pending + iam-compliance-report
+			// newman suites). AuthorizeService нужен для tenant FGA check flows.
+			if err := iampb.RegisterJitPendingServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam JitPendingService: %w", err)
+			}
+			if err := iampb.RegisterComplianceReportServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam ComplianceReportService: %w", err)
+			}
+			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam AuthorizeService: %w", err)
+			}
 		}
 
 		// --- iam.v1 admin (InternalUserService) — kacho-only, internal-port (9091) ---
