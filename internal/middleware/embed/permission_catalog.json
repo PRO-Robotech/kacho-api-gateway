@@ -1495,6 +1495,85 @@
     }
   },
   {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/ApproveJITActivation",
+    "permission": "iam.jit_pending.approve",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "iam_jit_pending",
+      "from_request_field": "request_id"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/DenyJITActivation",
+    "permission": "iam.jit_pending.deny",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "iam_jit_pending",
+      "from_request_field": "request_id"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/GetJitPending",
+    "permission": "iam.jit_pending.get",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_jit_pending",
+      "from_request_field": "request_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/ListJitPending",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GenerateAccessReport",
+    "permission": "iam.compliance_reports.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "scope_id"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GetComplianceReport",
+    "permission": "iam.compliance_reports.get",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_compliance_report",
+      "from_request_field": "report_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/ListComplianceReports",
+    "permission": "iam.compliance_reports.list",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "scope_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GetReportDownloadUrl",
+    "permission": "iam.compliance_reports.get",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_compliance_report",
+      "from_request_field": "report_id"
+    },
+    "required_acr_min": "3"
+  },
+  {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
     "permission": "<exempt>",
     "required_relation": "",
