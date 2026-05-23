@@ -48,10 +48,14 @@ func DefaultPublicAllowlist() []string {
 		"kacho.cloud.iam.v1.AuthService/RecoveryFinalise",
 		"kacho.cloud.iam.v1.AuthService/Register",
 
-		// Operation polling — gated INSIDE the IAM/VPC/Compute services on
-		// the underlying resource owner; running an extra Check here would
-		// double-spend the budget for a noisy poll path.
-		"kacho.cloud.operation.v1.OperationService/Get",
-		"kacho.cloud.operation.v1.OperationService/List",
+		// Operation polling — the catalog entries for OperationService use
+		// permission "<exempt>" (require authentication, skip FGA Check).
+		// These FQNs are NOT on the public allowlist; authentication is still
+		// enforced via the catalog exempt path.  The allowlist entries here
+		// were removed in KAC-127 because the proto package is
+		// "kacho.cloud.operation" (no ".v1."), the old "v1" FQNs never
+		// matched and silently left OperationService unprotected only at the
+		// allowlist level — the catalog path continued to apply.
+		// NOTE: do NOT add Internal* FQNs here (Запрет #6).
 	}
 }
