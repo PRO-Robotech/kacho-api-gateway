@@ -239,6 +239,32 @@ func main() {
 	// with Phase 1/2 dev environments).
 	var authzMW *middleware.AuthzMiddleware
 	{
+		// KAC-139 (W1.3): refuse to start if authz is disabled or fail-open in
+		// any production-class environment (prod / production / staging). The
+		// KACHO_APP_ENV signal is emitted from the helm overlay via extraEnv
+		// (see kacho-deploy values.prod.yaml). Non-prod envs are tolerated and
+		// surfaced via the WARN log below.
+		appEnv := os.Getenv("KACHO_APP_ENV")
+		if vErr := validateProductionAuthzConfig(appEnv, AuthzMiddlewareConfig{
+			Enabled:  cfg.AuthZEnabled,
+			FailOpen: cfg.AuthZFailOpen,
+		}); vErr != nil {
+			log.Fatalf("authz config startup-validation: %v", vErr)
+		}
+		// In non-prod envs surface relaxed config as a structured warning so
+		// operators see it in pod logs without grepping env-vars manually.
+		switch appEnv {
+		case "", "dev", "local":
+			if !cfg.AuthZEnabled || cfg.AuthZFailOpen {
+				logger.Warn("authz config relaxed for non-prod env",
+					"env", appEnv,
+					"enabled", cfg.AuthZEnabled,
+					"fail_open", cfg.AuthZFailOpen,
+					"ticket", "KAC-139",
+				)
+			}
+		}
+
 		authzMW, err = buildAuthzMiddleware(cfg, logger)
 		if err != nil {
 			log.Fatalf("authz middleware: %v", err)
@@ -250,6 +276,7 @@ func main() {
 				"cache_max", cfg.AuthZCacheMaxEntries,
 				"check_timeout_ms", cfg.AuthZCheckTimeoutMs,
 				"fail_open", cfg.AuthZFailOpen,
+				"app_env", appEnv,
 				"catalog_override_file", cfg.AuthZPermissionCatalogFile,
 				"overrides_file", cfg.AuthZOverridesFile,
 				"trusted_xff", cfg.AuthZTrustedXForwardedFor,
