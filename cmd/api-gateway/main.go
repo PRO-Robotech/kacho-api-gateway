@@ -37,6 +37,7 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/proxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/restmux"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/watcher"
 )
 
 func main() {
@@ -256,6 +257,22 @@ func main() {
 		} else {
 			logger.Info("authz-mw disabled (set KACHO_API_GATEWAY_AUTHZ_ENABLED=true to enable)")
 		}
+	}
+
+	// --- WS-2.3: subject-change poll-loop for cross-replica authz cache invalidation ---
+	// Runs only when authz is enabled (authzMW != nil covers both enabled and
+	// disabled — InvalidateCache is nil-safe, but polling is pointless when the
+	// cache is a no-op). Gate on cfg.AuthZEnabled to avoid spurious IAM polling
+	// in environments without authz.
+	if authzMW != nil {
+		scPoller := clients.NewSubjectChangePoller(backends["iamInternal"])
+		scWatcher := watcher.New(scPoller, authzMW.InvalidateCache,
+			cfg.SubjectChangePollInterval, logger)
+		// The watcher is poll-only with no shutdown cleanup; it exits when ctx is
+		// cancelled (SIGTERM/SIGINT). No WaitGroup join needed — nothing to flush on exit.
+		go scWatcher.Run(ctx)
+		logger.Info("WS-2.3 subject-change watcher started",
+			"interval", cfg.SubjectChangePollInterval)
 	}
 
 	// --- gRPC server ---
