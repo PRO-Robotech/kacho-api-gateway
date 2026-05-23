@@ -1495,6 +1495,80 @@
     }
   },
   {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/ApproveJITActivation",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/DenyJITActivation",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/GetJitPending",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.JitPendingService/ListJitPending",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GenerateAccessReport",
+    "permission": "iam.compliance_reports.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "account",
+      "from_request_field": "scope_id"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GetComplianceReport",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/ListComplianceReports",
+    "permission": "iam.compliance_reports.list",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "account",
+      "from_request_field": "scope_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.ComplianceReportService/GetReportDownloadUrl",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
     "permission": "<exempt>",
     "required_relation": "",
