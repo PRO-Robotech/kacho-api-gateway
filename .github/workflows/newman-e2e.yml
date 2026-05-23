@@ -22,8 +22,7 @@ name: newman-e2e
 # (unit + lint + scan) because a full kind bring-up takes 15-30 min — it must
 # not slow the fast feedback loop.
 #
-# Sibling repos pinned to latest fix branches for cross-repo CI (KAC-132):
-# kacho-proto→KAC-124, kacho-iam→KAC-130-integration, kacho-deploy→KAC-132, kacho-workspace→KAC-132. Revert after merge.
+# Sibling repos pinned to main (KAC-135: reverted stale KAC-124/KAC-130-integration/KAC-132 pins post-merge).
 
 on:
   push:
@@ -54,21 +53,21 @@ jobs:
       # authz fixtures bootstrap lives in kacho-workspace. KAC-127 is merged, so
       # every sibling is pinned to `main`.
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-deploy, ref: KAC-132, path: kacho-deploy }
+        with: { repository: PRO-Robotech/kacho-deploy, ref: main, path: kacho-deploy }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-124, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-compute, ref: main, path: kacho-compute }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-iam, ref: KAC-130-integration, path: kacho-iam }
+        with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
       # kacho-workspace carries the shared authz-fixtures bootstrap
       # (tests/authz-fixtures/setup.sh + setup-jwt.py + patch-env.py).
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-workspace, ref: KAC-132, path: kacho-workspace }
+        with: { repository: PRO-Robotech/kacho-workspace, ref: main, path: kacho-workspace }
       # kacho-ui is a private repo; best-effort checkout (parity with ci.yaml).
       - uses: actions/checkout@v4
         continue-on-error: true
