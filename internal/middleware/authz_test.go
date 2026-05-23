@@ -2,6 +2,7 @@ package middleware_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -172,8 +173,84 @@ func TestAuthz_GRPC_NoSubject_Denies(t *testing.T) {
 		func(ctx context.Context, req any) (any, error) { return "ok", nil })
 	require.Error(t, err)
 	st, _ := status.FromError(err)
-	assert.Equal(t, codes.PermissionDenied, st.Code())
+	// KAC-130 BUG-2: missing credentials → UNAUTHENTICATED (16), not PermissionDenied (7).
+	assert.Equal(t, codes.Unauthenticated, st.Code())
 	assert.Zero(t, checker.calls.Load())
+}
+
+// TestAuthz_GRPC_NoSubject_Unauthenticated — KAC-130 BUG-2:
+// anonymous request (no JWT metadata) on a catalogued RPC must return
+// Unauthenticated (16) so the caller knows credentials are required.
+// PermissionDenied (7) is reserved for authenticated-but-denied.
+func TestAuthz_GRPC_NoSubject_Unauthenticated(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code(),
+		"missing credentials must map to UNAUTHENTICATED(16), not PermissionDenied(7)")
+	// Checker must never be called — we never reach the IAM Check phase.
+	assert.Zero(t, checker.calls.Load())
+}
+
+// TestAuthz_GRPC_ExemptEntry_NoSubject_Unauthenticated — KAC-130 BUG-2:
+// anonymous request on an exempt (scope-filter) RPC must also return
+// Unauthenticated (16) — the exempt gate still requires authentication.
+func TestAuthz_GRPC_ExemptEntry_NoSubject_Unauthenticated(t *testing.T) {
+	checker := &fakeChecker{allowed: false}
+	// Use the exempt catalog entry — Login is on the allowlist; build a
+	// non-allowlisted exempt entry for this test.
+	listExemptEntry := `{"fqn":"kacho.cloud.iam.v1.UserService/List","permission":"<exempt>"}`
+	mw := buildAuthzMiddleware(t, buildCatalog(t, listExemptEntry), checker)
+	_, err := mw.Unary()(context.Background(), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.iam.v1.UserService/List"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Unauthenticated, st.Code(),
+		"anonymous on exempt RPC must return UNAUTHENTICATED(16), not PermissionDenied(7)")
+	assert.Zero(t, checker.calls.Load())
+}
+
+// TestAuthz_HTTP_NoSubject_Returns401 — KAC-130 BUG-2:
+// HTTP path for missing credentials must return 401 (not 403).
+func TestAuthz_HTTP_NoSubject_Returns401(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	router := &fakeRestRouter{m: map[string]string{
+		"POST /vpc/v1/networks": "kacho.cloud.vpc.v1.NetworkService/Create",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("must not reach handler") }))
+	// No Authorization / principal headers — anonymous request.
+	r := httptest.NewRequest(http.MethodPost, "/vpc/v1/networks", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusUnauthorized, w.Code,
+		"missing credentials must produce 401, not 403")
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	assert.Equal(t, float64(16), body["code"],
+		"grpc code in JSON body must be 16 (UNAUTHENTICATED)")
+}
+
+// TestAuthz_GRPC_AuthenticatedDeny_StillPermissionDenied — KAC-130 BUG-2:
+// authenticated subject rejected by FGA must keep returning PermissionDenied (7),
+// not Unauthenticated.
+func TestAuthz_GRPC_AuthenticatedDeny_StillPermissionDenied(t *testing.T) {
+	checker := &fakeChecker{allowed: false, reasons: []string{"no path"}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, createEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_x", "user"), nil,
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Create"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"authenticated subject denied by FGA must remain PermissionDenied(7)")
 }
 
 func TestAuthz_GRPC_Allow(t *testing.T) {
