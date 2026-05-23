@@ -249,6 +249,46 @@ func (m *AuthzMiddleware) InvalidateCache() {
 	}
 }
 
+// AsInvalidator returns a small port (Invalidator) over this middleware's
+// decision cache, used by the W1.2 (KAC-138) InternalAuthzCacheService
+// handler. Returns a non-nil no-op adapter when authz is disabled
+// (m.cache == nil) so the main.go wiring works on disabled-authz configs.
+//
+// The returned Invalidator exposes:
+//   - InvalidateSubject(subject) int — per-subject drop (push-drain path)
+//   - Invalidate() — whole-cache flush (safety net fallback)
+func (m *AuthzMiddleware) AsInvalidator() AuthzInvalidator {
+	if m == nil || m.cache == nil {
+		return nopAuthzInvalidator{}
+	}
+	return cacheInvalidatorAdapter{cache: m.cache}
+}
+
+// AuthzInvalidator — port consumed by the InternalAuthzCacheService handler
+// in internal/handler/internal_authz_cache_server.go. Lives here (not in
+// handler/) to keep middleware as the canonical owner of the decision cache.
+type AuthzInvalidator interface {
+	// InvalidateSubject drops decision-cache entries whose key is prefixed
+	// with the given FGA subject (e.g. "user:usr_abc"). Returns the count
+	// of entries dropped.
+	InvalidateSubject(subject string) int
+	// Invalidate flushes the whole decision cache (safety-net fallback).
+	Invalidate()
+}
+
+type cacheInvalidatorAdapter struct{ cache *decisionCache }
+
+func (a cacheInvalidatorAdapter) InvalidateSubject(subject string) int {
+	return a.cache.InvalidateSubject(subject)
+}
+
+func (a cacheInvalidatorAdapter) Invalidate() { a.cache.Invalidate() }
+
+type nopAuthzInvalidator struct{}
+
+func (nopAuthzInvalidator) InvalidateSubject(string) int { return 0 }
+func (nopAuthzInvalidator) Invalidate()                  {}
+
 // Unary returns a gRPC UnaryServerInterceptor enforcing per-RPC authz.
 func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

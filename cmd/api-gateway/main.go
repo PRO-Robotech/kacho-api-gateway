@@ -396,6 +396,34 @@ func main() {
 		IdleTimeout: 120 * time.Second,
 	}
 
+	// --- KAC-138 W1.2: internal-only gRPC listener for InternalAuthzCacheService ---
+	//
+	// Dedicated listener on KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR (default :9091)
+	// for cluster-internal RPCs that MUST NOT be on the external TLS endpoint
+	// (workspace CLAUDE.md §запрет #6). iam's subject_change push-drainer
+	// dials this listener to invoke InvalidateSubject within ~1s of revoke;
+	// without it, the WS-2.3 30s poll-loop is the only convergence path.
+	//
+	// Wiring is unconditional — listener is always up. When authz is disabled
+	// (cfg.AuthZEnabled=false), authzMW.AsInvalidator() returns a nopAuthzInvalidator
+	// and the handler returns NotFound on every InvalidateSubject (idempotent
+	// miss; drainer marks the row as already applied).
+	internalGRPCAddr := os.Getenv("KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR")
+	if internalGRPCAddr == "" {
+		internalGRPCAddr = ":9091"
+	}
+	internalGrpcSrv, internalLis, ierr := startInternalGRPCListener(
+		internalGRPCAddr, authzMW.AsInvalidator(), grpcSrv, logger)
+	if ierr != nil {
+		log.Fatalf("internal grpc listener: %v", ierr)
+	}
+	defer func() { _ = internalLis.Close() }()
+	go func() {
+		if serveErr := internalGrpcSrv.Serve(internalLis); serveErr != nil && serveErr != grpc.ErrServerStopped {
+			logger.Error("internal grpc serve error", "error", serveErr)
+		}
+	}()
+
 	// --- cmux: HTTP/2 gRPC vs HTTP/1.1 REST на одном порту ---
 	listener, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
@@ -475,6 +503,9 @@ func main() {
 		<-ctx.Done()
 		logger.Info("shutting down")
 		grpcSrv.GracefulStop()
+		// KAC-138 W1.2: graceful stop the internal listener too so in-flight
+		// iam drainer InvalidateSubject RPCs drain cleanly.
+		internalGrpcSrv.GracefulStop()
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutCancel()
 		_ = httpSrv.Shutdown(shutCtx)
