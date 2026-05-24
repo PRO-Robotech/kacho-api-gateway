@@ -56,6 +56,24 @@ func DefaultPublicAllowlist() []string {
 		// "kacho.cloud.operation" (no ".v1."), the old "v1" FQNs never
 		// matched and silently left OperationService unprotected only at the
 		// allowlist level — the catalog path continued to apply.
-		// NOTE: do NOT add Internal* FQNs here (Запрет #6).
+
+		// KAC-185 (F4): Internal IAM RPCs — cluster-internal listener callers
+		// (api-gateway auth-interceptor self-call, admin tooling via port-forward,
+		// kacho-iam subject-change drainer) DO NOT carry external user JWTs.
+		// The catalog marks them `<exempt>` from FGA Check but the `<exempt>`
+		// path STILL enforces authentication — so without an allowlist entry,
+		// these unauth'd internal calls would fail with Unauthenticated/401.
+		//
+		// §«Запреты» #6 isolation is enforced at the LISTENER layer: the
+		// external TLS listener (api.kacho.local:443) is firewalled / not
+		// exposed to tenant networks; the gRPC director's HasInternalSuffix
+		// blocks Internal* gRPC on the public listener. Adding these FQNs to
+		// the public allowlist does NOT widen exposure — it only lets the
+		// already-internal caller through the authz gate that the catalog
+		// would otherwise close.
+		"kacho.cloud.iam.v1.InternalIAMService/Check",
+		"kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
+		"kacho.cloud.iam.v1.InternalIAMService/LookupSubject",
+		"kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
 	}
 }
