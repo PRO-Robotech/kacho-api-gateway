@@ -481,57 +481,63 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Create",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.diskTypes.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Delete",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.diskTypes.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalDiskTypeService/Update",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.diskTypes.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Create",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.regions.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Delete",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.regions.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalRegionService/Update",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.regions.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalResourceLifecycleService/Subscribe",
@@ -553,30 +559,33 @@
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Create",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.zones.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Delete",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.zones.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.InternalZoneService/Update",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "compute.zones.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.compute.v1.RegionService/Get",
@@ -2087,21 +2096,23 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsAddressOverride",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsNetworkDefault",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Check",
@@ -2114,21 +2125,23 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Create",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Delete",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/ExplainResolution",
@@ -2177,30 +2190,33 @@
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/UnbindAddressOverride",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/UnbindNetworkDefault",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/Update",
-    "permission": "<exempt>",
-    "required_relation": "",
+    "permission": "vpc.addressPools.admin",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressService/AllocateExternalIP",
