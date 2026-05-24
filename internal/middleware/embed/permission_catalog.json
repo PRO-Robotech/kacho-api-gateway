@@ -1618,6 +1618,66 @@
     }
   },
   {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Create",
+    "permission": "loadbalancer.listeners.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "load_balancer_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Delete",
+    "permission": "loadbalancer.listeners.delete",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "lb_listener",
+      "from_request_field": "listener_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Get",
+    "permission": "loadbalancer.listeners.get",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "lb_listener",
+      "from_request_field": "listener_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/List",
+    "permission": "loadbalancer.listeners.list",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "lb_network_load_balancer",
+      "from_request_field": "load_balancer_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/ListOperations",
+    "permission": "loadbalancer.listeners.listOperations",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "lb_listener",
+      "from_request_field": "listener_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Update",
+    "permission": "loadbalancer.listeners.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "lb_listener",
+      "from_request_field": "listener_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AddListener",
     "permission": "loadbalancer.network_load_balancer_listeners.addListener",
     "required_relation": "editor",
