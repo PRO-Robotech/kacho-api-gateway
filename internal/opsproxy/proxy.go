@@ -129,12 +129,16 @@ func (p *OpsProxy) resolveBackend(id string) (operationpb.OperationServiceClient
 // principal'а: только создавший операцию (principal_type + principal_id
 // из Operation) может её читать. Исключение — system-bootstrap (внутренние
 // воркеры) и service-account (cross-service polling).
+// KAC-169: incoming metadata (x-kacho-principal-* set by restmux WithMetadata)
+// должна доходить до backend через outgoing-ctx — иначе backend видит
+// анонимный principal и его per-RPC authz возвращает NotFound/PermissionDenied.
+// Pattern такой же как в internal/proxy/director.go / shimproxy.go.
 func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest) (*operationpb.Operation, error) {
 	client, err := p.resolveBackend(req.OperationId)
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Get(ctx, req)
+	op, err := client.Get(propagateMetadata(ctx), req)
 	if err != nil {
 		return nil, err
 	}
@@ -147,12 +151,13 @@ func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest
 // Cancel проксирует OperationService.Cancel к нужному backend по prefix id.
 // KAC-127: то же ownership-check что и Get — только создавший операцию
 // может её отменить.
+// KAC-169: те же требования по metadata propagation что и для Get.
 func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationRequest) (*operationpb.Operation, error) {
 	client, err := p.resolveBackend(req.OperationId)
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Cancel(ctx, req)
+	op, err := client.Cancel(propagateMetadata(ctx), req)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +165,22 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 		return nil, err
 	}
 	return op, nil
+}
+
+// propagateMetadata конвертирует incoming gRPC metadata в outgoing для
+// последующего вызова backend. Если incoming metadata отсутствует — возвращает
+// ctx как есть (не оборачиваем пустым MD, чтобы downstream interceptor'ы
+// видели «нет metadata» а не «есть пустая metadata»).
+//
+// KAC-169: тот же pattern что в internal/proxy/director.go:55-56 и
+// internal/proxy/shimproxy.go:44-45 — все cross-process gRPC hops в gateway
+// обязаны это делать, иначе principal/request-id headers теряются.
+func propagateMetadata(ctx context.Context) context.Context {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx
+	}
+	return metadata.NewOutgoingContext(ctx, md.Copy())
 }
 
 // checkOperationOwnership проверяет что principal в ctx совпадает с
