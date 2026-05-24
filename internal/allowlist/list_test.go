@@ -136,18 +136,69 @@ func TestGateway_D7_OldUpsertWatchBlocked(t *testing.T) {
 	}
 }
 
-// TestGateway_D8_LoadbalancerFrozen проверяет, что loadbalancer всё ещё заморожен.
-// (compute активирован — см. TestGateway_D8b_ComputeActive ниже.)
-func TestGateway_D8_LoadbalancerFrozen(t *testing.T) {
-	frozenMethods := []string{
+// TestGateway_D8_LoadbalancerActive (KAC-161) проверяет, что kacho-nlb активирован —
+// публичные методы NetworkLoadBalancer / Listener / TargetGroup в allowlist, а
+// InternalResourceLifecycleService (streaming, gRPC-direct only) — НЕ в allowlist
+// (блокируется HasInternalSuffix; workspace CLAUDE.md §запрет #6).
+//
+// До KAC-161 loadbalancer был заморожен (предыдущий тест TestGateway_D8_LoadbalancerFrozen
+// проверял отсутствие методов в allowlist). После регистрации kacho-nlb эти же методы
+// должны проходить.
+func TestGateway_D8_LoadbalancerActive(t *testing.T) {
+	publicMethods := []string{
+		// NetworkLoadBalancerService
 		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Move",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations",
+		// ListenerService
+		"/kacho.cloud.loadbalancer.v1.ListenerService/Get",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/List",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/Create",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/Update",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/Delete",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/ListOperations",
+		// TargetGroupService
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
 		"/kacho.cloud.loadbalancer.v1.TargetGroupService/List",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Create",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Update",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Delete",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Move",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/RemoveTargets",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/ListOperations",
 	}
-	for _, m := range frozenMethods {
+	for _, m := range publicMethods {
 		m := m
-		t.Run(m, func(t *testing.T) {
+		t.Run("public/"+m, func(t *testing.T) {
+			if !allowlist.IsAllowed(m) {
+				t.Errorf("публичный nlb-метод %q должен быть в allowlist (KAC-161)", m)
+			}
+		})
+	}
+
+	internalMethods := []string{
+		// streaming gRPC-direct only — никаких HTTP-аннотаций, REST не регистрируется,
+		// внешний gRPC-proxy блокирует через HasInternalSuffix (запрет #6).
+		"/kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
+	}
+	for _, m := range internalMethods {
+		m := m
+		t.Run("internal/"+m, func(t *testing.T) {
 			if allowlist.IsAllowed(m) {
-				t.Errorf("замороженный метод %q НЕ должен быть в allowlist", m)
+				t.Errorf("Internal nlb-метод %q НЕ должен быть в allowlist", m)
+			}
+			if !allowlist.HasInternalSuffix(m) {
+				t.Errorf("метод %q должен определяться как Internal (HasInternalSuffix)", m)
 			}
 		})
 	}
