@@ -18,11 +18,13 @@ import (
 //	KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC — адрес backend compute internal-port (9091)
 //	KACHO_API_GATEWAY_IAM_GRPC            — адрес backend iam (public, port 9090)
 //	KACHO_API_GATEWAY_IAM_INTERNAL_GRPC   — адрес backend iam internal-port (9091)
+//	KACHO_API_GATEWAY_NLB_GRPC            — адрес backend kacho-nlb (public, port 9090) (KAC-161)
+//	KACHO_API_GATEWAY_NLB_INTERNAL_GRPC   — адрес backend kacho-nlb internal-port (9091) (KAC-161)
 //
 // TLS требуется для совместимости с CLI-клиентами (yc CLI hardcoded требует TLS).
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
 //
-// loadbalancer заморожен — env vars удалены.
+// KAC-161: loadbalancer активирован (kacho-nlb) — env vars добавлены ниже.
 type Config struct {
 	ListenAddr    string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
 	TLSListenAddr string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
@@ -49,6 +51,18 @@ type Config struct {
 	// InternalIAMService.LookupSubject/ListPermissions — НЕ регистрируется в REST
 	// (auth-interceptor zвонит kacho-iam:9091 напрямую через grpc-client).
 	IAMInternalAddr string `envconfig:"KACHO_API_GATEWAY_IAM_INTERNAL_GRPC" default:"iam.kacho.svc.cluster.local:9091"`
+
+	// NLBAddr — public gRPC backend of kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup).
+	// Public RPC под /nlb/v1/* (KAC-161). При пустом значении nlb-handlers не
+	// регистрируются (graceful — позволяет деплоить api-gateway до kacho-nlb pod'a).
+	NLBAddr string `envconfig:"KACHO_API_GATEWAY_NLB_GRPC" default:"kacho-nlb.kacho.svc.cluster.local:9090"`
+
+	// NLBInternalAddr — admin-only internal-port (9091) of kacho-nlb backend.
+	// InternalResourceLifecycleService.Subscribe — gRPC server-streaming для
+	// подписки на CREATED/UPDATED/DELETED события (data-plane consumer'ы дозваниваются
+	// напрямую). Регистрируется в REST mux pro-forma (как iam InternalUserService),
+	// реальный трафик идёт через gRPC-direct. См. workspace CLAUDE.md §запрет #6.
+	NLBInternalAddr string `envconfig:"KACHO_API_GATEWAY_NLB_INTERNAL_GRPC" default:"kacho-nlb.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
@@ -248,14 +262,19 @@ func (c Config) ResolvedIAMAuthorizeURL() string {
 // BackendAddrs возвращает карту domain → адрес для инициализации Backends.
 // "iam" / "iamInternal" — kacho-iam public (9090) / internal (9091) endpoints (KAC-105).
 // KAC-124/127: "resourcemanager" / "organizationmanager" удалены — заменены на /iam/v1/*.
+// KAC-161: "loadbalancer" / "loadbalancerInternal" — kacho-nlb public / internal endpoints.
+// Domain-ключ "loadbalancer" совпадает с proto-package `kacho.cloud.loadbalancer.v1.*`,
+// который парсит director (proxy/director.go) для маршрутизации gRPC-вызовов.
 func (c Config) BackendAddrs() map[string]string {
 	return map[string]string{
-		"vpc":             c.VPCAddr,
-		"vpcInternal":     c.VPCInternalAddr,
-		"compute":         c.ComputeAddr,
-		"computeInternal": c.ComputeInternalAddr,
-		"iam":             c.IAMAddr,
-		"iamInternal":     c.IAMInternalAddr,
+		"vpc":                  c.VPCAddr,
+		"vpcInternal":          c.VPCInternalAddr,
+		"compute":              c.ComputeAddr,
+		"computeInternal":      c.ComputeInternalAddr,
+		"iam":                  c.IAMAddr,
+		"iamInternal":          c.IAMInternalAddr,
+		"loadbalancer":         c.NLBAddr,
+		"loadbalancerInternal": c.NLBInternalAddr,
 	}
 }
 
