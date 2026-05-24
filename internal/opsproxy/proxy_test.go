@@ -396,3 +396,164 @@ func TestOpsProxy_Cancel_RmLegacyPrefixRemoved(t *testing.T) {
 		t.Errorf("ожидали INVALID_ARGUMENT, получили %s", st.Code())
 	}
 }
+
+// principalCapturingServer — mock backend, который захватывает x-kacho-principal-*
+// headers из incoming metadata своего gRPC-вызова. Это имитирует поведение
+// production IAM/VPC backend, который читает principal-headers из своей incoming
+// gRPC-ctx (через ту же `metadata.FromIncomingContext`).
+//
+// Используется для KAC-169 — убедиться что opsproxy конвертирует incoming-md
+// (set restmux-WithMetadata) → outgoing-md перед вызовом backend.Get/Cancel.
+type principalCapturingServer struct {
+	operationpb.UnimplementedOperationServiceServer
+	ops              map[string]*operationpb.Operation
+	receivedID       string
+	receivedType     string
+	receivedDispName string
+}
+
+func (m *principalCapturingServer) Get(ctx context.Context, req *operationpb.GetOperationRequest) (*operationpb.Operation, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
+			m.receivedID = v[0]
+		}
+		if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
+			m.receivedType = v[0]
+		}
+		if v := md.Get("x-kacho-principal-display-name"); len(v) > 0 {
+			m.receivedDispName = v[0]
+		}
+	}
+	op, ok := m.ops[req.OperationId]
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "operation %q not found", req.OperationId)
+	}
+	return op, nil
+}
+
+func (m *principalCapturingServer) Cancel(ctx context.Context, req *operationpb.CancelOperationRequest) (*operationpb.Operation, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
+			m.receivedID = v[0]
+		}
+		if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
+			m.receivedType = v[0]
+		}
+	}
+	op, ok := m.ops[req.OperationId]
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "operation %q not found", req.OperationId)
+	}
+	return op, nil
+}
+
+// setupCapturingBackend — analog setupMockBackend для principalCapturingServer.
+// Возвращает (conn, server) — server-handle нужен, чтобы тесты могли проверить
+// захваченные headers после вызова.
+func setupCapturingBackend(t *testing.T, ops map[string]*operationpb.Operation) (*grpc.ClientConn, *principalCapturingServer) {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := &principalCapturingServer{ops: ops}
+	srv := grpc.NewServer()
+	operationpb.RegisterOperationServiceServer(srv, server)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.GracefulStop)
+
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn, server
+}
+
+// TestOpsProxy_Get_PropagatesPrincipalMetadata — KAC-169.
+//
+// Воспроизводит prod-баг: restmux/mux.go ставит x-kacho-principal-* в INCOMING
+// gRPC metadata через WithMetadata callback. opsproxy.Get вызывает
+// `client.Get(ctx, req)` без конверсии incoming→outgoing — в результате backend
+// (IAM) получает анонимный principal в своей incoming metadata, IsSelf-check
+// проваливается и возвращает NotFound тому же user'у, кто create-нул операцию.
+//
+// Pattern propagation уже есть в internal/proxy/director.go:55-56 и
+// shimproxy.go:44-45 — opsproxy должен повторять тот же подход.
+//
+// До fix: receivedID == "" (backend не видит principal) → assert fails (RED).
+// После fix: receivedID == "usr_owner1" (backend видит propagated principal) → GREEN.
+func TestOpsProxy_Get_PropagatesPrincipalMetadata(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner1",
+	}
+	iamConn, backend := setupCapturingBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("usr_owner1", "user")
+	_, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if backend.receivedID != "usr_owner1" {
+		t.Errorf("backend должен был получить principal-id %q, получил %q (opsproxy не пробросил incoming metadata в outgoing)", "usr_owner1", backend.receivedID)
+	}
+	if backend.receivedType != "user" {
+		t.Errorf("backend должен был получить principal-type %q, получил %q", "user", backend.receivedType)
+	}
+}
+
+// TestOpsProxy_Cancel_PropagatesPrincipalMetadata — KAC-169.
+// Аналог TestOpsProxy_Get_PropagatesPrincipalMetadata для Cancel-пути.
+func TestOpsProxy_Cancel_PropagatesPrincipalMetadata(t *testing.T) {
+	id := "enp0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner2",
+	}
+	vpcConn, backend := setupCapturingBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
+
+	ctx := withPrincipalMD("usr_owner2", "user")
+	_, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if backend.receivedID != "usr_owner2" {
+		t.Errorf("backend должен был получить principal-id %q, получил %q (opsproxy не пробросил incoming metadata в outgoing)", "usr_owner2", backend.receivedID)
+	}
+}
+
+// TestOpsProxy_Get_PropagatesDisplayName — KAC-169 (полный набор principal-headers).
+// restmux ставит 3 заголовка: principal-type, principal-id, principal-display-name.
+// Все три должны доходить до backend.
+func TestOpsProxy_Get_PropagatesDisplayName(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id:            id,
+		PrincipalType: "user",
+		PrincipalId:   "usr_owner1",
+	}
+	iamConn, backend := setupCapturingBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	// ctx с display-name (имитирует full WithMetadata output)
+	md := metadata.New(map[string]string{
+		"x-kacho-principal-id":           "usr_owner1",
+		"x-kacho-principal-type":         "user",
+		"x-kacho-principal-display-name": "Alice Owner",
+	})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	_, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if backend.receivedDispName != "Alice Owner" {
+		t.Errorf("backend должен был получить display-name %q, получил %q", "Alice Owner", backend.receivedDispName)
+	}
+}
