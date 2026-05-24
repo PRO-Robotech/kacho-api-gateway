@@ -604,6 +604,20 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		resourceType = "project"
 	}
 
+	// KAC-178 §3 follow-up: cluster — это singleton (`cluster_kacho_root`,
+	// см. kacho-iam/internal/domain/cluster.go::ClusterSingletonID).
+	// Catalog для reference-data (compute.Region/Zone, etc.) задаёт
+	// scope_extractor: {object_type: cluster, from_request_field: '*'}.
+	// Extractor выдаёт ResourceID("*") → object="cluster:*" → kacho-iam
+	// AuthorizeService.Check отбивает с "no path: unscoped resource"
+	// (authorize_service.go блокирует req.Resource.ID == "*"). Тут
+	// substitute'им wildcard на канонический singleton id, чтобы Check
+	// шёл на cluster:cluster_kacho_root, где tuple-cascade
+	// `define viewer: [user, user:*, ...]` действительно работает.
+	if resourceType == "cluster" && resourceID.IsWildcard() {
+		resourceID = ResourceID("cluster_kacho_root")
+	}
+
 	descriptor := permissionDeniedDescriptor{
 		FQN:          dr.FQN,
 		Subject:      subj.FGA,
