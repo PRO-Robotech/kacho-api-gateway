@@ -158,6 +158,30 @@ func TestOpsProxy_Get_NewFormatVPC(t *testing.T) {
 	}
 }
 
+// TestOpsProxy_Get_NewFormatNLB (KAC-161) проверяет роутинг 20-char id с 3-char
+// prefix nlb (loadbalancer/kacho-nlb — все операции домена делят этот prefix,
+// PrefixOperationNLB == PrefixLoadBalancer в kacho-corelib/ids).
+func TestOpsProxy_Get_NewFormatNLB(t *testing.T) {
+	id := "nlb0123456789abcdefg" // 20 chars, nlb prefix
+	op := &operationpb.Operation{Id: id, Description: "create network load balancer"}
+	nlbConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"loadbalancer": nlbConn})
+
+	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("Get nlb…: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	}
+
+	// Cancel должен ходить туда же.
+	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+		t.Fatalf("Cancel nlb…: %v", err)
+	}
+}
+
 // TestOpsProxy_Get_NewFormatCompute проверяет роутинг 20-char id с 3-char
 // prefix epd (compute — все операции домена делят этот prefix).
 func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {

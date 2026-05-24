@@ -51,6 +51,14 @@ spec:
             - name: KACHO_API_GATEWAY_IAM_INTERNAL_GRPC
               value: "{{ .Values.backends.iamInternal }}"
             {{- end }}
+            {{- if .Values.backends.nlb }}
+            - name: KACHO_API_GATEWAY_NLB_GRPC
+              value: "{{ .Values.backends.nlb }}"
+            {{- end }}
+            {{- if .Values.backends.nlbInternal }}
+            - name: KACHO_API_GATEWAY_NLB_INTERNAL_GRPC
+              value: "{{ .Values.backends.nlbInternal }}"
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
               value: ":{{ .Values.tlsPort }}"

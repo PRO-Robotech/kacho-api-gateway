@@ -99,21 +99,47 @@ func TestGateway_A5b_RemovedResourceManagerMethodsBlocked(t *testing.T) {
 	}
 }
 
-// TestGateway_A6_LoadbalancerFrozenBlocked проверяет, что loadbalancer всё ещё заморожен.
-func TestGateway_A6_LoadbalancerFrozenBlocked(t *testing.T) {
-	frozenMethods := []string{
-		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
-		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
-	}
-	backends := makeTestBackends(t, []string{"iam", "vpc", "compute"})
+// TestGateway_A6_LoadbalancerRoutesToBackend (KAC-161) — публичные nlb-RPC
+// маршрутизируются на loadbalancer-backend (kacho-nlb), а Internal*-методы nlb
+// блокируются HasInternalSuffix (запрет #6).
+//
+// До KAC-161 loadbalancer был заморожен (предыдущий тест проверял,
+// что все методы возвращают NOT_FOUND). После регистрации kacho-nlb публичные
+// RPC должны проксироваться, internal — оставаться заблокированными.
+func TestGateway_A6_LoadbalancerRoutesToBackend(t *testing.T) {
+	backends := makeTestBackends(t, []string{"iam", "vpc", "compute", "loadbalancer"})
 	director := proxy.NewDirector(backends)
 
-	for _, m := range frozenMethods {
+	// Public nlb-методы → loadbalancer-backend
+	publicMethods := []string{
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
+		"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create",
+		"/kacho.cloud.loadbalancer.v1.ListenerService/Create",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
+		"/kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets",
+	}
+	for _, m := range publicMethods {
 		m := m
-		t.Run(m, func(t *testing.T) {
+		t.Run("public/"+m, func(t *testing.T) {
+			_, conn, err := director(context.Background(), m)
+			if err != nil {
+				t.Fatalf("ожидали успех для public nlb-метода %q: %v", m, err)
+			}
+			if conn != backends["loadbalancer"] {
+				t.Errorf("метод %q: директор должен вернуть loadbalancer-backend", m)
+			}
+		})
+	}
+
+	// Internal nlb-методы блокируются HasInternalSuffix → NOT_FOUND
+	for _, m := range []string{
+		"/kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
+	} {
+		m := m
+		t.Run("internal/"+m, func(t *testing.T) {
 			_, _, err := director(context.Background(), m)
 			if err == nil {
-				t.Fatalf("замороженный метод %q должен быть заблокирован", m)
+				t.Fatalf("Internal nlb-метод %q должен быть заблокирован", m)
 			}
 			st, ok := status.FromError(err)
 			if !ok || st.Code() != codes.NotFound {

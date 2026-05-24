@@ -5,10 +5,12 @@ import "strings"
 // AllowedMethods — публичные RPC-пути, маршрутизируемые через api-gateway.
 // Методы *InternalService.* НИКОГДА не включаются (запрет #6, workspace CLAUDE.md):
 // их REST-проекция доступна только на cluster-internal listener (см. restmux/mux.go).
-// Активны: iam, vpc, compute, operation.
+// Активны: iam, vpc, compute, loadbalancer, operation.
 // KAC-124: resourcemanager/organizationmanager удалены — backend упразднён,
 // заменён на kacho-iam (Account/Project).
-// loadbalancer заморожен — его методов здесь нет.
+// KAC-161: loadbalancer активирован (kacho-nlb) — NetworkLoadBalancer / Listener /
+// TargetGroup публичные методы добавлены ниже. InternalResourceLifecycleService
+// (streaming, gRPC-direct only) — НЕ в allowlist; блокируется HasInternalSuffix.
 var AllowedMethods = map[string]struct{}{
 	// vpc.v1 — NetworkService
 	"/kacho.cloud.vpc.v1.NetworkService/Get":                {},
@@ -197,6 +199,40 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":  {},
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
+
+	// loadbalancer.v1 — NetworkLoadBalancerService (KAC-161, kacho-nlb)
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get":                {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List":               {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create":             {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update":             {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete":             {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start":              {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop":               {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Move":               {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup":  {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup":  {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates":    {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations":     {},
+	// loadbalancer.v1 — ListenerService (first-class FGA object, design §3.3)
+	"/kacho.cloud.loadbalancer.v1.ListenerService/Get":            {},
+	"/kacho.cloud.loadbalancer.v1.ListenerService/List":           {},
+	"/kacho.cloud.loadbalancer.v1.ListenerService/Create":         {},
+	"/kacho.cloud.loadbalancer.v1.ListenerService/Update":         {},
+	"/kacho.cloud.loadbalancer.v1.ListenerService/Delete":         {},
+	"/kacho.cloud.loadbalancer.v1.ListenerService/ListOperations": {},
+	// loadbalancer.v1 — TargetGroupService
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/Get":            {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/List":           {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/Create":         {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/Update":         {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/Delete":         {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/Move":           {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets":     {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/RemoveTargets":  {},
+	"/kacho.cloud.loadbalancer.v1.TargetGroupService/ListOperations": {},
+	// loadbalancer.v1 — InternalResourceLifecycleService.* — НЕ в allowlist
+	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only;
+	// streaming Subscribe не имеет HTTP-аннотаций, REST не регистрируется.
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},

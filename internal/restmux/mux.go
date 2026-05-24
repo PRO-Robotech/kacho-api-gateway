@@ -1,7 +1,10 @@
 // Package restmux инициализирует REST-фасад grpc-gateway для api-gateway.
 //
 // Регистрирует активные сервисы Kachō + OperationService через OpsProxy.
-// loadbalancer — НЕ регистрируется (заморожен).
+// KAC-161: loadbalancer (kacho-nlb) активирован — NetworkLoadBalancer / Listener /
+// TargetGroup регистрируются на public mux (/nlb/v1/*). InternalResourceLifecycleService —
+// streaming gRPC-direct only (нет HTTP-аннотаций; consumer'ы ходят в loadbalancer.kacho.svc:9091
+// напрямую gRPC; через grpc-gateway не проксируется).
 //
 // # Split-mux pattern (KAC-50)
 //
@@ -48,6 +51,9 @@
 //   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
 //     (InternalHypervisor выпилен в KAC-36 / kacho-proto commit 79e3790.)
+//   - loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancerService, ListenerService,
+//     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
+//     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
 //   - iam.v1: Account, Project, User (read+delete only), ServiceAccount, Group, Role, AccessBinding —
 //     все RPC public под /iam/v1/* (KAC-105, E0).
 //   - iam.v1 admin (kacho-only): InternalUserService.Get — для admin tooling; зарегистрирован
@@ -72,6 +78,8 @@ import (
 
 	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
+	// KAC-161: kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
+	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	// KAC-124: rmpb/orgpb убраны — kacho-resource-manager заменён на kacho-iam
 	// (Organization/Cloud/Folder → Account/Project). Proto-пакеты
@@ -148,12 +156,16 @@ func isInternalPath(path string) bool {
 //
 // addrs — карта domain → адрес gRPC backend:
 //
-//	"iam"                 → kacho-iam.kacho.svc.cluster.local:9090
-//	"iamInternal"         → kacho-iam.kacho.svc.cluster.local:9091
-//	"vpc"                 → vpc.kacho.svc.cluster.local:9090
-//	"vpcInternal"         → vpc.kacho.svc.cluster.local:9091 (admin internal-порт)
-//	"compute"             → compute.kacho.svc.cluster.local:9090
-//	"computeInternal"     → compute.kacho.svc.cluster.local:9091 (admin internal-порт)
+//	"iam"                  → kacho-iam.kacho.svc.cluster.local:9090
+//	"iamInternal"          → kacho-iam.kacho.svc.cluster.local:9091
+//	"vpc"                  → vpc.kacho.svc.cluster.local:9090
+//	"vpcInternal"          → vpc.kacho.svc.cluster.local:9091 (admin internal-порт)
+//	"compute"              → compute.kacho.svc.cluster.local:9090
+//	"computeInternal"      → compute.kacho.svc.cluster.local:9091 (admin internal-порт)
+//	"loadbalancer"         → kacho-nlb.kacho.svc.cluster.local:9090 (KAC-161)
+//	"loadbalancerInternal" → kacho-nlb.kacho.svc.cluster.local:9091 (KAC-161; зарезервирован
+//	                        под admin/internal REST, если в будущем добавятся http-аннотации;
+//	                        сейчас InternalResourceLifecycleService — streaming gRPC-direct only)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -250,7 +262,8 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	}
 
 	// KAC-124: rmAddr убран — backend kacho-resource-manager упразднён.
-	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr string
+	// KAC-161: lbAddr / lbInternalAddr добавлены под kacho-nlb (loadbalancer.v1).
+	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr string
 	if addrs != nil {
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
@@ -258,6 +271,8 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		computeInternalAddr = addrs["computeInternal"]
 		iamAddr = addrs["iam"]
 		iamInternalAddr = addrs["iamInternal"]
+		lbAddr = addrs["loadbalancer"]
+		lbInternalAddr = addrs["loadbalancerInternal"]
 	}
 
 	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
@@ -429,6 +444,38 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		if iamInternalAddr != "" {
 			if err := iampb.RegisterInternalUserServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam InternalUserService: %w", err)
+			}
+		}
+
+		// --- loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancer + Listener + TargetGroup ---
+		// Public RPC под /nlb/v1/*. Регистрируется условно по lbAddr — backend ещё
+		// может быть не задеплоен в окружении (поведение симметрично vpcInternalAddr /
+		// computeInternalAddr / iamAddr выше).
+		if lbAddr != "" {
+			if err := lbpb.RegisterNetworkLoadBalancerServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+				return nil, fmt.Errorf("register loadbalancer NetworkLoadBalancerService: %w", err)
+			}
+			if err := lbpb.RegisterListenerServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+				return nil, fmt.Errorf("register loadbalancer ListenerService: %w", err)
+			}
+			if err := lbpb.RegisterTargetGroupServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+				return nil, fmt.Errorf("register loadbalancer TargetGroupService: %w", err)
+			}
+		}
+
+		// --- loadbalancer.v1 admin (InternalResourceLifecycleService) — kacho-only, internal-port (9091) ---
+		// InternalResourceLifecycleService.Subscribe — gRPC server-streaming для
+		// подписки на CREATED/UPDATED/DELETED события (см. kacho-nlb design §3.9 outbox).
+		// В proto НЕТ `option (google.api.http)`, поэтому grpc-gateway не создаёт REST-routes —
+		// consumer'ы (наблюдатели data-plane) дозваниваются по gRPC напрямую до
+		// loadbalancer.kacho.svc:9091 через grpc-client. Регистрация здесь — pro-forma
+		// reference (симметрично iam InternalUserService); если в будущем добавятся
+		// http-аннотации, REST автоматически появится на internal mux.
+		// HasInternalSuffix в gRPC-director (proxy/director.go) блокирует попадание
+		// InternalResourceLifecycleService.* на external/TLS endpoint (запрет #6).
+		if lbInternalAddr != "" {
+			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register loadbalancer InternalResourceLifecycleService: %w", err)
 			}
 		}
 

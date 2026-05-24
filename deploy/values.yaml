@@ -7,8 +7,8 @@ port: 8080
 tlsPort: 8443
 
 # Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
-# loadbalancer заморожен — его адрес здесь отсутствует.
 # KAC-124/127: resourceManager удалён — backend заменён на kacho-iam (ниже).
+# KAC-161: loadbalancer активирован (kacho-nlb) — публичные RPC под /nlb/v1/*.
 backends:
   vpc: vpc.kacho.svc.cluster.local:9090
   vpcInternal: vpc.kacho.svc.cluster.local:9091
@@ -17,6 +17,9 @@ backends:
   # KAC-105 (IAM E0): kacho-iam public + internal endpoints
   iam: kacho-iam.kacho.svc.cluster.local:9090
   iamInternal: kacho-iam-internal.kacho.svc.cluster.local:9091
+  # KAC-161: kacho-nlb public + internal endpoints
+  nlb: kacho-nlb.kacho.svc.cluster.local:9090
+  nlbInternal: kacho-nlb.kacho.svc.cluster.local:9091
 
 # TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
 # Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.

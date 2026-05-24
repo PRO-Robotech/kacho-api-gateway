@@ -36,6 +36,8 @@ import (
 
 // prefixToBackend — карта 3-символьного префикса в имя backend-домена.
 // KAC-124: префиксы `b1g` / `bpf` (resource-manager) удалены — backend упразднён.
+// KAC-161: добавлен `nlb` (PrefixOperationNLB == PrefixLoadBalancer в kacho-corelib/ids)
+// → loadbalancer backend (kacho-nlb).
 var prefixToBackend = map[string]string{
 	// vpc domain
 	"enp": "vpc", // Network / RouteTable / SecurityGroup / vpc op-root
@@ -44,6 +46,8 @@ var prefixToBackend = map[string]string{
 	"epd": "compute", // все операции compute (Instance/Disk/Image/Snapshot — общий op-prefix)
 	// iam domain
 	"iop": "iam", // все операции iam (Account/Project/User/SA/Group/Role/AccessBinding — общий op-prefix, KAC-105)
+	// loadbalancer domain (KAC-161)
+	"nlb": "loadbalancer", // все операции kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup — общий op-prefix)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, всё ещё
