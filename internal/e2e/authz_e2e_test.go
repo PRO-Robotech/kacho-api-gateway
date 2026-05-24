@@ -219,7 +219,20 @@ func TestE2E_AuthZ_StepUpDenyAddsChallenge(t *testing.T) {
 	assert.Contains(t, chal, `acr_values="3"`)
 }
 
-func TestE2E_AuthZ_MissingSubject_403(t *testing.T) {
+// TestE2E_AuthZ_MissingSubject_401 — KAC-130 BUG-2 / KAC-179:
+// missing credentials (no Bearer / no X-Kacho-Principal-*) →
+// 401 Unauthorized + gRPC code 16 UNAUTHENTICATED, NOT 403 / 7 PERMISSION_DENIED.
+//
+// RFC 7235 / gRPC status-code guide: UNAUTHENTICATED means "caller is not
+// identified"; PERMISSION_DENIED means "identified caller has no access".
+// Mapping the missing-subject case to 403 would mislead clients into thinking
+// they are authenticated but forbidden — they should instead be prompted to
+// supply credentials.
+//
+// Originally named ..._403 under the old (pre-KAC-130) contract; renamed when
+// the product behaviour was corrected, but the assertion was not updated until
+// KAC-179. Test now matches the post-KAC-130 product behaviour exactly.
+func TestE2E_AuthZ_MissingSubject_401(t *testing.T) {
 	ts, _ := buildE2E(t)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/vpc/v1/networks/enp_x", nil)
@@ -227,7 +240,7 @@ func TestE2E_AuthZ_MissingSubject_403(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
-	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestE2E_AuthZ_HealthBypass(t *testing.T) {
