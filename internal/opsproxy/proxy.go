@@ -200,6 +200,15 @@ func checkOperationOwnership(ctx context.Context, op *operationpb.Operation) err
 		// Операция без записанного owner'а (legacy) — пропускаем.
 		return nil
 	}
+	// KAC-178 §2 follow-up: pre-W1.4 backend без mounted UnaryPrincipalExtract
+	// записывал SystemPrincipal()={type:"system", id:"bootstrap"} как owner
+	// для каждой Operation, потому что corelib operations.Repo.Create fall-back'ался
+	// на SystemPrincipal при отсутствии ctx-Principal. Эти записи — legacy
+	// в том же смысле что и principal_id="" — реальный owner не известен,
+	// нельзя ограничивать чтение конкретным user'ом. Treat as legacy → pass.
+	if op.GetPrincipalType() == "system" && op.GetPrincipalId() == "bootstrap" {
+		return nil
+	}
 	callerID, callerType := principalFromContext(ctx)
 	if callerID == "" {
 		// Анонимный caller — не должен читать операции.
