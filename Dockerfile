@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM mirror.gcr.io/library/golang:1.25-alpine AS builder
 WORKDIR /src
 
 # Копируем зависимые модули (parent-context pattern — сборка из cloud-demo/)
@@ -10,7 +10,7 @@ WORKDIR /src/kacho-api-gateway
 RUN go mod download
 RUN CGO_ENABLED=0 go build -o /api-gateway ./cmd/api-gateway
 
-FROM alpine:3.20
+FROM mirror.gcr.io/library/alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /api-gateway /usr/local/bin/api-gateway
 USER 65532
