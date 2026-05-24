@@ -64,6 +64,12 @@ jobs:
         with: { repository: PRO-Robotech/kacho-compute, ref: main, path: kacho-compute }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
+      # KAC-NLB / KAC-161: kacho-nlb sibling — helm umbrella sub-chart
+      # (file://../../../kacho-nlb/deploy) + Dockerfile build context.
+      # Without this checkout, `helm install umbrella` fails with
+      # «directory ../../../kacho-nlb/deploy not found» (KAC-177).
+      - uses: actions/checkout@v4
+        with: { repository: PRO-Robotech/kacho-nlb, ref: main, path: kacho-nlb }
       # kacho-workspace carries the shared authz-fixtures bootstrap
       # (tests/authz-fixtures/setup.sh + setup-jwt.py + patch-env.py).
       - uses: actions/checkout@v4
@@ -109,7 +115,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          for svc in vpc iam compute api-gateway; do
+          # KAC-177: nlb added — umbrella chart now includes kacho-nlb sub-chart (KAC-161).
+          for svc in vpc iam compute api-gateway nlb; do
             echo "=== build kacho-$svc:dev ==="
             docker build -f "kacho-$svc/Dockerfile" -t "kacho-$svc:dev" .
           done
@@ -126,7 +133,8 @@ jobs:
       - name: load images into kind
         run: |
           set -euo pipefail
-          for img in kacho-vpc:dev kacho-iam:dev kacho-compute:dev kacho-api-gateway:dev; do
+          # KAC-177: kacho-nlb:dev added — umbrella sub-chart (KAC-161).
+          for img in kacho-vpc:dev kacho-iam:dev kacho-compute:dev kacho-api-gateway:dev kacho-nlb:dev; do
             kind load docker-image "$img" --name kacho
           done
           docker image inspect kacho-ui:dev >/dev/null 2>&1 \
