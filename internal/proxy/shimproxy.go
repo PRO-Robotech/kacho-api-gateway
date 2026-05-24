@@ -21,7 +21,12 @@ import (
 )
 
 // MethodResolver — функция определяет в какой backend forward'ить RPC.
-// (fullMethod, conn, ok). Если ok==false — Unimplemented.
+// (fullMethod, conn, ok). Если ok==false — метод НЕ выставлен на публичный
+// gateway (unknown domain / Internal*-service / backend не зарегистрирован) →
+// NotFound. См. director.go — там тот же контракт (NotFound для blocked /
+// unknown), а workspace CLAUDE.md §запрет #6 требует, чтобы Internal*-методы
+// выглядели как несуществующие на external listener (не "exists but
+// unimplemented"), иначе утечка о наличии admin endpoints.
 type methodResolverInternal = func(fullMethod string) (string, grpc.ClientConnInterface, bool)
 
 // Handler — gRPC StreamHandler для UnknownServiceHandler. Принимает resolver
@@ -38,7 +43,12 @@ func Handler(resolve methodResolverInternal) grpc.StreamHandler {
 		}
 		target, conn, ok := resolve(method)
 		if !ok {
-			return status.Errorf(codes.Unimplemented, "method %s not implemented", method)
+			// KAC-179: NotFound (не Unimplemented) — single contract с
+			// director.go и acceptance §запрет #6: Internal*-методы и
+			// unknown-domain методы должны быть неотличимы от "method does
+			// not exist" для external клиента. Unimplemented подсказал бы,
+			// что метод "известен системе, но не реализован" — это разведка.
+			return status.Errorf(codes.NotFound, "unknown method: %s", method)
 		}
 		// Forward incoming metadata as outgoing.
 		md, _ := metadata.FromIncomingContext(ss.Context())
