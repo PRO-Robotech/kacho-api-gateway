@@ -246,6 +246,18 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/iam/v1/complianceReports/{report_id}", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GetComplianceReport"},
 	{Method: "POST", Template: "/iam/v1/complianceReports/{report_id}:getDownloadUrl", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GetReportDownloadUrl"},
 	{Method: "POST", Template: "/iam/v1/complianceReports:generateAccessReport", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GenerateAccessReport"},
+	// KAC-185 (F4): Internal IAM services — cluster-internal listener only (CLAUDE.md §Запрет 6).
+	// Registered here so the authz middleware can resolve the gRPC FQN and apply the
+	// <exempt> catalog entry. isInternalPath() in restmux gates /iam/v1/internal/*
+	// to the cluster-internal listener; public TLS endpoint never serves these paths.
+	// authz_public_allowlist.go bypasses the JWT gate for cluster-internal callers
+	// (internal callers — api-gateway interceptor itself, admin tooling via port-forward —
+	// do not carry external user JWTs; the IAM service enforces its own per-handler auth
+	// via authzguard interceptor whitelist).
+	{Method: "POST", Template: "/iam/v1/internal/users:upsertFromIdentity", FQN: "kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity"},
+	{Method: "POST", Template: "/iam/v1/internal/iam:lookupSubject", FQN: "kacho.cloud.iam.v1.InternalIAMService/LookupSubject"},
+	{Method: "GET", Template: "/iam/v1/internal/iam/permissions", FQN: "kacho.cloud.iam.v1.InternalIAMService/ListPermissions"},
+	{Method: "POST", Template: "/iam/v1/internal/iam:check", FQN: "kacho.cloud.iam.v1.InternalIAMService/Check"},
 	// KAC-161: kacho-nlb routes — path /nlb/v1/* (не /load-balancer/v1/*),
 	// Listener — отдельный first-class service (не sub-resource NLB), no zonal-shift.
 	// NetworkLoadBalancerService

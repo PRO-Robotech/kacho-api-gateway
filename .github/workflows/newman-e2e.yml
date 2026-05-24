@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: KAC-185, path: kacho-proto }  # KAC-185 ref-pin — drop after PRO-Robotech/kacho-proto KAC-185 merges to main
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4

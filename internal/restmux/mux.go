@@ -432,18 +432,24 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			}
 		}
 
-		// --- iam.v1 admin (InternalUserService) — kacho-only, internal-port (9091) ---
-		// E0: Регистрируем InternalUserService для admin tooling. ВАЖНО: его RPC
-		// (Get, UpsertFromIdentity) в proto НЕ имеют `option (google.api.http)`,
-		// поэтому grpc-gateway не создаёт REST-routes для них — реальный трафик
-		// идёт исключительно через gRPC-direct (`grpcurl :9091`). Регистрация в
-		// REST mux — pro-forma reference для будущего E2 (когда добавим http-аннотации
-		// для admin REST UI). InternalIAMService.LookupSubject/ListPermissions — НЕ
-		// регистрируется здесь; auth-interceptor api-gateway зовёт kacho-iam:9091
-		// напрямую через grpc-client (E2, см. middleware/auth_noop.go TODO).
+		// --- iam.v1 admin (InternalUserService + InternalIAMService) —
+		// kacho-only, internal-port (9091); CLAUDE.md §Запрет 6 ---
+		// KAC-185 (F4): REST HTTP annotations added to internal IAM proto RPCs
+		// (UpsertFromIdentity, LookupSubject, ListPermissions, Check) so that
+		// grpc-gateway creates routes for /iam/v1/internal/* paths.
+		// These handlers are dispatched to the internal mux (isInternalPath
+		// returns true for any path containing /internal/); the authz middleware
+		// lets them through via the public allowlist (no Bearer JWT required —
+		// the IAM service enforces its own per-handler auth via authzguard
+		// interceptor whitelist). External TLS listener never serves these
+		// paths — gRPC director's HasInternalSuffix blocks Internal* services
+		// on the public listener.
 		if iamInternalAddr != "" {
 			if err := iampb.RegisterInternalUserServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam InternalUserService: %w", err)
+			}
+			if err := iampb.RegisterInternalIAMServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam InternalIAMService: %w", err)
 			}
 		}
 
