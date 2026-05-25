@@ -63,6 +63,11 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-compute, ref: main, path: kacho-compute }
       - uses: actions/checkout@v4
+        # KAC-198 transitional pin: kacho-iam:main still references deleted
+        # proto types (jit_pending_operation_adapter.go). Unpin to `main` once
+        # kacho-iam#76 merges (which deletes that adapter). Workspace CLAUDE.md
+        # §«Кросс-репо зависимости» allows temporary ref pinning while a
+        # cross-repo chain converges.
         with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
       # KAC-NLB / KAC-161: kacho-nlb sibling — helm umbrella sub-chart
       # (file://../../../kacho-nlb/deploy) + Dockerfile build context.
