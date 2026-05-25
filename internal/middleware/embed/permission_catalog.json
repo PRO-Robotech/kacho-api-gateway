@@ -781,8 +781,8 @@
     "permission": "iam.access_bindings_by_subjects.listBySubject",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "subject_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
