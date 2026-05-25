@@ -124,8 +124,8 @@
     "permission": "compute.disk_types.get",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "disk_type_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
@@ -134,7 +134,7 @@
     "permission": "compute.disk_typeses.list",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
+      "object_type": "cluster",
       "from_request_field": "*"
     },
     "required_acr_min": "2"
@@ -603,8 +603,8 @@
     "permission": "compute.regions.get",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "region_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
@@ -613,7 +613,7 @@
     "permission": "compute.regionses.list",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
+      "object_type": "cluster",
       "from_request_field": "*"
     },
     "required_acr_min": "2"
@@ -713,8 +713,8 @@
     "permission": "compute.zones.get",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "zone_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
@@ -723,7 +723,7 @@
     "permission": "compute.zoneses.list",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "project",
+      "object_type": "cluster",
       "from_request_field": "*"
     },
     "required_acr_min": "2"
