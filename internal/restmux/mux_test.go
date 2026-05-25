@@ -153,6 +153,28 @@ func TestIsInternalPath(t *testing.T) {
 			want: false,
 		},
 
+		// --- KAC-196: InternalClusterService — cluster-admin RBAC under
+		// /iam/v1/internal/cluster/...  All four RPCs (Get/GrantAdmin/RevokeAdmin/
+		// ListAdmins) must be classified as internal so the path-based dispatcher
+		// routes them to the internal sub-mux (which is what the cluster-internal
+		// REST listener exposes). External TLS endpoint must NEVER serve these
+		// paths — workspace CLAUDE.md §«Запрет 6».
+		{
+			name: "iam internal cluster Get",
+			path: "/iam/v1/internal/cluster",
+			want: true,
+		},
+		{
+			name: "iam internal cluster GrantAdmin / ListAdmins (POST/GET collection)",
+			path: "/iam/v1/internal/cluster/admins",
+			want: true,
+		},
+		{
+			name: "iam internal cluster RevokeAdmin (DELETE by subject id)",
+			path: "/iam/v1/internal/cluster/admins/usr_abc",
+			want: true,
+		},
+
 		// --- KAC-161: kacho-nlb /nlb/v1/* — все public (никаких /internal сегментов
 		// и admin-bindings в proto). InternalResourceLifecycleService — streaming
 		// gRPC-direct only, REST не регистрируется вовсе.
@@ -276,5 +298,80 @@ func TestNewMux_NoNLBBackend_RouteNotRegistered(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("без loadbalancer backend ожидали 404, получили %d", rec.Code)
+	}
+}
+
+// TestNewMux_RegistersInternalClusterRoutes (KAC-196) — InternalClusterService
+// is wired on the internal mux under /iam/v1/internal/cluster/... when
+// iamInternal backend is configured. The test fires HTTP requests against the
+// dispatcher and checks that the response is NOT a route-level 404 (it is
+// instead some downstream gRPC error because the backend at 127.0.0.1:1 is
+// unreachable). A bare 404 means grpc-gateway has no route registered.
+//
+// Symmetric with TestNewMux_RegistersNLBRoutes — proves D-11 surface area is
+// actually exposed.
+func TestNewMux_RegistersInternalClusterRoutes(t *testing.T) {
+	addrs := map[string]string{
+		"vpc":             "127.0.0.1:1",
+		"vpcInternal":     "127.0.0.1:1",
+		"compute":         "127.0.0.1:1",
+		"computeInternal": "127.0.0.1:1",
+		"iam":             "127.0.0.1:1",
+		"iamInternal":     "127.0.0.1:1",
+	}
+	h, err := NewMux(context.Background(), addrs, nil)
+	if err != nil {
+		t.Fatalf("NewMux: %v", err)
+	}
+	if h == nil {
+		t.Fatal("NewMux returned nil http.Handler")
+	}
+
+	// All four RPCs of InternalClusterService — one path each.
+	internalClusterPaths := []struct {
+		method, path string
+	}{
+		{"GET", "/iam/v1/internal/cluster"},               // Get
+		{"GET", "/iam/v1/internal/cluster/admins"},        // ListAdmins
+		{"POST", "/iam/v1/internal/cluster/admins"},       // GrantAdmin
+		{"DELETE", "/iam/v1/internal/cluster/admins/usr"}, // RevokeAdmin
+	}
+	for _, tc := range internalClusterPaths {
+		tc := tc
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code == http.StatusNotFound {
+				t.Errorf("InternalClusterService route %s %s: got 404 from grpc-gateway — handler not registered", tc.method, tc.path)
+			}
+		})
+	}
+}
+
+// TestNewMux_NoIAMInternalBackend_ClusterRouteNotRegistered (KAC-196) — when
+// iamInternal backend address is missing, the InternalClusterService routes are
+// not wired and the dispatcher returns 404. Mirrors the conditional pattern
+// for vpc/compute/iam/nlb backends and confirms the registration block lives
+// inside `if iamInternalAddr != ""`.
+func TestNewMux_NoIAMInternalBackend_ClusterRouteNotRegistered(t *testing.T) {
+	addrs := map[string]string{
+		// iamInternal intentionally absent
+		"iam":             "127.0.0.1:1",
+		"compute":         "127.0.0.1:1",
+		"vpc":             "127.0.0.1:1",
+		"vpcInternal":     "127.0.0.1:1",
+		"computeInternal": "127.0.0.1:1",
+	}
+	h, err := NewMux(context.Background(), addrs, nil)
+	if err != nil {
+		t.Fatalf("NewMux: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/iam/v1/internal/cluster", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("без iamInternal backend ожидали 404 на /iam/v1/internal/cluster, получили %d", rec.Code)
 	}
 }

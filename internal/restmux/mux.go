@@ -451,6 +451,16 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := iampb.RegisterInternalIAMServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam InternalIAMService: %w", err)
 			}
+			// KAC-196: InternalClusterService — cluster-admin RBAC management
+			// (Get / GrantAdmin / RevokeAdmin / ListAdmins) under
+			// /iam/v1/internal/cluster/...  Internal-only (workspace
+			// CLAUDE.md §«Запрет 6»); isInternalPath sends these paths to the
+			// internal sub-mux. D-11 gate (catalog `required_relation: admin`)
+			// enforces the FGA computed-alias `system_admin OR emergency_admin`
+			// on `cluster:cluster_kacho_root`.
+			if err := iampb.RegisterInternalClusterServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+				return nil, fmt.Errorf("register iam InternalClusterService: %w", err)
+			}
 		}
 
 		// --- loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancer + Listener + TargetGroup ---

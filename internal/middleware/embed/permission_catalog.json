@@ -1123,6 +1123,46 @@
     }
   },
   {
+    "fqn": "kacho.cloud.iam.v1.InternalClusterService/Get",
+    "permission": "iam.cluster.get",
+    "required_relation": "admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.InternalClusterService/GrantAdmin",
+    "permission": "iam.cluster.admin.grant",
+    "required_relation": "admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.InternalClusterService/ListAdmins",
+    "permission": "iam.cluster.admin.list",
+    "required_relation": "admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.InternalClusterService/RevokeAdmin",
+    "permission": "iam.cluster.admin.revoke",
+    "required_relation": "admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "3"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/Check",
     "permission": "<exempt>",
     "required_relation": "",
