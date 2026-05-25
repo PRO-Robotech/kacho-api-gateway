@@ -369,16 +369,39 @@ func extractByPathTemplate(reqPath, template, field string) (string, bool) {
 	var found string
 	for i, t := range tparts {
 		p := pparts[i]
-		if len(t) >= 2 && t[0] == '{' && t[len(t)-1] == '}' {
-			name := t[1 : len(t)-1]
+		// KAC-197: grpc-gateway suffix-action syntax `{field}:verb` (or
+		// literal `seg:verb`). Split off the verb tail before placeholder
+		// matching so the trailing literal compares correctly. Verb is
+		// required to match verbatim between template and request path.
+		tHead, tVerb, tHasVerb := splitVerbSuffix(t)
+		pHead, pVerb, pHasVerb := splitVerbSuffix(p)
+		if tHasVerb != pHasVerb || tVerb != pVerb {
+			return "", false
+		}
+		if len(tHead) >= 2 && tHead[0] == '{' && tHead[len(tHead)-1] == '}' {
+			name := tHead[1 : len(tHead)-1]
 			if name == field {
-				found = p
+				found = pHead
 			}
-		} else if t != p {
+		} else if tHead != pHead {
 			return "", false
 		}
 	}
 	return found, found != ""
+}
+
+// splitVerbSuffix separates `head:verb` into (head, verb, true). When no
+// `:` is present returns (s, "", false). `:` inside the placeholder (the
+// `{field}` portion) is not a verb separator — but grpc-gateway path
+// templates do not allow `:` inside `{...}`, so a plain right-most split is
+// sufficient. Used by extractByPathTemplate to support both `{id}:action`
+// and `seg:action` last segments without confusing the placeholder check.
+func splitVerbSuffix(seg string) (head, verb string, ok bool) {
+	i := strings.LastIndexByte(seg, ':')
+	if i < 0 {
+		return seg, "", false
+	}
+	return seg[:i], seg[i+1:], true
 }
 
 // toSnakeCase — minimal CamelCase → snake_case for field-name normalisation.

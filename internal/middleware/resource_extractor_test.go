@@ -105,6 +105,40 @@ func TestResourceExtractor_FromHTTP_PathTemplate(t *testing.T) {
 	assert.Equal(t, "prj_alpha", id.String())
 }
 
+// KAC-197 regression: grpc-gateway suffix-action path templates
+// (`/<resource>/{id}:verb`) must extract the {id} placeholder. Prior to the
+// fix the extractor rejected the last segment because it ended with the verb
+// (`}` was no longer the last char), produced wildcard, and every mutating
+// `:verb` RPC on a path-param resource (AddCidrBlocks / RemoveCidrBlocks /
+// Move / Relocate / Activate / Cancel / …) returned 403 `no path: unscoped
+// resource`. Discovered probe POST /vpc/v1/subnets/<id>:add-cidr-blocks.
+func TestResourceExtractor_FromHTTP_PathTemplate_VerbSuffix(t *testing.T) {
+	e := middleware.NewResourceExtractor(map[string]string{
+		"kacho.cloud.vpc.v1.SubnetService/AddCidrBlocks": "/vpc/v1/subnets/{subnet_id}:add-cidr-blocks",
+		"kacho.cloud.vpc.v1.SubnetService/Move":          "/vpc/v1/subnets/{subnet_id}:move",
+		"kacho.cloud.iam.v1.ProjectService/Activate":     "/iam/v1/projects/{project_id}:activate",
+	})
+	cases := []struct {
+		name, fqn, path, field, want string
+	}{
+		{"vpc-add-cidr-blocks", "kacho.cloud.vpc.v1.SubnetService/AddCidrBlocks", "/vpc/v1/subnets/e9b906y2arwnjg6g0gs8:add-cidr-blocks", "subnet_id", "e9b906y2arwnjg6g0gs8"},
+		{"vpc-move", "kacho.cloud.vpc.v1.SubnetService/Move", "/vpc/v1/subnets/e9b906y2arwnjg6g0gs8:move", "subnet_id", "e9b906y2arwnjg6g0gs8"},
+		{"iam-activate", "kacho.cloud.iam.v1.ProjectService/Activate", "/iam/v1/projects/prj_alpha:activate", "project_id", "prj_alpha"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := middleware.CatalogEntry{
+				ScopeExtractor: middleware.ScopeExtractor{FromRequestField: tc.field},
+			}
+			r := httptest.NewRequest(http.MethodPost, tc.path, nil)
+			id, ok := e.ExtractFromHTTP(r, tc.fqn, entry)
+			require.True(t, ok)
+			assert.Equal(t, tc.want, id.String(), "verb-suffix path placeholder must be extracted")
+			assert.False(t, id.IsWildcard(), "must not fall back to wildcard")
+		})
+	}
+}
+
 func TestResourceExtractor_FromHTTP_QueryStringFallback(t *testing.T) {
 	e := middleware.NewResourceExtractor(nil)
 	entry := middleware.CatalogEntry{
