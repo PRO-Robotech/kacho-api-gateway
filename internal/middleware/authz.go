@@ -63,12 +63,18 @@ import (
 // cycle (clients itself imports middleware for Subject / ResolvedSubject
 // types). Adapters convert between the two shapes.
 type AuthzCheckInput struct {
-	Subject      string
-	Action       string
-	ResourceType string
-	ResourceID   string
-	Context      map[string]any
-	TraceID      string
+	Subject string
+	Action  string
+	// RequiredRelation — explicit FGA relation from the catalog. KAC-198
+	// follow-up: when non-empty, IAM honors this verbatim instead of
+	// deriving from action verb. Required for admin-only RPCs whose
+	// `*.list`/`*.get` verb would resolve to `viewer` and slip through
+	// the `cluster.viewer = user:*` cascade.
+	RequiredRelation string
+	ResourceType     string
+	ResourceID       string
+	Context          map[string]any
+	TraceID          string
 }
 
 // AuthzCheckResult — caller-friendly Check result.
@@ -657,12 +663,16 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 
 	// 8. IAM Check.
 	result, err := m.cfg.Checker.Check(ctx, AuthzCheckInput{
-		Subject:      subj.FGA,
-		Action:       entry.Permission,
-		ResourceType: resourceType,
-		ResourceID:   resourceID.String(),
-		Context:      contextMap,
-		TraceID:      traceID,
+		Subject: subj.FGA,
+		Action:  entry.Permission,
+		// KAC-198 follow-up: pass catalog's required_relation through to
+		// IAM so admin-only RPCs (system_admin) gate correctly even when
+		// the verb (`list`/`get`) would otherwise derive to `viewer`.
+		RequiredRelation: entry.RequiredRelation,
+		ResourceType:     resourceType,
+		ResourceID:       resourceID.String(),
+		Context:          contextMap,
+		TraceID:          traceID,
 	})
 	if err != nil {
 		// PermissionDenied surfaced as an error from the gRPC stub is a
