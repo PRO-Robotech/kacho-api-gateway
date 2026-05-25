@@ -68,7 +68,7 @@ jobs:
         # kacho-iam#76 merges (which deletes that adapter). Workspace CLAUDE.md
         # §«Кросс-репо зависимости» allows temporary ref pinning while a
         # cross-repo chain converges.
-        with: { repository: PRO-Robotech/kacho-iam, ref: feat/phase4-drop-jit-simplify-gdpr, path: kacho-iam }
+        with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
       # KAC-NLB / KAC-161: kacho-nlb sibling — helm umbrella sub-chart
       # (file://../../../kacho-nlb/deploy) + Dockerfile build context.
       # Without this checkout, `helm install umbrella` fails with
