@@ -53,6 +53,13 @@ type AuthorizeCheckInput struct {
 	// Action — `<domain>.<resource>.<verb>` ("vpc.networks.create"). Required.
 	Action string
 
+	// RequiredRelation — KAC-198 follow-up: explicit FGA relation from the
+	// permission catalog. When non-empty, IAM honors it verbatim instead
+	// of deriving from action verb. Required for admin-only RPCs whose
+	// `*.list`/`*.get` verb would otherwise resolve to `viewer` and slip
+	// through the `cluster.viewer = user:*` cascade.
+	RequiredRelation string
+
 	// ResourceType — FGA object type ("vpc_network" / "project" / "*").
 	// Required.
 	ResourceType string
@@ -204,10 +211,11 @@ func (c *IAMAuthorizeClient) Check(ctx context.Context, in AuthorizeCheckInput) 
 	}
 
 	req := &iamv1.AuthorizeCheckRequest{
-		Subject:  in.Subject,
-		Resource: &iamv1.ResourceRef{Type: in.ResourceType, Id: in.ResourceID},
-		Action:   in.Action,
-		TraceId:  truncateStr(in.TraceID, 64),
+		Subject:          in.Subject,
+		Resource:         &iamv1.ResourceRef{Type: in.ResourceType, Id: in.ResourceID},
+		Action:           in.Action,
+		RequiredRelation: in.RequiredRelation,
+		TraceId:          truncateStr(in.TraceID, 64),
 	}
 	if ctxStruct, err := buildContextStruct(in.Context); err != nil {
 		return AuthorizeCheckResult{}, fmt.Errorf("authorize check: build context: %w", err)
