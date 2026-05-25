@@ -357,6 +357,13 @@ func readStringField(fv reflect.Value) ResourceID {
 // returns the value of the placeholder matching the catalog's
 // `from_request_field` (`project_id` in this example). Empty string when
 // the path does not match the template or the placeholder is missing.
+//
+// Handles grpc-gateway suffix-action segments where a `:verb` is glued to
+// the final segment: template `{subnet_id}:add-cidr-blocks` against request
+// segment `xyz:add-cidr-blocks` extracts `xyz` (the verb part is matched
+// as a literal). Without this, AddCidrBlocks / RemoveCidrBlocks /
+// SetAutoUpgrade-style RPCs fell through to wildcard `*` and surfaced as
+// `no path: unscoped resource` 403 from the authz check.
 func extractByPathTemplate(reqPath, template, field string) (string, bool) {
 	// Tokenize both — slashed segments, very small templates only (no
 	// wildcards / collections). This mirrors how grpc-gateway parses
@@ -369,16 +376,37 @@ func extractByPathTemplate(reqPath, template, field string) (string, bool) {
 	var found string
 	for i, t := range tparts {
 		p := pparts[i]
-		if len(t) >= 2 && t[0] == '{' && t[len(t)-1] == '}' {
-			name := t[1 : len(t)-1]
+
+		// Suffix-action handling: split off optional `:verb` from BOTH
+		// template and request, then compare the verbs as literals and
+		// fall through to placeholder matching on the leading half.
+		tBase, tVerb := splitVerbSuffix(t)
+		pBase, pVerb := splitVerbSuffix(p)
+		if tVerb != pVerb {
+			return "", false
+		}
+
+		if len(tBase) >= 2 && tBase[0] == '{' && tBase[len(tBase)-1] == '}' {
+			name := tBase[1 : len(tBase)-1]
 			if name == field {
-				found = p
+				found = pBase
 			}
-		} else if t != p {
+		} else if tBase != pBase {
 			return "", false
 		}
 	}
 	return found, found != ""
+}
+
+// splitVerbSuffix peels off an optional grpc-gateway `:verb` action from a
+// path segment. `"x:add"` → ("x","add"); `"x"` → ("x",""). Only the final
+// colon is treated as a separator (defensive against colon-in-id ids,
+// which Kachō does not currently produce but cheap to guard against).
+func splitVerbSuffix(seg string) (base, verb string) {
+	if idx := strings.LastIndexByte(seg, ':'); idx > 0 {
+		return seg[:idx], seg[idx+1:]
+	}
+	return seg, ""
 }
 
 // toSnakeCase — minimal CamelCase → snake_case for field-name normalisation.
