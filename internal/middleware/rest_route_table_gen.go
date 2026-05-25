@@ -258,6 +258,11 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/internal/iam:lookupSubject", FQN: "kacho.cloud.iam.v1.InternalIAMService/LookupSubject"},
 	{Method: "GET", Template: "/iam/v1/internal/iam/permissions", FQN: "kacho.cloud.iam.v1.InternalIAMService/ListPermissions"},
 	{Method: "POST", Template: "/iam/v1/internal/iam:check", FQN: "kacho.cloud.iam.v1.InternalIAMService/Check"},
+	// KAC-196: InternalClusterService — cluster-admin RBAC management (internal-only).
+	{Method: "GET", Template: "/iam/v1/internal/cluster", FQN: "kacho.cloud.iam.v1.InternalClusterService/Get"},
+	{Method: "GET", Template: "/iam/v1/internal/cluster/admins", FQN: "kacho.cloud.iam.v1.InternalClusterService/ListAdmins"},
+	{Method: "POST", Template: "/iam/v1/internal/cluster/admins", FQN: "kacho.cloud.iam.v1.InternalClusterService/GrantAdmin"},
+	{Method: "DELETE", Template: "/iam/v1/internal/cluster/admins/{subject_id}", FQN: "kacho.cloud.iam.v1.InternalClusterService/RevokeAdmin"},
 	// KAC-161: kacho-nlb routes — path /nlb/v1/* (не /load-balancer/v1/*),
 	// Listener — отдельный first-class service (не sub-resource NLB), no zonal-shift.
 	// NetworkLoadBalancerService
