@@ -416,17 +416,10 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
 			}
-			// KAC-132: JitPendingService + ComplianceReportService + AuthorizeService.
-			// All under /iam/v1/; без этих регистраций grpc-gateway не создаёт REST-routes
-			// → все POST /jitPending/:approve, GET /jitPending, POST /complianceReports:generate
-			// и POST /authorize:check → 404 (breaking iam-jit-pending + iam-compliance-report
-			// newman suites). AuthorizeService нужен для tenant FGA check flows.
-			if err := iampb.RegisterJitPendingServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
-				return nil, fmt.Errorf("register iam JitPendingService: %w", err)
-			}
-			if err := iampb.RegisterComplianceReportServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
-				return nil, fmt.Errorf("register iam ComplianceReportService: %w", err)
-			}
+			// KAC-198 Phase 4: JitPendingService removed. KAC-127 Phase 2:
+			// ComplianceReportService removed. Both proto stubs deleted from
+			// kacho-proto. Only AuthorizeService remains here (tenant FGA
+			// check flows on POST /iam/v1/authorize:check).
 			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
 				return nil, fmt.Errorf("register iam AuthorizeService: %w", err)
 			}

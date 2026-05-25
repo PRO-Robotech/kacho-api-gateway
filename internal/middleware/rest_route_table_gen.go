@@ -238,14 +238,6 @@ var generatedRestRoutes = []restRoute{
 	{Method: "DELETE", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Delete"},
 	{Method: "GET", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Get"},
 	{Method: "POST", Template: "/iam/v1/users:invite", FQN: "kacho.cloud.iam.v1.UserService/Invite"},
-	{Method: "GET", Template: "/iam/v1/jitPending", FQN: "kacho.cloud.iam.v1.JitPendingService/ListJitPending"},
-	{Method: "GET", Template: "/iam/v1/jitPending/{request_id}", FQN: "kacho.cloud.iam.v1.JitPendingService/GetJitPending"},
-	{Method: "POST", Template: "/iam/v1/jitPending/{request_id}:approve", FQN: "kacho.cloud.iam.v1.JitPendingService/ApproveJITActivation"},
-	{Method: "POST", Template: "/iam/v1/jitPending/{request_id}:deny", FQN: "kacho.cloud.iam.v1.JitPendingService/DenyJITActivation"},
-	{Method: "GET", Template: "/iam/v1/complianceReports", FQN: "kacho.cloud.iam.v1.ComplianceReportService/ListComplianceReports"},
-	{Method: "GET", Template: "/iam/v1/complianceReports/{report_id}", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GetComplianceReport"},
-	{Method: "POST", Template: "/iam/v1/complianceReports/{report_id}:getDownloadUrl", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GetReportDownloadUrl"},
-	{Method: "POST", Template: "/iam/v1/complianceReports:generateAccessReport", FQN: "kacho.cloud.iam.v1.ComplianceReportService/GenerateAccessReport"},
 	// KAC-185 (F4): Internal IAM services — cluster-internal listener only (CLAUDE.md §Запрет 6).
 	// Registered here so the authz middleware can resolve the gRPC FQN and apply the
 	// <exempt> catalog entry. isInternalPath() in restmux gates /iam/v1/internal/*
