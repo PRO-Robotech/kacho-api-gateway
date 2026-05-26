@@ -1234,39 +1234,43 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalClusterService/Get",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.cluster_admins.get",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalClusterService/GrantAdmin",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.cluster_admins.grant",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalClusterService/ListAdmins",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.cluster_admins.list",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalClusterService/RevokeAdmin",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
+    "permission": "iam.cluster_admins.revoke",
+    "required_relation": "system_admin",
     "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/Check",
