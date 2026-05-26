@@ -213,6 +213,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/groups/{group_id}:addMember", FQN: "kacho.cloud.iam.v1.GroupService/AddMember"},
 	{Method: "GET", Template: "/iam/v1/groups/{group_id}:listMembers", FQN: "kacho.cloud.iam.v1.GroupService/ListMembers"},
 	{Method: "POST", Template: "/iam/v1/groups/{group_id}:removeMember", FQN: "kacho.cloud.iam.v1.GroupService/RemoveMember"},
+	{Method: "GET", Template: "/iam/v1/me", FQN: "kacho.cloud.iam.v1.AuthorizeService/WhoAmI"},
 	{Method: "GET", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/List"},
 	{Method: "POST", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/projects/{project_id}", FQN: "kacho.cloud.iam.v1.ProjectService/Delete"},
