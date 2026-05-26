@@ -197,6 +197,7 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.AccessBindingService/Delete":         {},
 	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource": {},
 	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":  {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":  {},
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 

@@ -185,6 +185,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "DELETE", Template: "/iam/v1/accounts/{account_id}", FQN: "kacho.cloud.iam.v1.AccountService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accounts/{account_id}", FQN: "kacho.cloud.iam.v1.AccountService/Get"},
 	{Method: "PATCH", Template: "/iam/v1/accounts/{account_id}", FQN: "kacho.cloud.iam.v1.AccountService/Update"},
+	{Method: "GET", Template: "/iam/v1/accounts/{account_id}/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByAccount"},
 	{Method: "GET", Template: "/iam/v1/accounts/{account_id}/operations", FQN: "kacho.cloud.iam.v1.AccountService/ListOperations"},
 	{Method: "POST", Template: "/iam/v1/authorize:batchCheck", FQN: "kacho.cloud.iam.v1.AuthorizeService/BatchCheck"},
 	{Method: "POST", Template: "/iam/v1/authorize:check", FQN: "kacho.cloud.iam.v1.AuthorizeService/Check"},
