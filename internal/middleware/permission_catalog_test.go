@@ -220,6 +220,46 @@ func TestPermissionCatalog_LookupKnownEntries_FromEmbed(t *testing.T) {
 	}
 }
 
+// TestPermissionCatalog_InternalClusterService_LockedSystemAdmin (item-2b) —
+// regression guard: every RPC of `InternalClusterService` must be gated by
+// the FGA relation `system_admin` on `cluster:<cluster-singleton>` in the
+// embedded catalog. Non-admin callers MUST NOT be able to even observe
+// these RPCs — `Get` / `ListAdmins` would otherwise leak the existence and
+// roster of cluster admins. Regressing any of these entries to `<exempt>` /
+// `viewer` / non-`cluster` scope would re-open the leak.
+func TestPermissionCatalog_InternalClusterService_LockedSystemAdmin(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	want := []struct {
+		fqn  string
+		perm string
+	}{
+		{"kacho.cloud.iam.v1.InternalClusterService/Get", "iam.cluster_admins.get"},
+		{"kacho.cloud.iam.v1.InternalClusterService/ListAdmins", "iam.cluster_admins.list"},
+		{"kacho.cloud.iam.v1.InternalClusterService/GrantAdmin", "iam.cluster_admins.grant"},
+		{"kacho.cloud.iam.v1.InternalClusterService/RevokeAdmin", "iam.cluster_admins.revoke"},
+	}
+
+	for _, w := range want {
+		t.Run(w.fqn, func(t *testing.T) {
+			entry, ok := c.Lookup(w.fqn)
+			require.True(t, ok, "fqn missing from embedded catalog: %s", w.fqn)
+			assert.False(t, entry.IsExempt(),
+				"InternalClusterService.%s must NOT be <exempt> — non-admins would observe cluster-admin roster",
+				w.fqn)
+			assert.Equal(t, w.perm, entry.Permission,
+				"permission identifier drift on %s", w.fqn)
+			assert.Equal(t, "system_admin", entry.RequiredRelation,
+				"required_relation must be system_admin on %s (acceptance D-11, item-2b)", w.fqn)
+			assert.Equal(t, "cluster", entry.ScopeExtractor.ObjectType,
+				"scope object_type must be cluster on %s", w.fqn)
+			assert.Equal(t, "*", entry.ScopeExtractor.FromRequestField,
+				"scope from_request_field must be '*' (cluster singleton) on %s", w.fqn)
+		})
+	}
+}
+
 func TestPermissionCatalog_RejectBadVersionFlavour(t *testing.T) {
 	// Truncated input — must fail with descriptive error.
 	raw := []byte(`{"entries":`)
