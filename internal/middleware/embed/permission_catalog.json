@@ -965,6 +965,15 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AuthorizeService/WhoAmI",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.ConditionsService/Create",
     "permission": "iam.conditions.create",
     "required_relation": "editor",
