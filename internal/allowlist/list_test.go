@@ -306,11 +306,12 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		// RoleService
 		"/kacho.cloud.iam.v1.RoleService/Create",
 		"/kacho.cloud.iam.v1.RoleService/Delete",
-		// AccessBindingService (+ ListByResource/ListBySubject)
+		// AccessBindingService (+ ListByResource/ListBySubject/ListByAccount)
 		"/kacho.cloud.iam.v1.AccessBindingService/Create",
 		"/kacho.cloud.iam.v1.AccessBindingService/Delete",
 		"/kacho.cloud.iam.v1.AccessBindingService/ListByResource",
 		"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject",
+		"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount",
 	}
 	for _, m := range publicMethods {
 		m := m
