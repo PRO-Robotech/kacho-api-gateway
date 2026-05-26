@@ -932,13 +932,12 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.AuthorizeService/Check",
-    "permission": "iam.authorize.check",
-    "required_relation": "viewer",
+    "permission": "<exempt>",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "subject"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.iam.v1.AuthorizeService/ExpandRelations",
