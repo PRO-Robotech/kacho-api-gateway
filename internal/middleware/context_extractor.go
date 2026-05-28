@@ -7,10 +7,10 @@
 //	mfa_fresh(amr_claims, acr_value, current_time, mfa_at)
 //	non_expired(current_time, valid_until)
 //	source_ip_in_range(client_ip, allowed_cidrs)
-//	break_glass_window(current_time, expires_at)
 //	business_hours(current_time, tz, start_h, end_h)
 //	device_compliant(device_attestation, allowed_attestations)
 //	jit_window(current_time, activated_at, ttl_seconds)
+//	(break_glass_window removed in KAC-214 / RBAC v2)
 //
 // This extractor builds the *caller-side* half of those keys — the ones
 // derivable from the JWT and the incoming HTTP request. Predicate-side
