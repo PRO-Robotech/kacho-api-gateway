@@ -213,6 +213,13 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/groups/{group_id}:addMember", FQN: "kacho.cloud.iam.v1.GroupService/AddMember"},
 	{Method: "GET", Template: "/iam/v1/groups/{group_id}:listMembers", FQN: "kacho.cloud.iam.v1.GroupService/ListMembers"},
 	{Method: "POST", Template: "/iam/v1/groups/{group_id}:removeMember", FQN: "kacho.cloud.iam.v1.GroupService/RemoveMember"},
+	// KAC-225 (stopgap): AuthorizeService.WhoAmI (GET /iam/v1/me) is in the
+	// permission catalog (<exempt>) but was missing from this generated table,
+	// so path->FQN resolution failed and the <exempt> bypass never fired →
+	// 403 "catalog: no entry for method" (fqn "//iam/v1/me"). Route table was
+	// not regenerated when WhoAmI was synced into the catalog. Proper fix:
+	// re-run the kacho-proto route extractor. See PRO-Robotech/kacho-api-gateway issue.
+	{Method: "GET", Template: "/iam/v1/me", FQN: "kacho.cloud.iam.v1.AuthorizeService/WhoAmI"},
 	{Method: "GET", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/List"},
 	{Method: "POST", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/projects/{project_id}", FQN: "kacho.cloud.iam.v1.ProjectService/Delete"},
