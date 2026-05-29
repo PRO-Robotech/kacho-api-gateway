@@ -18,6 +18,10 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		{"DELETE", "/iam/v1/accounts/acc0000000000000001", "kacho.cloud.iam.v1.AccountService/Delete"},
 		// suffix-action `:verb`
 		{"POST", "/iam/v1/users:invite", "kacho.cloud.iam.v1.UserService/Invite"},
+		// KAC-225: WhoAmI (GET /iam/v1/me) must resolve — was missing from the
+		// route table, so path->FQN failed and the <exempt> bypass never fired
+		// → 403 "catalog: no entry for method" broke UI permission bootstrap.
+		{"GET", "/iam/v1/me", "kacho.cloud.iam.v1.AuthorizeService/WhoAmI"},
 		// list with query string is stripped before matching
 		{"GET", "/iam/v1/projects?accountId=acc1", "kacho.cloud.iam.v1.ProjectService/List"},
 		// vpc resource
