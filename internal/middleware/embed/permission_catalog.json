@@ -1749,8 +1749,8 @@
     "permission": "loadbalancer.listeners.list",
     "required_relation": "viewer",
     "scope_extractor": {
-      "object_type": "lb_network_load_balancer",
-      "from_request_field": "load_balancer_id"
+      "object_type": "project",
+      "from_request_field": "project_id"
     },
     "required_acr_min": "2"
   },
