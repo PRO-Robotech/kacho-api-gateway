@@ -1,0 +1,26 @@
+{{/*
+api-gateway-internal — ClusterIP Service for the cluster-internal gRPC
+listener (InternalAuthzCacheService, port {{ .Values.internalPort | default 9091 }}).
+
+KAC-223: kacho-iam's subject_change push-drainer dials
+api-gateway-internal.<ns>.svc.cluster.local:9091 to push per-subject authz
+cache invalidations. This listener MUST NOT be exposed on the public cmux /
+TLS Service (workspace CLAUDE.md запрет #6 — internal-only RPCs). A separate
+Service (no Ingress / LoadBalancer) keeps it cluster-internal.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}-internal
+  namespace: kacho
+  labels:
+    app: {{ .Values.name }}
+    kacho.io/listener: internal
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - name: grpc-internal
+      port: {{ .Values.internalPort | default 9091 }}
+      targetPort: grpc-internal

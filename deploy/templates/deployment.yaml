@@ -21,6 +21,8 @@ spec:
           ports:
             - name: cmux
               containerPort: {{ .Values.port }}
+            - name: grpc-internal
+              containerPort: {{ .Values.internalPort | default 9091 }}
             {{- if .Values.tls.enabled }}
             - name: tls
               containerPort: {{ .Values.tlsPort }}
@@ -28,6 +30,11 @@ spec:
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
+            # Internal-only gRPC listener (InternalAuthzCacheService). NOT on
+            # the public cmux/TLS port (запрет #6). Reached via the
+            # api-gateway-internal Service.
+            - name: KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR
+              value: ":{{ .Values.internalPort | default 9091 }}"
             # KAC-124/127: KACHO_API_GATEWAY_RESOURCEMANAGER_GRPC удалён — backend заменён на kacho-iam.
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"

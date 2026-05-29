@@ -5,6 +5,10 @@ imagePullPolicy: IfNotPresent
 
 port: 8080
 tlsPort: 8443
+# Internal gRPC listener (InternalAuthzCacheService — cluster-internal only,
+# workspace CLAUDE.md запрет #6). Exposed via the api-gateway-internal Service;
+# kacho-iam's subject_change drainer dials it (KAC-223).
+internalPort: 9091
 
 # Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
 # KAC-124/127: resourceManager удалён — backend заменён на kacho-iam (ниже).
