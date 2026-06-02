@@ -152,9 +152,12 @@ func NewIAMAuthorizeClient(cfg IAMAuthorizeClientConfig) (*IAMAuthorizeClient, e
 		// Default 1 retry on Unavailable.
 		cfg.MaxRetries = 1
 	}
+	// KAC-244: Time=10s — authorize-conn (list-filter authz) реже используется и
+	// успевает остыть в простое; 30s-ping слишком медленный для kind → первый
+	// authz-check после простоя таймаутит (200ms) → список приходит пустым.
 	kp := keepalive.ClientParameters{
-		Time:                30 * time.Second,
-		Timeout:             10 * time.Second,
+		Time:                10 * time.Second,
+		Timeout:             3 * time.Second,
 		PermitWithoutStream: true,
 	}
 	conn, err := grpc.NewClient(cfg.Addr,

@@ -65,9 +65,13 @@ func main() {
 	// loadbalancer заморожен — dial не выполняется. grpc.NewClient ленив:
 	// фактическое соединение устанавливается при первом RPC, поэтому отсутствие
 	// ещё-не-задеплоенного backend не валит запуск.
+	// KAC-244: Time=10s (не 30s) — в kind idle inter-service conn умирает быстрее
+	// 30s-интервала, из-за чего первый запрос после простоя висит на переустановке
+	// (cold-start authz-таймаут → списки accounts/projects приходят пустыми). 10s
+	// держит conn тёплым (стандарт corelib grpcclient.KeepaliveParams).
 	keepaliveParams := keepalive.ClientParameters{
-		Time:                30 * time.Second,
-		Timeout:             10 * time.Second,
+		Time:                10 * time.Second,
+		Timeout:             3 * time.Second,
 		PermitWithoutStream: true,
 	}
 	dialOpts := []grpc.DialOption{
