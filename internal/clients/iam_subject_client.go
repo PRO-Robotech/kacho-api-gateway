@@ -36,9 +36,10 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, e
 	if addr == "" {
 		return nil, fmt.Errorf("iam internal addr empty")
 	}
+	// KAC-244: Time=10s (стандарт) — держим idle subject-lookup conn тёплым.
 	kp := keepalive.ClientParameters{
-		Time:                30 * time.Second,
-		Timeout:             10 * time.Second,
+		Time:                10 * time.Second,
+		Timeout:             3 * time.Second,
 		PermitWithoutStream: true,
 	}
 	conn, err := grpc.NewClient(addr,
