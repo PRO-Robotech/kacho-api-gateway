@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	allowlist "github.com/PRO-Robotech/kacho-proto/apisurface"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 )
 
 // Backends — карта «доменное имя → долгоживущий *grpc.ClientConn».

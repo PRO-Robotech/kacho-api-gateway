@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	allowlist "github.com/PRO-Robotech/kacho-proto/apisurface"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 )
 
 // MethodResolver — re-export of local proxy MethodResolver type signature.
