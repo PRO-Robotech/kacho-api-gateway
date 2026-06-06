@@ -77,18 +77,9 @@ advertised'ятся на external TLS endpoint (workspace `CLAUDE.md` §запр
   `InternalRegionService` / `InternalZoneService` на cluster-internal mux.
 
 **Cluster-internal mux only** (НЕ на external TLS endpoint):
-- `InternalNetworkInterfaceService` (kacho-vpc, `vpcInternal`) — `GET
-  /vpc/v1/networkInterfaces/{id}/internal` (data-plane-проекция NIC: `hv_id`/
-  placement, `sid`/`sid_seq`, `host_iface`, `netns`, `gateway_ip`, `container_id`,
-  resolved `vpn_id`); плюс `ReportNiDataplane` / `ListByHypervisor` на
-  gRPC-style routes.
 - `InternalNetworkService` (kacho-vpc, `vpcInternal`) — `GET /vpc/v1/networks/{id}/internal`
-  → `{network, vpn_id}` (числовой data-plane-id Network — internal-only).
-- `InternalHypervisorService` (kacho-compute, `computeInternal`) — `GET/POST
-  /compute/v1/hypervisors`, `GET/DELETE /compute/v1/hypervisors/{hypervisor_id}`,
-  `POST /compute/v1/hypervisors/{hypervisor_id}:updateState` (placement / HW
-  инвентарь — инфра-чувствительное; на external endpoint `GET
-  /compute/v1/hypervisors` → 404).
+  (internal-проекция Network — инфра-чувствительные поля; см. workspace
+  CLAUDE.md §«Инфра-чувствительные данные»).
 - `InternalAddressService` (kacho-vpc) — `/vpc/v1/addressPools` + ephemeral-IPAM
   helper'ы (как было).
 

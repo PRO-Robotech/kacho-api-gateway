@@ -9,8 +9,8 @@ import (
 
 // TestIsInternalPath покрывает path-based dispatch правил для split-mux (KAC-50).
 //
-// Логика: любой путь, который relates к admin/internal-поверхности (data-plane
-// проекции, AddressPool, Hypervisor, admin-bindings) → internal sub-mux
+// Логика: любой путь, который relates к admin/internal-поверхности
+// (internal-проекции, AddressPool, admin-bindings) → internal sub-mux
 // (EmitUnpopulated=false); всё остальное (tenant-facing public контракт
 // Network/Subnet/Address/NIC/SG/RT/Gateway/PE/Instance/Disk/...) → public sub-mux
 // (EmitUnpopulated=true).
@@ -104,21 +104,6 @@ func TestIsInternalPath(t *testing.T) {
 			name: "cloud get by id (public)",
 			path: "/vpc/v1/clouds/cl-1",
 			want: false,
-		},
-
-		// --- (6) /compute/v1/hypervisors[/...] ---
-		// Hypervisor выпилен из proto (KAC-36), но path-classification остаётся
-		// helper'ом defense-in-depth, чтобы при возможной реинтродукции пустые
-		// поля скрывались без отдельного релиза gateway.
-		{
-			name: "hypervisors root",
-			path: "/compute/v1/hypervisors",
-			want: true,
-		},
-		{
-			name: "hypervisors by id",
-			path: "/compute/v1/hypervisors/hv-1",
-			want: true,
 		},
 
 		// --- public surfaces (must NOT go to internal) ---
