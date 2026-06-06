@@ -15,11 +15,9 @@
 //     должен видеть поле даже если оно пустое (`description: ""`, `labels: {}`,
 //     `cidrBlocks: []`, `defaultSecurityGroupId: ""`, и т.п.). Это часть
 //     стабильного API.
-//   - internal mux — `EmitUnpopulated=false`. Admin / data-plane-ресурсы и
-//     internal-проекции публичных ресурсов до материализации на гипервизоре
-//     отдают много zero-полей (`vpnId=0`, `hypervisorId=""`, `sid=""`,
-//     `hostIface=""`, `netns=""`, …). На внутренней admin/UI поверхности
-//     этот шум вреден и сбивает админов.
+//   - internal mux — `EmitUnpopulated=false`. Admin-ресурсы и internal-проекции
+//     публичных ресурсов отдают много zero-полей. На внутренней admin/UI
+//     поверхности этот шум вреден и сбивает админов.
 //
 // Все RPC handlers регистрируются на ОБА mux'а — разница только в JSON
 // маршалинге. Path-based dispatch выбирает нужный mux на основании
@@ -32,8 +30,7 @@
 //     `/vpc/v1/addressPools` (включая `:check` / `:explainResolution`),
 //     `/vpc/v1/networks/{id}/addressPoolBinding`,
 //     `/vpc/v1/addresses/{id}/addressPoolOverride`,
-//     `/vpc/v1/clouds/{id}/poolSelector`,
-//     `/compute/v1/hypervisors`.
+//     `/vpc/v1/clouds/{id}/poolSelector`.
 //   - Всё остальное → public mux.
 //
 // Корневой `http.Handler` (диспетчер) экспонируется как `http.Handler`
@@ -50,7 +47,6 @@
 //     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
 //   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
-//     (InternalHypervisor выпилен в KAC-36 / kacho-proto commit 79e3790.)
 //   - loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancerService, ListenerService,
 //     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
 //     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
@@ -99,8 +95,7 @@ import (
 //  3. `/vpc/v1/networks/{id}/addressPoolBinding` → internal.
 //  4. `/vpc/v1/addresses/{id}/addressPoolOverride` → internal.
 //  5. `/vpc/v1/clouds/{id}/poolSelector` → internal.
-//  6. `/compute/v1/hypervisors` → internal.
-//  7. Всё остальное → public.
+//  6. Всё остальное → public.
 func isInternalPath(path string) bool {
 	// (1) any `/internal` segment.
 	// strings.Contains покрывает оба варианта:
@@ -138,12 +133,6 @@ func isInternalPath(path string) bool {
 		return true
 	}
 
-	// (6) /compute/v1/hypervisors[/...]
-	if path == "/compute/v1/hypervisors" ||
-		strings.HasPrefix(path, "/compute/v1/hypervisors/") {
-		return true
-	}
-
 	return false
 }
 
@@ -176,10 +165,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 	//     `cidr_blocks`/`v4_address_ids` и т.п. — полезный контракт, клиент
 	//     должен видеть поле даже если оно пустое.
 	//   - internal: EmitUnpopulated=false — на internal/admin endpoints
-	//     (`/internal`-projections, AddressPool, Hypervisor) много инфра-полей
-	//     `vpn_id`/`hv_id`/`sid`/`host_iface`/`netns`/... до материализации
-	//     пустые; пустые поля скрываем чтобы UI/админам видеть только реально
-	//     заполненные значения.
+	//     (`/internal`-projections, AddressPool) часть инфра-полей до
+	//     материализации пустые; пустые поля скрываем чтобы UI/админам видеть
+	//     только реально заполненные значения.
 	publicMarshaler := &runtime.JSONPb{
 		MarshalOptions: protojson.MarshalOptions{
 			UseProtoNames:   false,
@@ -319,13 +307,9 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register InternalCloudService: %w", err)
 			}
-			// NB: InternalNetworkInterfaceService — НЕ регистрируется в REST mux
-			// (KAC-49 решение: NIC оставлен только публичной проекцией). Data-plane-
-			// инфо (vpn_id/hv_id/sid/host_iface/netns/...) остаётся доступной только
-			// через gRPC `vpc.kacho.svc:9091` для kacho-vpc-implement — не для UI/CLI.
-			//
-			// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal projection
-			// of a Network ({network, vpn_id}); backs the admin-UI "jsonint" tab.
+			// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal
+			// projection of a Network (инфра-чувствительные поля); backs the
+			// admin-UI "jsonint" tab.
 			if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register InternalNetworkService: %w", err)
 			}
@@ -371,11 +355,6 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
 			}
-			// InternalHypervisorService удалён в kacho-proto (commit 79e3790,
-			// KAC-78/KAC-36): ресурс `Hypervisor` целиком выпилен. Path
-			// `/compute/v1/hypervisors` остаётся помеченным как internal в
-			// `isInternalPath` (defense-in-depth — на случай реинтродукции),
-			// но handler здесь больше НЕ регистрируется. См. KAC-50.
 		}
 
 		// --- iam.v1: Account + Project + User (read+delete only) + ServiceAccount + Group + Role + AccessBinding ---
