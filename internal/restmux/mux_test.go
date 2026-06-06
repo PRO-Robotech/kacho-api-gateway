@@ -54,6 +54,17 @@ func TestIsInternalPath(t *testing.T) {
 			path: "/vpc/v1/addressPools/ap-abc",
 			want: true,
 		},
+		// KAC-269: AddCidrBlocks / RemoveCidrBlocks suffix-actions on a pool.
+		{
+			name: "addressPools addCidrBlocks (internal)",
+			path: "/vpc/v1/addressPools/ap-abc:addCidrBlocks",
+			want: true,
+		},
+		{
+			name: "addressPools removeCidrBlocks (internal)",
+			path: "/vpc/v1/addressPools/ap-abc:removeCidrBlocks",
+			want: true,
+		},
 
 		// --- (3) /vpc/v1/networks/{id}/addressPoolBinding ---
 		{

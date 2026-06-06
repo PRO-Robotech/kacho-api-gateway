@@ -2113,6 +2113,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/AddCidrBlocks",
+    "permission": "vpc.address_pools.add_cidr_blocks",
+    "required_relation": "system_admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsNetworkDefault",
     "permission": "vpc.address_pools.bind",
     "required_relation": "system_admin",
@@ -2175,6 +2185,16 @@
   {
     "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/ListAddresses",
     "permission": "vpc.address_pools.list_addresses",
+    "required_relation": "system_admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.InternalAddressPoolService/RemoveCidrBlocks",
+    "permission": "vpc.address_pools.remove_cidr_blocks",
     "required_relation": "system_admin",
     "scope_extractor": {
       "object_type": "cluster",
