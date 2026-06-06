@@ -43,7 +43,7 @@
 //
 //   - iam.v1: Account, Project, User, ServiceAccount, Group, Role, AccessBinding
 //     (KAC-104; заменили resourcemanager Cloud/Folder и organizationmanager Organization)
-//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, PrivateEndpoint, NetworkInterface
+//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, NetworkInterface
 //   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetwork —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
 //   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
@@ -85,7 +85,6 @@ import (
 	// (Organization/Cloud/Folder → Account/Project). Proto-пакеты
 	// resourcemanager.v1 / organizationmanager.v1 удалены целиком в kacho-proto.
 	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
-	pepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1/privatelink"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
@@ -286,7 +285,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// KAC-124: resourcemanager (Cloud/Folder) и organizationmanager (Organization)
 		// удалены целиком — backend заменён на kacho-iam Accounts/Projects.
 
-		// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway + PrivateEndpoint ---
+		// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway ---
 		if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 			return nil, fmt.Errorf("register NetworkService: %w", err)
 		}
@@ -304,9 +303,6 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		}
 		if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 			return nil, fmt.Errorf("register GatewayService: %w", err)
-		}
-		if err := pepb.RegisterPrivateEndpointServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
-			return nil, fmt.Errorf("register PrivateEndpointService: %w", err)
 		}
 		if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
 			return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
