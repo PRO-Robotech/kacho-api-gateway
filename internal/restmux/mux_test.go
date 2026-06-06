@@ -42,7 +42,8 @@ func TestIsInternalPath(t *testing.T) {
 			want: false,
 		},
 
-		// --- (2) /vpc/v1/addressPools[/...|:...] ---
+		// --- (2) /vpc/v1/addressPools[/...] ---
+		// KAC-266: AddressPool Check / ExplainResolution RPCs removed from proto.
 		{
 			name: "addressPools root",
 			path: "/vpc/v1/addressPools",
@@ -51,16 +52,6 @@ func TestIsInternalPath(t *testing.T) {
 		{
 			name: "addressPools by id",
 			path: "/vpc/v1/addressPools/ap-abc",
-			want: true,
-		},
-		{
-			name: "addressPools :check verb",
-			path: "/vpc/v1/addressPools:check",
-			want: true,
-		},
-		{
-			name: "addressPools :explainResolution verb",
-			path: "/vpc/v1/addressPools:explainResolution",
 			want: true,
 		},
 
@@ -82,27 +73,12 @@ func TestIsInternalPath(t *testing.T) {
 			want: false,
 		},
 
-		// --- (4) /vpc/v1/addresses/{id}/addressPoolOverride ---
-		{
-			name: "address addressPoolOverride",
-			path: "/vpc/v1/addresses/addr-1/addressPoolOverride",
-			want: true,
-		},
+		// KAC-266: address addressPoolOverride (Bind/Unbind) and cloud poolSelector
+		// (InternalCloudService) RPCs removed from proto — those internal-path rules
+		// no longer exist. Addresses/clouds stay fully public.
 		{
 			name: "address get by id (public)",
 			path: "/vpc/v1/addresses/addr-1",
-			want: false,
-		},
-
-		// --- (5) /vpc/v1/clouds/{id}/poolSelector ---
-		{
-			name: "cloud poolSelector",
-			path: "/vpc/v1/clouds/cl-1/poolSelector",
-			want: true,
-		},
-		{
-			name: "cloud get by id (public)",
-			path: "/vpc/v1/clouds/cl-1",
 			want: false,
 		},
 
