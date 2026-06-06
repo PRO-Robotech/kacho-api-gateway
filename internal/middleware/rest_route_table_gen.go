@@ -304,6 +304,8 @@ var generatedRestRoutes = []restRoute{
 	{Method: "PATCH", Template: "/vpc/v1/addressPools/{pool_id}", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/Update"},
 	{Method: "GET", Template: "/vpc/v1/addressPools/{pool_id}/addresses", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/ListAddresses"},
 	{Method: "GET", Template: "/vpc/v1/addressPools/{pool_id}/utilization", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/GetUtilization"},
+	{Method: "POST", Template: "/vpc/v1/addressPools/{address_pool_id}:addCidrBlocks", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/AddCidrBlocks"},
+	{Method: "POST", Template: "/vpc/v1/addressPools/{address_pool_id}:removeCidrBlocks", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/RemoveCidrBlocks"},
 	{Method: "GET", Template: "/vpc/v1/addresses", FQN: "kacho.cloud.vpc.v1.AddressService/List"},
 	{Method: "POST", Template: "/vpc/v1/addresses", FQN: "kacho.cloud.vpc.v1.AddressService/Create"},
 	{Method: "DELETE", Template: "/vpc/v1/addresses/{address_id}", FQN: "kacho.cloud.vpc.v1.AddressService/Delete"},

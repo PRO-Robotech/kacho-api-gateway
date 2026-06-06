@@ -26,6 +26,9 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		{"GET", "/iam/v1/projects?accountId=acc1", "kacho.cloud.iam.v1.ProjectService/List"},
 		// vpc resource
 		{"GET", "/vpc/v1/networks/enp0000000000000001", "kacho.cloud.vpc.v1.NetworkService/Get"},
+		// KAC-269: InternalAddressPoolService CIDR-block suffix-actions (internal mux).
+		{"POST", "/vpc/v1/addressPools/apl0000000000000001:addCidrBlocks", "kacho.cloud.vpc.v1.InternalAddressPoolService/AddCidrBlocks"},
+		{"POST", "/vpc/v1/addressPools/apl0000000000000001:removeCidrBlocks", "kacho.cloud.vpc.v1.InternalAddressPoolService/RemoveCidrBlocks"},
 	}
 	for _, c := range cases {
 		fqn, ok := r.Resolve(c.method, c.path)
