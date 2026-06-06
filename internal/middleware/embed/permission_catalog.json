@@ -2593,6 +2593,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.vpc.v1.RouteTableService/AddRoutes",
+    "permission": "vpc.route_tables.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Create",
     "permission": "vpc.route_tables.create",
     "required_relation": "editor",
@@ -2653,7 +2663,27 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.vpc.v1.RouteTableService/RemoveRoutes",
+    "permission": "vpc.route_tables.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Update",
+    "permission": "vpc.route_tables.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "vpc_route_table",
+      "from_request_field": "route_table_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.RouteTableService/UpdateRoute",
     "permission": "vpc.route_tables.update",
     "required_relation": "editor",
     "scope_extractor": {
@@ -2859,66 +2889,6 @@
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Create",
-    "permission": "vpc.private_endpoints.create",
-    "required_relation": "editor",
-    "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "project_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Delete",
-    "permission": "vpc.private_endpoints.delete",
-    "required_relation": "editor",
-    "scope_extractor": {
-      "object_type": "vpc_private_endpoint",
-      "from_request_field": "private_endpoint_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Get",
-    "permission": "vpc.private_endpoints.get",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "vpc_private_endpoint",
-      "from_request_field": "private_endpoint_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/List",
-    "permission": "vpc.private_endpointses.list",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "project_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/ListOperations",
-    "permission": "vpc.private_endpoint_operationses.listOperations",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "vpc_private_endpoint",
-      "from_request_field": "private_endpoint_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Update",
-    "permission": "vpc.private_endpoints.update",
-    "required_relation": "editor",
-    "scope_extractor": {
-      "object_type": "vpc_private_endpoint",
-      "from_request_field": "private_endpoint_id"
     },
     "required_acr_min": "2"
   }

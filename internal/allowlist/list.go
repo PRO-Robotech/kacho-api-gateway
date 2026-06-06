@@ -71,14 +71,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.GatewayService/Delete":         {},
 	"/kacho.cloud.vpc.v1.GatewayService/Move":           {},
 	"/kacho.cloud.vpc.v1.GatewayService/ListOperations": {},
-	// vpc.v1.privatelink — PrivateEndpointService
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Get":            {},
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/List":           {},
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Create":         {},
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Update":         {},
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/Delete":         {},
-	"/kacho.cloud.vpc.v1.privatelink.PrivateEndpointService/ListOperations": {},
-
 	// compute.v1 — DiskService
 	"/kacho.cloud.compute.v1.DiskService/Get":                   {},
 	"/kacho.cloud.compute.v1.DiskService/List":                  {},
@@ -202,18 +194,18 @@ var AllowedMethods = map[string]struct{}{
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 
 	// loadbalancer.v1 — NetworkLoadBalancerService (KAC-161, kacho-nlb)
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get":                {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List":               {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create":             {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update":             {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete":             {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start":              {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop":               {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Move":               {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup":  {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup":  {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates":    {},
-	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations":     {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get":               {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List":              {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Create":            {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update":            {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete":            {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start":             {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop":              {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Move":              {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup": {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup": {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates":   {},
+	"/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations":    {},
 	// loadbalancer.v1 — ListenerService (first-class FGA object, design §3.3)
 	"/kacho.cloud.loadbalancer.v1.ListenerService/Get":            {},
 	"/kacho.cloud.loadbalancer.v1.ListenerService/List":           {},
