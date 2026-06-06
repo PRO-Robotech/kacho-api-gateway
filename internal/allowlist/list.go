@@ -22,7 +22,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.NetworkService/ListSecurityGroups": {},
 	"/kacho.cloud.vpc.v1.NetworkService/ListRouteTables":    {},
 	"/kacho.cloud.vpc.v1.NetworkService/ListOperations":     {},
-	"/kacho.cloud.vpc.v1.NetworkService/Move":               {},
 	// vpc.v1 — SubnetService
 	"/kacho.cloud.vpc.v1.SubnetService/Get":               {},
 	"/kacho.cloud.vpc.v1.SubnetService/List":              {},
@@ -33,8 +32,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.SubnetService/RemoveCidrBlocks":  {},
 	"/kacho.cloud.vpc.v1.SubnetService/ListOperations":    {},
 	"/kacho.cloud.vpc.v1.SubnetService/ListUsedAddresses": {},
-	"/kacho.cloud.vpc.v1.SubnetService/Move":              {},
-	"/kacho.cloud.vpc.v1.SubnetService/Relocate":          {},
 	// vpc.v1 — AddressService
 	"/kacho.cloud.vpc.v1.AddressService/Get":            {},
 	"/kacho.cloud.vpc.v1.AddressService/GetByValue":     {},
@@ -44,7 +41,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.AddressService/Update":         {},
 	"/kacho.cloud.vpc.v1.AddressService/Delete":         {},
 	"/kacho.cloud.vpc.v1.AddressService/ListOperations": {},
-	"/kacho.cloud.vpc.v1.AddressService/Move":           {},
 	// vpc.v1 — RouteTableService
 	"/kacho.cloud.vpc.v1.RouteTableService/Get":            {},
 	"/kacho.cloud.vpc.v1.RouteTableService/List":           {},
@@ -52,7 +48,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.RouteTableService/Update":         {},
 	"/kacho.cloud.vpc.v1.RouteTableService/Delete":         {},
 	"/kacho.cloud.vpc.v1.RouteTableService/ListOperations": {},
-	"/kacho.cloud.vpc.v1.RouteTableService/Move":           {},
 	// vpc.v1 — SecurityGroupService
 	"/kacho.cloud.vpc.v1.SecurityGroupService/Get":            {},
 	"/kacho.cloud.vpc.v1.SecurityGroupService/List":           {},
@@ -62,14 +57,12 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.SecurityGroupService/UpdateRule":     {},
 	"/kacho.cloud.vpc.v1.SecurityGroupService/Delete":         {},
 	"/kacho.cloud.vpc.v1.SecurityGroupService/ListOperations": {},
-	"/kacho.cloud.vpc.v1.SecurityGroupService/Move":           {},
 	// vpc.v1 — GatewayService (NAT egress)
 	"/kacho.cloud.vpc.v1.GatewayService/Get":            {},
 	"/kacho.cloud.vpc.v1.GatewayService/List":           {},
 	"/kacho.cloud.vpc.v1.GatewayService/Create":         {},
 	"/kacho.cloud.vpc.v1.GatewayService/Update":         {},
 	"/kacho.cloud.vpc.v1.GatewayService/Delete":         {},
-	"/kacho.cloud.vpc.v1.GatewayService/Move":           {},
 	"/kacho.cloud.vpc.v1.GatewayService/ListOperations": {},
 	// compute.v1 — DiskService
 	"/kacho.cloud.compute.v1.DiskService/Get":                   {},
@@ -78,7 +71,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.compute.v1.DiskService/Update":                {},
 	"/kacho.cloud.compute.v1.DiskService/Delete":                {},
 	"/kacho.cloud.compute.v1.DiskService/ListOperations":        {},
-	"/kacho.cloud.compute.v1.DiskService/Move":                  {},
 	"/kacho.cloud.compute.v1.DiskService/Relocate":              {},
 	"/kacho.cloud.compute.v1.DiskService/ListSnapshotSchedules": {},
 	"/kacho.cloud.compute.v1.DiskService/ListAccessBindings":    {},
@@ -126,7 +118,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.compute.v1.InstanceService/RemoveOneToOneNat":        {},
 	"/kacho.cloud.compute.v1.InstanceService/UpdateNetworkInterface":   {},
 	"/kacho.cloud.compute.v1.InstanceService/ListOperations":           {},
-	"/kacho.cloud.compute.v1.InstanceService/Move":                     {},
 	"/kacho.cloud.compute.v1.InstanceService/Relocate":                 {},
 	"/kacho.cloud.compute.v1.InstanceService/SimulateMaintenanceEvent": {},
 	"/kacho.cloud.compute.v1.InstanceService/ListAccessBindings":       {},
@@ -152,7 +143,6 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.ProjectService/Create":         {},
 	"/kacho.cloud.iam.v1.ProjectService/Update":         {},
 	"/kacho.cloud.iam.v1.ProjectService/Delete":         {},
-	"/kacho.cloud.iam.v1.ProjectService/Move":           {},
 	"/kacho.cloud.iam.v1.ProjectService/ListOperations": {},
 	// iam.v1 — UserService (НЕТ Create/Update — Users создаются через
 	// InternalUserService.UpsertFromIdentity; см. workspace CLAUDE.md / E0 §5.10)
@@ -244,8 +234,9 @@ func IsAllowed(methodPath string) bool {
 //
 // Покрывает обе принятые в kacho-proto конвенции именования internal-сервисов:
 //   - суффикс  "<Xxx>InternalService" (resource-manager: FolderInternalService);
-//   - префикс  "Internal<Xxx>Service" (vpc: InternalZoneService, InternalCloudService;
-//     compute: InternalDiskTypeService, InternalZoneService, InternalWatchService).
+//   - префикс  "Internal<Xxx>Service" (vpc: InternalAddressPoolService,
+//     InternalNetworkService; compute: InternalDiskTypeService,
+//     InternalZoneService, InternalWatchService).
 //
 // Путь имеет вид "/kacho.cloud.<domain>.v1.<Service>/<Method>"; проверяем сегмент
 // между последней "." и "/".

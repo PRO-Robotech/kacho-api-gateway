@@ -27,10 +27,8 @@
 //     `/vpc/v1/networks/{id}/internal`, `/vpc/v1/networkInterfaces/{id}/internal`),
 //     → internal mux.
 //   - Admin-only ресурсы (kacho-only, не tenant-facing) → internal mux:
-//     `/vpc/v1/addressPools` (включая `:check` / `:explainResolution`),
-//     `/vpc/v1/networks/{id}/addressPoolBinding`,
-//     `/vpc/v1/addresses/{id}/addressPoolOverride`,
-//     `/vpc/v1/clouds/{id}/poolSelector`.
+//     `/vpc/v1/addressPools`,
+//     `/vpc/v1/networks/{id}/addressPoolBinding`.
 //   - Всё остальное → public mux.
 //
 // Корневой `http.Handler` (диспетчер) экспонируется как `http.Handler`
@@ -41,8 +39,9 @@
 //   - iam.v1: Account, Project, User, ServiceAccount, Group, Role, AccessBinding
 //     (KAC-104; заменили resourcemanager Cloud/Folder и organizationmanager Organization)
 //   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, NetworkInterface
-//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, Cloud, InternalNetwork —
+//   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, InternalNetwork —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
+//     (KAC-266: InternalCloudService poolSelector удалён из proto.)
 //   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
 //     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
 //   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
@@ -91,11 +90,13 @@ import (
 //  1. Любой path-сегмент `/internal` → internal mux. Покрывает
 //     `/vpc/v1/networks/{id}/internal`, `/vpc/v1/networkInterfaces/{id}/internal`,
 //     и любые будущие `*/internal`.
-//  2. `/vpc/v1/addressPools` (и `:check` / `:explainResolution`) → internal.
+//  2. `/vpc/v1/addressPools` → internal.
 //  3. `/vpc/v1/networks/{id}/addressPoolBinding` → internal.
-//  4. `/vpc/v1/addresses/{id}/addressPoolOverride` → internal.
-//  5. `/vpc/v1/clouds/{id}/poolSelector` → internal.
-//  6. Всё остальное → public.
+//  4. Всё остальное → public.
+//
+// KAC-266: AddressPool `:check` / `:explainResolution`, address `addressPoolOverride`
+// (Bind/Unbind) и cloud `poolSelector` (InternalCloudService Get/Set/Unset) удалены
+// из proto целиком — соответствующие правила маршрутизации убраны.
 func isInternalPath(path string) bool {
 	// (1) any `/internal` segment.
 	// strings.Contains покрывает оба варианта:
@@ -108,7 +109,7 @@ func isInternalPath(path string) bool {
 		return true
 	}
 
-	// (2) /vpc/v1/addressPools[/...|:...]
+	// (2) /vpc/v1/addressPools[/...]
 	if path == "/vpc/v1/addressPools" ||
 		strings.HasPrefix(path, "/vpc/v1/addressPools/") ||
 		strings.HasPrefix(path, "/vpc/v1/addressPools:") {
@@ -118,18 +119,6 @@ func isInternalPath(path string) bool {
 	// (3) /vpc/v1/networks/{id}/addressPoolBinding
 	if strings.HasPrefix(path, "/vpc/v1/networks/") &&
 		strings.HasSuffix(path, "/addressPoolBinding") {
-		return true
-	}
-
-	// (4) /vpc/v1/addresses/{id}/addressPoolOverride
-	if strings.HasPrefix(path, "/vpc/v1/addresses/") &&
-		strings.HasSuffix(path, "/addressPoolOverride") {
-		return true
-	}
-
-	// (5) /vpc/v1/clouds/{id}/poolSelector
-	if strings.HasPrefix(path, "/vpc/v1/clouds/") &&
-		strings.HasSuffix(path, "/poolSelector") {
 		return true
 	}
 
@@ -296,16 +285,14 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
 		}
 
-		// --- vpc admin (AddressPool/Cloud) — kacho-only, internal-port (9091) ---
+		// --- vpc admin (AddressPool) — kacho-only, internal-port (9091) ---
 		// Эти сервисы экспонируются через apiGW REST для UI/админ-tooling. Не верстаются
 		// на verbatim-YC; путь /vpc/v1/addressPools. Region/Zone перенесены в kacho-compute
 		// (эпик KAC-15) — см. блок compute ниже + workspace CLAUDE.md §«Кросс-доменные ссылки».
+		// KAC-266: InternalCloudService (poolSelector Get/Set/Unset) удалён целиком из proto.
 		if vpcInternalAddr != "" {
 			if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
 				return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
-			}
-			if err := vpcpb.RegisterInternalCloudServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
-				return nil, fmt.Errorf("register InternalCloudService: %w", err)
 			}
 			// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal
 			// projection of a Network (инфра-чувствительные поля); backs the

@@ -287,10 +287,9 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		"/kacho.cloud.iam.v1.AccountService/Create",
 		"/kacho.cloud.iam.v1.AccountService/Update",
 		"/kacho.cloud.iam.v1.AccountService/Delete",
-		// ProjectService (+ Move)
+		// ProjectService (KAC-266: Move removed)
 		"/kacho.cloud.iam.v1.ProjectService/Get",
 		"/kacho.cloud.iam.v1.ProjectService/Create",
-		"/kacho.cloud.iam.v1.ProjectService/Move",
 		// UserService (read+delete only)
 		"/kacho.cloud.iam.v1.UserService/Get",
 		"/kacho.cloud.iam.v1.UserService/List",
