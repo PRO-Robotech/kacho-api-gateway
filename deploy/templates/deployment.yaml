@@ -118,15 +118,52 @@ spec:
               value: {{ .Values.authz.checkTimeoutMs | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.mtls.enable }}
+            {{- $mp := .Values.mtls.mountPath }}
+            # SEC-E/SEC-F per-edge backend-dial mTLS. Shared "api-gateway" client
+            # identity (cert-manager api-gateway-client-tls). SERVER_NAME unset →
+            # config.go EdgeTLSClient derives it per dial-host (covers public +
+            # internal hosts, both in the peer server-SAN, КРИТ#1).
+            - name: KACHO_API_GATEWAY_MTLS_CLIENT_CERT_FILE
+              value: {{ printf "%s/tls.crt" $mp | quote }}
+            - name: KACHO_API_GATEWAY_MTLS_CLIENT_KEY_FILE
+              value: {{ printf "%s/tls.key" $mp | quote }}
+            - name: KACHO_API_GATEWAY_MTLS_CA_FILE
+              value: {{ printf "%s/ca.crt" $mp | quote }}
+            {{- if .Values.mtls.edges.vpc }}
+            - name: KACHO_API_GATEWAY_MTLS_VPC_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.compute }}
+            - name: KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.iam }}
+            - name: KACHO_API_GATEWAY_MTLS_IAM_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.nlb }}
+            - name: KACHO_API_GATEWAY_MTLS_NLB_ENABLE
+              value: "true"
+            {{- end }}
+            {{- end }}
             {{- range $k, $v := .Values.extraEnv }}
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
-          {{- if .Values.tls.enabled }}
+          {{- if or .Values.tls.enabled .Values.mtls.enable }}
           volumeMounts:
+            {{- if .Values.tls.enabled }}
             - name: tls
               mountPath: /etc/api-gateway/tls
               readOnly: true
+            {{- end }}
+            {{- if .Values.mtls.enable }}
+            # SEC-F mTLS — backend-dial client-cert (cert-manager internal-CA).
+            - name: mtls-client
+              mountPath: {{ .Values.mtls.mountPath | quote }}
+              readOnly: true
+            {{- end }}
           {{- end }}
           readinessProbe:
             httpGet:
@@ -147,9 +184,17 @@ spec:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
               memory: {{ .Values.resources.limits.memory }}
-      {{- if .Values.tls.enabled }}
+      {{- if or .Values.tls.enabled .Values.mtls.enable }}
       volumes:
+        {{- if .Values.tls.enabled }}
         - name: tls
           secret:
             secretName: {{ .Values.tls.secretName }}
+        {{- end }}
+        {{- if .Values.mtls.enable }}
+        # SEC-F mTLS — backend-dial client-cert secret (cert-manager internal-CA).
+        - name: mtls-client
+          secret:
+            secretName: {{ .Values.mtls.clientSecretName | quote }}
+        {{- end }}
       {{- end }}
