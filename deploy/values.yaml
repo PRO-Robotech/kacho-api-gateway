@@ -100,6 +100,30 @@ authn: {}
 # (enabled=false, failOpen=false) apply. The dev overlay enables it.
 authz: {}
 
+# ─── SEC-F/SEC-E mTLS — per-edge backend-dial (cert-manager internal-CA) ──────
+# api-gateway is a backend-dial CLIENT (it terminates EXTERNAL TLS separately via
+# `tls.*` above — that is unrelated). enable=false (default) → НИ client-cert
+# secret, НИ KACHO_API_GATEWAY_MTLS_* env → every backend dial insecure, текущее
+# dev (нулевая регрессия, SEC-E-01/SEC-F-05). umbrella прокидывает .mtls.enable +
+# per-edge флаги (КРИТ#3).
+#
+# One shared "api-gateway" client identity across all edges (OQ-SEC-E-3): the
+# cert-manager `api-gateway-client-tls` secret. Per-edge ENABLE toggles each edge
+# independently (SEC-E-09). SERVER_NAME is INTENTIONALLY left unset → config.go
+# EdgeTLSClient derives it from each dial-host (`hostFromAddr`), so the iam/nlb
+# edges verify against BOTH their public (kacho-iam / kacho-nlb) AND internal
+# (kacho-iam-internal / kacho-nlb-internal) dial-hosts — both are in the peer
+# server-SAN (КРИТ#1). A single override would force one name and break the other.
+mtls:
+  enable: false
+  clientSecretName: api-gateway-client-tls   # cert key = api-gateway (КРИТ#1)
+  mountPath: /etc/api-gateway/mtls           # <mp>/{tls.crt,tls.key,ca.crt}
+  edges:
+    vpc: false        # gateway→vpc (+ vpcInternal)
+    compute: false    # gateway→compute (+ computeInternal)
+    iam: false        # gateway→iam (+ iamInternal); shared by authz/subject dials
+    nlb: false        # gateway→nlb (+ nlbInternal)
+
 # Arbitrary env vars escape-hatch (key: value).
 extraEnv: {}
 
