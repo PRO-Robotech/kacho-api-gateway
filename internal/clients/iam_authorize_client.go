@@ -107,11 +107,11 @@ type AuthorizeClient interface {
 
 // IAMAuthorizeClient — production implementation backed by gRPC.
 type IAMAuthorizeClient struct {
-	conn    *grpc.ClientConn
-	stub    iamv1.AuthorizeServiceClient
-	timeout time.Duration
+	conn       *grpc.ClientConn
+	stub       iamv1.AuthorizeServiceClient
+	timeout    time.Duration
 	maxRetries int
-	logger  *slog.Logger
+	logger     *slog.Logger
 
 	// callsTotal — diagnostic counter (separate from the per-decision
 	// metrics; this counts wire-level RPCs including retries).
@@ -132,6 +132,13 @@ type IAMAuthorizeClientConfig struct {
 
 	// Logger — slog. Required.
 	Logger *slog.Logger
+
+	// TransportCreds — SEC-E per-edge transport-credentials dial-option for the
+	// gateway→iam edge (mTLS client-cert when KACHO_API_GATEWAY_MTLS_IAM_ENABLE=true,
+	// assembled in cmd/api-gateway). nil ⇒ insecure (dev backward-compat). The
+	// transport layer is orthogonal to the principal-metadata propagated per RPC
+	// (epic invariant I2).
+	TransportCreds grpc.DialOption
 }
 
 // NewIAMAuthorizeClient dials the IAM backend and returns a ready client.
@@ -152,6 +159,10 @@ func NewIAMAuthorizeClient(cfg IAMAuthorizeClientConfig) (*IAMAuthorizeClient, e
 		// Default 1 retry on Unavailable.
 		cfg.MaxRetries = 1
 	}
+	transportCreds := cfg.TransportCreds
+	if transportCreds == nil {
+		transportCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
 	// KAC-244: Time=10s — authorize-conn (list-filter authz) реже используется и
 	// успевает остыть в простое; 30s-ping слишком медленный для kind → первый
 	// authz-check после простоя таймаутит (200ms) → список приходит пустым.
@@ -161,7 +172,7 @@ func NewIAMAuthorizeClient(cfg IAMAuthorizeClientConfig) (*IAMAuthorizeClient, e
 		PermitWithoutStream: true,
 	}
 	conn, err := grpc.NewClient(cfg.Addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		transportCreds,
 		grpc.WithKeepaliveParams(kp),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
 	)
@@ -268,7 +279,6 @@ func (c *IAMAuthorizeClient) Close() error {
 // CallsTotal returns the lifetime count of wire RPCs (including retries).
 // Exposed for tests + diagnostic readouts.
 func (c *IAMAuthorizeClient) CallsTotal() int64 { return c.callsTotal.Load() }
-
 
 // retryable returns true for transient gRPC codes that warrant a single
 // retry. We deliberately exclude `Aborted` (typically a CAS conflict —

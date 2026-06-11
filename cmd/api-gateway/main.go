@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -15,8 +16,6 @@ import (
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	// Регистрация errdetails-типов в protoregistry — иначе protojson не
@@ -65,59 +64,28 @@ func main() {
 	// loadbalancer заморожен — dial не выполняется. grpc.NewClient ленив:
 	// фактическое соединение устанавливается при первом RPC, поэтому отсутствие
 	// ещё-не-задеплоенного backend не валит запуск.
-	// KAC-244: Time=10s (не 30s) — в kind idle inter-service conn умирает быстрее
-	// 30s-интервала, из-за чего первый запрос после простоя висит на переустановке
-	// (cold-start authz-таймаут → списки accounts/projects приходят пустыми). 10s
-	// держит conn тёплым (стандарт corelib grpcclient.KeepaliveParams).
-	keepaliveParams := keepalive.ClientParameters{
-		Time:                10 * time.Second,
-		Timeout:             3 * time.Second,
-		PermitWithoutStream: true,
+	//
+	// SEC-E: each backend dial selects its per-edge transport creds (mTLS
+	// client-cert when KACHO_API_GATEWAY_MTLS_<EDGE>_ENABLE=true + cert material
+	// present, else insecure — dev backward-compat). The "operation" self-loopback
+	// stays always-insecure (in-process re-entry, SEC-E-07). Fail-fast on misconfig
+	// (enabled edge w/o cert material) so the process never starts half-secured.
+	backends, closeBackends, err := dialBackends(cfg)
+	if err != nil {
+		log.Fatalf("backend dial: %v", err)
 	}
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepaliveParams),
-		// Client-side round-robin across all backend pods. Combined with `dns:///`
-		// scheme on the dial target (or a Headless Service) this opens one subconn
-		// per backend Pod IP and distributes RPCs across them — vs the default
-		// pick_first which pins to one Pod per ClusterIP forever.
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
-	}
-
-	backends := make(proxy.Backends)
-	for domain, addr := range cfg.BackendAddrs() {
-		conn, dialErr := grpc.NewClient(addr, dialOpts...)
-		if dialErr != nil {
-			log.Fatalf("dial %s (%s): %v", domain, addr, dialErr)
-		}
-		defer conn.Close()
-		backends[domain] = conn
-	}
-
-	// Self-loopback ClientConn for the "operation" domain. Requests for
-	// /kacho.cloud.operation.OperationService/* arrive natively (registered
-	// below) and are dispatched directly to OpsProxy. But yc CLI sends
-	// /yandex.cloud.operation.OperationService/* — that path is NOT registered
-	// natively, so it hits the UnknownServiceHandler, which rewrites it to
-	// /kacho.cloud.operation.OperationService/* and looks up backend by domain
-	// "operation". This loopback satisfies the lookup; the connection re-enters
-	// the gateway through the listening port and matches the natively-registered
-	// kacho.cloud.operation.OperationService.
-	loopbackAddr := cfg.ListenAddr
-	if len(loopbackAddr) > 0 && loopbackAddr[0] == ':' {
-		loopbackAddr = "127.0.0.1" + loopbackAddr
-	}
-	opsLoopback, dialErr := grpc.NewClient(loopbackAddr, dialOpts...)
-	if dialErr != nil {
-		log.Fatalf("dial operation self-loopback (%s): %v", loopbackAddr, dialErr)
-	}
-	defer opsLoopback.Close()
-	backends["operation"] = opsLoopback
+	defer closeBackends()
 
 	// --- IAM subject client (gRPC-direct к kacho-iam:9091 для LookupSubject; KAC-107 E2) ---
 	// Loop-prevention запрет #6: InternalIAMService НЕ регистрируется в restmux,
 	// поэтому subject-lookup идёт напрямую через grpc.NewClient.
-	iamSubjectClient, err := clients.NewIAMSubjectClient(cfg.IAMInternalAddr, logger)
+	// SEC-E: this is the gateway→iam edge → same MTLS_IAM_ENABLE creds as the iam
+	// backend conns (OQ-SEC-E-3). Fail-fast on misconfig.
+	iamSubjectCreds, err := iamEdgeDialCreds(cfg, cfg.IAMInternalAddr)
+	if err != nil {
+		log.Fatalf("iam subject mTLS creds: %v", err)
+	}
+	iamSubjectClient, err := clients.NewIAMSubjectClient(cfg.IAMInternalAddr, logger, iamSubjectCreds)
 	if err != nil {
 		log.Fatalf("iam subject client: %v", err)
 	}
@@ -583,10 +551,19 @@ func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.A
 		}
 	}
 
+	// SEC-E: iam-authorize is the gateway→iam edge → mTLS under MTLS_IAM_ENABLE
+	// (OQ-SEC-E-3, same edge as iam-subject + iam backend conns). Fail-fast on
+	// misconfig (enabled without cert material) — never a silent insecure fallback.
+	authorizeAddr := cfg.ResolvedIAMAuthorizeURL()
+	authorizeCreds, err := iamEdgeDialCreds(cfg, authorizeAddr)
+	if err != nil {
+		return nil, fmt.Errorf("iam authorize mTLS creds: %w", err)
+	}
 	authzClient, err := clients.NewIAMAuthorizeClient(clients.IAMAuthorizeClientConfig{
-		Addr:    cfg.ResolvedIAMAuthorizeURL(),
-		Timeout: time.Duration(cfg.AuthZCheckTimeoutMs) * time.Millisecond,
-		Logger:  logger,
+		Addr:           authorizeAddr,
+		Timeout:        time.Duration(cfg.AuthZCheckTimeoutMs) * time.Millisecond,
+		Logger:         logger,
+		TransportCreds: authorizeCreds,
 	})
 	if err != nil {
 		return nil, err
