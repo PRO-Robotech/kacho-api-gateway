@@ -1,0 +1,403 @@
+{
+  "info": {
+    "_postman_id": "77283aab-eaf2-4a0f-a590-f729653adf59",
+    "name": "kacho-api-gateway / newman / sec_e_gateway_mtls",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get('runId') || pm.environment.get('runId') === '') {",
+          "  const t = Date.now().toString(36);",
+          "  const r = Math.floor(Math.random() * 1e9).toString(36);",
+          "  pm.environment.set('runId', ('r' + t + r).replace(/[^a-z0-9]/g, '').slice(0, 11));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "SEC-E-GATEWAY-MTLS-A — POST /vpc/v1/networks as owner alice over mTLS-profiled gateway → 200 Operation, poll done, GET network",
+      "description": "class:CRUD | class:AUTHZ | class:SEC | priority:P0",
+      "item": [
+        {
+          "name": "create-network-over-mtls",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vpc/v1/networks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vpc",
+                "v1",
+                "networks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"projectId\": \"{{projectAliceId}}\", \"name\": \"net-mtls-01\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.test('Operation envelope returned (async mutation)', () => {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.id, 'operation.id present: ' + JSON.stringify(j)).to.be.a('string');",
+                  "  pm.expect(j.done, 'operation.done present').to.be.a('boolean');",
+                  "});",
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = (j.id);",
+                  "  if (v !== undefined && v !== null) pm.environment.set('opId', String(v));",
+                  "} catch (e) {}",
+                  "const __j = pm.response.json();",
+                  "const __rid = (__j.metadata && (__j.metadata.networkId || __j.metadata.resourceId)) || '';",
+                  "if (__rid) pm.environment.set('netId', __rid);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "poll-op",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/operations/{{opId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "operations",
+                "{{opId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('poll status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const j = pm.response.json();",
+                  "const pc = parseInt(pm.environment.get('_pollCount') || '0', 10);",
+                  "if (!j.done && pc < 20) {",
+                  "  pm.environment.set('_pollCount', String(pc + 1));",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "  return;",
+                  "}",
+                  "pm.environment.unset('_pollCount');",
+                  "pm.test('operation done', () => pm.expect(j.done, JSON.stringify(j)).to.eql(true));",
+                  "if (j.error) pm.environment.set('lastOpError', JSON.stringify(j.error));",
+                  "else pm.environment.unset('lastOpError');",
+                  "if (j.response) pm.environment.set('lastOpResponse', JSON.stringify(j.response));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "resolve-network-id-from-op",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/operations/{{opId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "operations",
+                "{{opId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('operation succeeded (no error) over mTLS', () => {",
+                  "  pm.expect(j.error, 'op error: ' + JSON.stringify(j.error || {})).to.be.oneOf([undefined, null]);",
+                  "});",
+                  "let rid = pm.environment.get('netId') || '';",
+                  "if (!rid && j.response && j.response.id) rid = j.response.id;",
+                  "if (!rid && j.metadata && j.metadata.networkId) rid = j.metadata.networkId;",
+                  "if (rid) pm.environment.set('netId', rid);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "get-network-back",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vpc/v1/networks/{{netId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vpc",
+                "v1",
+                "networks",
+                "{{netId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}",
+                  "// Skip the GET when the op did not surface a resource id (stand-dependent).",
+                  "const rid = pm.environment.get('netId') || '';",
+                  "if (!rid) { console.warn('netId unresolved — skipping GET-back step.'); postman.setNextRequest(null); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.test('network created over mTLS has expected fields (camelCase, transparent)', () => {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.id, JSON.stringify(j)).to.be.a('string');",
+                  "  pm.expect(j.projectId, JSON.stringify(j)).to.eql(pm.environment.get('projectAliceId'));",
+                  "  pm.expect(j.name, JSON.stringify(j)).to.eql('net-mtls-01');",
+                  "  pm.expect(j.createdAt, JSON.stringify(j)).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SEC-E-GATEWAY-MTLS-NEG-A — alice lists networks in bob's project over mTLS gateway → 403 PermissionDenied (Check fired over mTLS)",
+      "description": "class:NEG | class:AUTHZ | class:SEC | priority:P0",
+      "item": [
+        {
+          "name": "cross-tenant-list-denied-over-mtls",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vpc/v1/networks?projectId={{projectBobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vpc",
+                "v1",
+                "networks?projectId={{projectBobId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.expect(pm.response.code).to.eql(403));",
+                  "pm.test('grpc code 7 (PERMISSION_DENIED)', () => {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.code, JSON.stringify(j)).to.eql(7);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SEC-E-GATEWAY-MTLS-BAN6-ADDRESSPOOL — GET /vpc/v1/addressPools on external TLS endpoint → not exposed (ban #6, mTLS profile)",
+      "description": "class:NEG | class:SEC | priority:P0",
+      "item": [
+        {
+          "name": "addresspool-on-external-tls",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vpc/v1/addressPools",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vpc",
+                "v1",
+                "addressPools"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// per-step auth: bearer from env 'tokenAlice'",
+                  "const __t = pm.environment.get('tokenAlice') || pm.variables.get('tokenAlice') || '';",
+                  "if (__t) {",
+                  "  pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + __t});",
+                  "} else {",
+                  "  pm.request.headers.remove('Authorization');",
+                  "}",
+                  "const extBase = pm.environment.get('externalBaseUrl') || pm.variables.get('externalBaseUrl') || '';",
+                  "if (!extBase) {",
+                  "  console.warn('externalBaseUrl not set — skipping ban#6 external-AddressPool check.');",
+                  "  postman.setNextRequest(null);",
+                  "} else {",
+                  "  pm.request.url = extBase + '/vpc/v1/addressPools';",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('EXT-TLS: AddressPool (Internal) not exposed on external endpoint', () => {",
+                  "  const code = pm.response.code;",
+                  "  if (code === undefined) { return; }  // DNS / conn error = not exposed = PASS",
+                  "  pm.expect(code, 'CRITICAL: Internal AddressPool exposed on external TLS!').to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": []
+}

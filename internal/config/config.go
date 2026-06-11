@@ -1,9 +1,13 @@
 package config
 
 import (
+	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	corecfg "github.com/PRO-Robotech/kacho-corelib/config"
+	"github.com/PRO-Robotech/kacho-corelib/grpcclient"
 )
 
 // Config хранит конфигурацию api-gateway.
@@ -191,6 +195,34 @@ type Config struct {
 	// decision cache on sibling replicas that did not process the mutation.
 	// Default 2s. Omit the env var (or set 0) to use the built-in default.
 	SubjectChangePollInterval time.Duration `envconfig:"KACHO_API_GATEWAY_SUBJECT_CHANGE_POLL_INTERVAL" default:"2s"`
+
+	// --- SEC-E: per-edge backend-dial mTLS (epic §6.4/§6.5, decision §3.2) ---
+	//
+	// Backward-compat default = OFF: all *_ENABLE false, cert/key/ca empty ⇒
+	// every backend dial is insecure, identical to current dev (SEC-E-01). When
+	// an edge is enabled the gateway presents the shared "api-gateway" client-cert
+	// (CertFile/KeyFile), verifies the backend server-cert against CAFile, and
+	// checks the server-cert SAN against the per-edge ServerName (or the dial-host
+	// when unset). enable=true with missing cert material ⇒ fail-fast at startup,
+	// never a silent insecure fallback (SEC-E-03, epic §6.7).
+	//
+	// One shared client cert/key/ca across all edges (one "api-gateway" module
+	// identity, OQ-SEC-E-3); per-edge ENABLE + SERVER_NAME give independent
+	// rollback (SEC-E-09).
+	MTLSClientCertFile string `envconfig:"KACHO_API_GATEWAY_MTLS_CLIENT_CERT_FILE" default:""`
+	MTLSClientKeyFile  string `envconfig:"KACHO_API_GATEWAY_MTLS_CLIENT_KEY_FILE"  default:""`
+	MTLSCAFile         string `envconfig:"KACHO_API_GATEWAY_MTLS_CA_FILE"          default:""`
+
+	MTLSVPCEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_ENABLE"     default:"false"`
+	MTLSComputeEnable bool `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE" default:"false"`
+	MTLSIAMEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_ENABLE"     default:"false"`
+	MTLSNLBEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_ENABLE"     default:"false"`
+
+	// Per-edge SNI/server-name overrides. Empty ⇒ derive from the dial-addr host.
+	MTLSVPCServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_SERVER_NAME"     default:""`
+	MTLSComputeServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_SERVER_NAME" default:""`
+	MTLSIAMServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_SERVER_NAME"     default:""`
+	MTLSNLBServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"     default:""`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
@@ -276,6 +308,80 @@ func (c Config) BackendAddrs() map[string]string {
 		"loadbalancer":         c.NLBAddr,
 		"loadbalancerInternal": c.NLBInternalAddr,
 	}
+}
+
+// EdgeTLSClient assembles the corelib grpcclient.TLSClient value-struct for a
+// backend edge ("vpc" | "compute" | "iam" | "nlb"), deriving the server-name
+// from the dial address host when no per-edge override is set.
+//
+// Contract (SEC-E §1.1/§3.1-§3.3):
+//   - edge disabled ⇒ {Enable:false}; cert material is NOT consulted (insecure
+//     dial; dev backward-compat). The returned struct is safe to pass to
+//     grpcclient.TLSClientCreds.
+//   - edge enabled ⇒ {Enable:true, CertFile, KeyFile, CAFiles, ServerName}; if any
+//     of cert/key/ca is empty the call FAILS (fail-fast), never a silent insecure
+//     fallback. PEM validity itself is enforced later by grpcclient.TLSClientCreds.
+//   - unknown edge ⇒ error (programming error).
+func (c Config) EdgeTLSClient(edge, dialAddr string) (grpcclient.TLSClient, error) {
+	enable, serverNameOverride, err := c.edgeMTLS(edge)
+	if err != nil {
+		return grpcclient.TLSClient{}, err
+	}
+	if !enable {
+		return grpcclient.TLSClient{Enable: false}, nil
+	}
+
+	// Fail-fast: enabled edge demands the full shared cert material. A silent
+	// insecure fallback here would defeat the security contract (SEC-E-03).
+	if c.MTLSClientCertFile == "" || c.MTLSClientKeyFile == "" || c.MTLSCAFile == "" {
+		return grpcclient.TLSClient{}, fmt.Errorf(
+			"mtls %s enabled but client cert/key/ca missing "+
+				"(KACHO_API_GATEWAY_MTLS_CLIENT_CERT_FILE/_KEY_FILE/_CA_FILE)", edge)
+	}
+
+	serverName := serverNameOverride
+	if serverName == "" {
+		serverName = hostFromAddr(dialAddr)
+	}
+	if serverName == "" {
+		return grpcclient.TLSClient{}, fmt.Errorf(
+			"mtls %s enabled but server_name could not be derived from dial addr %q "+
+				"(set KACHO_API_GATEWAY_MTLS_%s_SERVER_NAME)", edge, dialAddr, strings.ToUpper(edge))
+	}
+
+	return grpcclient.TLSClient{
+		Enable:     true,
+		CertFile:   c.MTLSClientCertFile,
+		KeyFile:    c.MTLSClientKeyFile,
+		CAFiles:    []string{c.MTLSCAFile},
+		ServerName: serverName,
+	}, nil
+}
+
+// edgeMTLS resolves the per-edge enable flag + server-name override.
+func (c Config) edgeMTLS(edge string) (enable bool, serverName string, err error) {
+	switch edge {
+	case "vpc":
+		return c.MTLSVPCEnable, c.MTLSVPCServerName, nil
+	case "compute":
+		return c.MTLSComputeEnable, c.MTLSComputeServerName, nil
+	case "iam":
+		return c.MTLSIAMEnable, c.MTLSIAMServerName, nil
+	case "nlb":
+		return c.MTLSNLBEnable, c.MTLSNLBServerName, nil
+	default:
+		return false, "", fmt.Errorf("unknown mtls edge %q", edge)
+	}
+}
+
+// hostFromAddr returns the host portion of a "host:port" dial address (or the
+// input unchanged when it has no port).
+func hostFromAddr(addr string) string {
+	host, _, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		return addr
+	}
+	return host
 }
 
 // Load читает конфигурацию из переменных окружения.

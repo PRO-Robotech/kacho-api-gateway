@@ -32,9 +32,19 @@ type IAMSubjectClient struct {
 	logger   *slog.Logger
 }
 
-func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, error) {
+// NewIAMSubjectClient dials kacho-iam:9091 for InternalIAMService.LookupSubject.
+//
+// SEC-E: transportCreds is the per-edge transport-credentials dial-option for the
+// gateway→iam edge (mTLS client-cert when KACHO_API_GATEWAY_MTLS_IAM_ENABLE=true,
+// assembled in cmd/api-gateway). nil ⇒ insecure (dev backward-compat). The
+// transport layer is orthogonal to the principal-metadata propagated on each RPC
+// (epic invariant I2).
+func NewIAMSubjectClient(addr string, logger *slog.Logger, transportCreds grpc.DialOption) (*IAMSubjectClient, error) {
 	if addr == "" {
 		return nil, fmt.Errorf("iam internal addr empty")
+	}
+	if transportCreds == nil {
+		transportCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
 	// KAC-244: Time=10s (стандарт) — держим idle subject-lookup conn тёплым.
 	kp := keepalive.ClientParameters{
@@ -43,7 +53,7 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger) (*IAMSubjectClient, e
 		PermitWithoutStream: true,
 	}
 	conn, err := grpc.NewClient(addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		transportCreds,
 		grpc.WithKeepaliveParams(kp),
 	)
 	if err != nil {
@@ -182,7 +192,7 @@ func (c *IAMSubjectClient) IsSystemAdmin(ctx context.Context, subject string) (b
 }
 
 func (c *IAMSubjectClient) InvalidateAll() { c.cache.InvalidateAll() }
-func (c *IAMSubjectClient) Close() error  { return c.conn.Close() }
+func (c *IAMSubjectClient) Close() error   { return c.conn.Close() }
 
 func pickDisplayName(displayName, email string) string {
 	if displayName != "" {
