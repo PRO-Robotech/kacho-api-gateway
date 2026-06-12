@@ -1,8 +1,11 @@
 package config
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -223,6 +226,16 @@ type Config struct {
 	MTLSComputeServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_SERVER_NAME" default:""`
 	MTLSIAMServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_SERVER_NAME"     default:""`
 	MTLSNLBServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"     default:""`
+
+	// SEC-K hybrid external listener: when true, the external TLS listener
+	// (TLSListenAddr) runs with tls.VerifyClientCertIfGiven and the internal CA
+	// (MTLSCAFile) as ClientCAs — an OPTIONAL client cert. A browser (no cert)
+	// handshakes and takes the JWT path; a client presenting a valid Kachō cert
+	// is verified so the AuthInterceptor can derive a principal from its SPIFFE
+	// SAN (no JWT required). Default false ⇒ ClientAuth stays NoClientCert,
+	// behaviour unchanged. Internal service listeners are NOT affected by this
+	// flag (they stay strict RequireAndVerifyClientCert).
+	HybridMTLSExternal bool `envconfig:"KACHO_API_GATEWAY_HYBRID_MTLS_EXTERNAL" default:"false"`
 }
 
 // TLSEnabled возвращает true, если TLS-listener должен быть запущен.
@@ -235,6 +248,49 @@ func (c Config) TLSEnabled() bool {
 // compatibility shim (ApiEndpointService.List response).
 func (c Config) AdvertisedEndpoint() string {
 	return c.AdvertisedEndpointAddr
+}
+
+// HybridMTLSEnabled reports whether the external TLS listener should accept an
+// optional client cert (SEC-K). When false (default) the listener behaves exactly
+// as before (NoClientCert; JWT-only authN).
+func (c Config) HybridMTLSEnabled() bool {
+	return c.HybridMTLSExternal
+}
+
+// ExternalListenerClientAuth applies the SEC-K hybrid client-auth policy to the
+// external listener's *tls.Config and returns it. When hybrid is disabled it is a
+// no-op (ClientAuth stays NoClientCert). When enabled it sets
+// tls.VerifyClientCertIfGiven with the internal CA (MTLSCAFile) as ClientCAs, so
+// a browser without a cert still handshakes (JWT path) while a client that DOES
+// present a cert has it verified against the trust anchor — the AuthInterceptor
+// then derives the principal from the verified cert's SPIFFE SAN.
+//
+// Fail-fast: hybrid enabled with no readable CA file is an error (a listener that
+// cannot verify any client cert would silently degrade every cert client to the
+// JWT path — the operator must know).
+func (c Config) ExternalListenerClientAuth(base *tls.Config) (*tls.Config, error) {
+	if base == nil {
+		base = &tls.Config{}
+	}
+	if !c.HybridMTLSExternal {
+		return base, nil
+	}
+	if c.MTLSCAFile == "" {
+		return nil, fmt.Errorf(
+			"hybrid mTLS external listener enabled but client-CA missing " +
+				"(KACHO_API_GATEWAY_MTLS_CA_FILE)")
+	}
+	caPEM, err := os.ReadFile(c.MTLSCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("read hybrid client-CA %q: %w", c.MTLSCAFile, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("hybrid client-CA %q: no certificates parsed", c.MTLSCAFile)
+	}
+	base.ClientAuth = tls.VerifyClientCertIfGiven
+	base.ClientCAs = pool
+	return base, nil
 }
 
 // ResolvedHydraIssuer returns the Hydra issuer URL, deriving it from APIDomain

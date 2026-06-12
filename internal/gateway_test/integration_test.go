@@ -70,7 +70,7 @@ func setupGateway(t *testing.T, backends proxy.Backends) string {
 	health.RegisterGRPCHealth(grpcSrv, backends)
 
 	ctx := context.Background()
-	restHandler, err := restmux.NewMux(ctx, nil, nil)
+	restHandler, err := restmux.NewMux(ctx, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("rest mux: %v", err)
 	}

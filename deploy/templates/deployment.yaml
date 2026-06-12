@@ -100,6 +100,22 @@ spec:
               value: {{ .Values.authn.devSecret | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.hydra }}
+            # KAC-127 Phase 2 — Hydra JWKS for RS256 access-token verification.
+            # KACHO_HYDRA_JWKS_URL MUST be the cluster-internal Hydra PUBLIC
+            # Service (e.g. kacho-umbrella-hydra-public:4444/.well-known/jwks.json),
+            # reachable from the gateway pod. Without it config.ResolvedHydraJWKSURL()
+            # derives the public issuer host, which the pod cannot reach → Hydra
+            # login tokens never validate → WhoAmI/Account/Project → code 16.
+            {{- if .Values.hydra.jwksUrl }}
+            - name: KACHO_HYDRA_JWKS_URL
+              value: {{ .Values.hydra.jwksUrl | quote }}
+            {{- end }}
+            {{- if .Values.hydra.issuer }}
+            - name: KACHO_HYDRA_ISSUER
+              value: {{ .Values.hydra.issuer | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.authz }}
             - name: KACHO_API_GATEWAY_AUTHZ_ENABLED
               value: {{ .Values.authz.enabled | default false | quote }}
@@ -144,6 +160,15 @@ spec:
             {{- end }}
             {{- if .Values.mtls.edges.nlb }}
             - name: KACHO_API_GATEWAY_MTLS_NLB_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.hybridExternal }}
+            # SEC-K hybrid: external TLS listener uses VerifyClientCertIfGiven with
+            # the internal CA (MTLS_CA_FILE above) as ClientCAs — a client WITH a
+            # valid kacho client-cert authenticates by cert identity (SPIFFE SAN),
+            # a browser WITHOUT a cert falls back to JWT. Internal listeners stay
+            # strict (RequireAndVerifyClientCert).
+            - name: KACHO_API_GATEWAY_HYBRID_MTLS_EXTERNAL
               value: "true"
             {{- end }}
             {{- end }}

@@ -112,10 +112,49 @@ func main() {
 		logger.Info("kratos session-auth disabled by env")
 	}
 
+	// --- SEC-J: Hydra JWKS verifier wired into the principal-setting path ---
+	//
+	// The same JWTVerifier is the authoritative validator for Hydra-issued
+	// RS256 access JWTs. It is constructed here (independent of the DPoP
+	// feature flag) and wired into the AuthInterceptor so a real login token
+	// authenticates on the principal path (the original AUTHN_REQUIRED bug).
+	// The DPoP middleware (below) reuses the SAME instance when enabled.
+	//
+	// Construction failure (e.g. empty resolved JWKS URL) is non-fatal — the
+	// gateway keeps the HMAC-dev path; only the RS256/JWKS strategy is absent.
+	jwtVerifier, jverr := middleware.NewJWTVerifier(middleware.JWTVerifierConfig{
+		JWKSURL:          cfg.ResolvedHydraJWKSURL(),
+		JWKSCacheTTL:     time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second,
+		JWKSFetchTimeout: time.Duration(cfg.JWKSFetchTimeoutSeconds) * time.Second,
+		ExpectedIssuer:   cfg.ResolvedHydraIssuer(),
+		ExpectedAudience: cfg.ExpectedAudience(),
+		ClockSkew:        time.Duration(cfg.JWTClockSkewSeconds) * time.Second,
+	})
+	if jverr != nil {
+		logger.Warn("jwks verifier not wired into principal path (HMAC-dev only)",
+			"err", jverr, "jwks_url", cfg.ResolvedHydraJWKSURL())
+	} else {
+		authInterceptor = authInterceptor.WithVerifier(jwtVerifier)
+		logger.Info("hydra jwks verifier wired into principal path",
+			"jwks_url", cfg.ResolvedHydraJWKSURL(),
+			"issuer", cfg.ResolvedHydraIssuer())
+	}
+
+	// SEC-K hybrid external listener: when enabled, a client that presents a
+	// valid Kachō cert over the external listener (tls.VerifyClientCertIfGiven,
+	// wired on the TLS listener below) authenticates on its mTLS SPIFFE identity —
+	// the AuthInterceptor derives the principal from the verified cert and skips
+	// the JWT requirement. Default off ⇒ JWT-only authN, behaviour unchanged.
+	if cfg.HybridMTLSEnabled() {
+		authInterceptor = authInterceptor.WithMTLSPrincipal(true)
+		logger.Info("hybrid mTLS external listener: cert-principal path enabled")
+	}
+
 	logger.Info("auth-interceptor configured",
 		"mode", cfg.AuthNMode,
 		"iam_internal_addr", cfg.IAMInternalAddr,
-		"dev_secret_set", cfg.AuthNDevSecret != "")
+		"dev_secret_set", cfg.AuthNDevSecret != "",
+		"jwks_verifier_set", jverr == nil)
 
 	// --- KAC-127 Phase 2: DPoP / JWT verifier / mTLS-bound / step-up gate ---
 	//
@@ -129,17 +168,13 @@ func main() {
 	var dpopMiddleware *middleware.DPoPMiddleware
 	if cfg.AuthNEnableDPoP {
 		var verifierErr error
-		verifier, verifierErr := middleware.NewJWTVerifier(middleware.JWTVerifierConfig{
-			JWKSURL:          cfg.ResolvedHydraJWKSURL(),
-			JWKSCacheTTL:     time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second,
-			JWKSFetchTimeout: time.Duration(cfg.JWKSFetchTimeoutSeconds) * time.Second,
-			ExpectedIssuer:   cfg.ResolvedHydraIssuer(),
-			ExpectedAudience: cfg.ExpectedAudience(),
-			ClockSkew:        time.Duration(cfg.JWTClockSkewSeconds) * time.Second,
-		})
-		if verifierErr != nil {
-			log.Fatalf("jwt verifier: %v", verifierErr)
+		// SEC-J: reuse the SAME verifier instance already wired into the
+		// AuthInterceptor (single JWKS cache, one source of truth). If its
+		// construction failed above, DPoP cannot run either — fail-fast.
+		if jverr != nil {
+			log.Fatalf("jwt verifier (required by DPoP): %v", jverr)
 		}
+		verifier := jwtVerifier
 		replayCache := middleware.NewDPoPReplayCache(middleware.DPoPReplayCacheConfig{
 			MaxEntries: cfg.DPoPReplayCacheSize,
 			TTL:        time.Duration(cfg.DPoPReplayCacheTTLSeconds) * time.Second,
@@ -328,7 +363,18 @@ func main() {
 	// REST-доступ к ним — только для UI / admin-tooling через cluster-internal
 	// REST listener (см. workspace CLAUDE.md §запрет 6, kacho-vpc/CLAUDE.md §16).
 	restAddrs := cfg.BackendAddrs()
-	restHandler, err := restmux.NewMux(ctx, restAddrs, backends)
+	// SEC-K: the REST-mux is a SEPARATE proxy-path from the gRPC-director — it
+	// dials each backend itself. Before SEC-K it built one insecure opts for every
+	// RegisterXServiceHandlerFromEndpoint; after the backends flipped to
+	// RequireAndVerifyClientCert that produced a 503 (handshake reset) on every UI
+	// REST call. Thread the SAME per-edge dial creds the director/authz use (mTLS
+	// client-cert + per-backend ServerName when the edge is enabled, else
+	// insecure). Fail-fast on misconfig — never start half-secured.
+	restDialCreds, err := buildBackendDialCreds(cfg)
+	if err != nil {
+		log.Fatalf("rest mux backend dial creds: %v", err)
+	}
+	restHandler, err := restmux.NewMux(ctx, restAddrs, backends, restDialCreds)
 	if err != nil {
 		log.Fatalf("rest mux: %v", err)
 	}
@@ -464,6 +510,18 @@ func main() {
 			Certificates: []tls.Certificate{cert},
 			NextProtos:   []string{"h2", "http/1.1"},
 			MinVersion:   tls.VersionTLS12,
+		}
+		// SEC-K hybrid: when enabled, accept an OPTIONAL client cert
+		// (tls.VerifyClientCertIfGiven) with the internal CA as ClientCAs — a
+		// browser without a cert still handshakes (JWT path), a client presenting a
+		// valid Kachō cert gets it verified so the principal can be derived from its
+		// SPIFFE SAN. Default (disabled) leaves ClientAuth=NoClientCert. This is the
+		// EXTERNAL listener only; internal service listeners stay strict.
+		if tlsCfg, certErr = cfg.ExternalListenerClientAuth(tlsCfg); certErr != nil {
+			log.Fatalf("hybrid mTLS external listener: %v", certErr)
+		}
+		if cfg.HybridMTLSEnabled() {
+			logger.Info("api-gateway external listener: optional client-cert (VerifyClientCertIfGiven) enabled")
 		}
 		tlsListener, tlsErr := tls.Listen("tcp", cfg.TLSListenAddr, tlsCfg)
 		if tlsErr != nil {

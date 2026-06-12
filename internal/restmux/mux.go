@@ -146,7 +146,30 @@ func isInternalPath(path string) bool {
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
-func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc.ClientConn) (http.Handler, error) {
+//
+// dialOpts — карта backend-key → transport-credentials grpc.DialOption (SEC-K).
+// Ключи совпадают с `addrs` / `config.BackendAddrs()` (vpc/vpcInternal/compute/
+// computeInternal/iam/iamInternal/loadbalancer/loadbalancerInternal). Для каждого
+// backend'а REST-mux дозванивается с ЕГО per-edge creds: mTLS client-cert +
+// корректный ServerName, когда mTLS на edge включён; insecure — когда нет.
+//
+// Это устранение 503-бага: ДО SEC-K NewMux строил ОДИН insecure
+// `[]grpc.DialOption` и передавал его в КАЖДЫЙ RegisterXServiceHandlerFromEndpoint.
+// После флипа backend'ов в `tls.RequireAndVerifyClientCert` каждый REST-вызов
+// (UI → gw REST → backend :9090/:9091) обрывался на TLS-handshake → connection
+// reset → 503. Composition-root (`cmd/api-gateway/main.go`) собирает dialOpts
+// через `buildBackendDialCreds(cfg)` (те же per-edge creds, что gRPC-director /
+// authz-dial в SEC-E) — новой cert-обвязки не вводится.
+//
+// dialOpts может быть nil или не содержать ключ — тогда для этого backend'а
+// используется insecure dial (dev backward-compat, A-1c). enable=false на edge
+// также даёт insecure (creds-резолвер в main.go возвращает insecure-опцию).
+func NewMux(
+	ctx context.Context,
+	addrs map[string]string,
+	conns map[string]*grpc.ClientConn,
+	dialOpts map[string]grpc.DialOption,
+) (http.Handler, error) {
 	// JSON-marshallers (отличаются ТОЛЬКО `EmitUnpopulated`):
 	//   - public: EmitUnpopulated=true — отдаём явные нулевые значения
 	//     (`""`/`{}`/`[]`/`null`) для proto-полей. На публичной поверхности
@@ -231,10 +254,22 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		runtime.WithMetadata(principalMetadata),
 	)
 
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Client-side round-robin; pair with `dns:///<headless-svc>:<port>` dial target.
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
+	// optsFor returns the dial-options for one backend-key (SEC-K): that backend's
+	// per-edge transport credentials (mTLS client-cert + ServerName when the edge
+	// is enabled, else insecure) plus the shared round-robin service-config. When
+	// dialOpts has no entry for the key the dial falls back to insecure — dev
+	// backward-compat (A-1c). This replaces the pre-SEC-K single insecure opts
+	// that every Register* shared (the 503 bug).
+	optsFor := func(backendKey string) []grpc.DialOption {
+		transport, ok := dialOpts[backendKey]
+		if !ok {
+			transport = grpc.WithTransportCredentials(insecure.NewCredentials())
+		}
+		return []grpc.DialOption{
+			transport,
+			// Client-side round-robin; pair with `dns:///<headless-svc>:<port>` dial target.
+			grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
+		}
 	}
 
 	// KAC-124: rmAddr убран — backend kacho-resource-manager упразднён.
@@ -263,25 +298,25 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// удалены целиком — backend заменён на kacho-iam Accounts/Projects.
 
 		// --- vpc: Network + Subnet + Address + RouteTable + SecurityGroup + Gateway ---
-		if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterNetworkServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register NetworkService: %w", err)
 		}
-		if err := vpcpb.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterSubnetServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register SubnetService: %w", err)
 		}
-		if err := vpcpb.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterAddressServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register AddressService: %w", err)
 		}
-		if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterRouteTableServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register RouteTableService: %w", err)
 		}
-		if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterSecurityGroupServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register SecurityGroupService: %w", err)
 		}
-		if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterGatewayServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register GatewayService: %w", err)
 		}
-		if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, opts); err != nil {
+		if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
 		}
 
@@ -291,37 +326,37 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// (эпик KAC-15) — см. блок compute ниже + workspace CLAUDE.md §«Кросс-доменные ссылки».
 		// KAC-266: InternalCloudService (poolSelector Get/Set/Unset) удалён целиком из proto.
 		if vpcInternalAddr != "" {
-			if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			if err := vpcpb.RegisterInternalAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, optsFor("vpcInternal")); err != nil {
 				return nil, fmt.Errorf("register InternalAddressPoolService: %w", err)
 			}
 			// GetNetwork → GET /vpc/v1/networks/{network_id}/internal — internal
 			// projection of a Network (инфра-чувствительные поля); backs the
 			// admin-UI "jsonint" tab.
-			if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, opts); err != nil {
+			if err := vpcpb.RegisterInternalNetworkServiceHandlerFromEndpoint(ctx, mux, vpcInternalAddr, optsFor("vpcInternal")); err != nil {
 				return nil, fmt.Errorf("register InternalNetworkService: %w", err)
 			}
 		}
 
 		// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
-		if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute DiskService: %w", err)
 		}
-		if err := computepb.RegisterImageServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterImageServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute ImageService: %w", err)
 		}
-		if err := computepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute SnapshotService: %w", err)
 		}
-		if err := computepb.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterInstanceServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute InstanceService: %w", err)
 		}
-		if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute DiskTypeService: %w", err)
 		}
-		if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute ZoneService: %w", err)
 		}
-		if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, opts); err != nil {
+		if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute RegionService: %w", err)
 		}
 
@@ -333,13 +368,13 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// (outbox), через grpc-gateway REST не проксируется; consumer'ы ходят в
 		// compute.kacho.svc:9091 напрямую gRPC.
 		if computeInternalAddr != "" {
-			if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
 			}
-			if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
 			}
-			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, opts); err != nil {
+			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
 			}
 		}
@@ -350,39 +385,39 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// (E2: OIDC-callback в api-gateway), на E0 — admin через grpcurl. Update пользователю не
 		// требуется на E0 (display_name/email берётся из Zitadel при следующем UpsertFromIdentity).
 		if iamAddr != "" {
-			if err := iampb.RegisterAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AccountService: %w", err)
 			}
-			if err := iampb.RegisterProjectServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterProjectServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam ProjectService: %w", err)
 			}
-			if err := iampb.RegisterUserServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterUserServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam UserService: %w", err)
 			}
-			if err := iampb.RegisterServiceAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterServiceAccountServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam ServiceAccountService: %w", err)
 			}
-			if err := iampb.RegisterGroupServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterGroupServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam GroupService: %w", err)
 			}
-			if err := iampb.RegisterRoleServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterRoleServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam RoleService: %w", err)
 			}
-			if err := iampb.RegisterAccessBindingServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterAccessBindingServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AccessBindingService: %w", err)
 			}
 			// KAC-127 Phase 5 — SAKeyService (ServiceAccount OAuth keys). Public
 			// under /iam/v1/serviceAccounts/{id}/keys. Без этой регистрации
 			// grpc-gateway не имеет REST-route → POST .../keys → 404, и
 			// SAKeyService.Issue/Revoke недоступны (ломало authz-sa-apitoken suite).
-			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
 			}
 			// KAC-198 Phase 4: JitPendingService removed. KAC-127 Phase 2:
 			// ComplianceReportService removed. Both proto stubs deleted from
 			// kacho-proto. Only AuthorizeService remains here (tenant FGA
 			// check flows on POST /iam/v1/authorize:check).
-			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, opts); err != nil {
+			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AuthorizeService: %w", err)
 			}
 		}
@@ -400,10 +435,10 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// paths — gRPC director's HasInternalSuffix blocks Internal* services
 		// on the public listener.
 		if iamInternalAddr != "" {
-			if err := iampb.RegisterInternalUserServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+			if err := iampb.RegisterInternalUserServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, optsFor("iamInternal")); err != nil {
 				return nil, fmt.Errorf("register iam InternalUserService: %w", err)
 			}
-			if err := iampb.RegisterInternalIAMServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+			if err := iampb.RegisterInternalIAMServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, optsFor("iamInternal")); err != nil {
 				return nil, fmt.Errorf("register iam InternalIAMService: %w", err)
 			}
 			// KAC-196: InternalClusterService — cluster-admin RBAC management
@@ -413,7 +448,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 			// internal sub-mux. D-11 gate (catalog `required_relation: admin`)
 			// enforces the FGA computed-alias `system_admin OR emergency_admin`
 			// on `cluster:cluster_kacho_root`.
-			if err := iampb.RegisterInternalClusterServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, opts); err != nil {
+			if err := iampb.RegisterInternalClusterServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, optsFor("iamInternal")); err != nil {
 				return nil, fmt.Errorf("register iam InternalClusterService: %w", err)
 			}
 		}
@@ -423,13 +458,13 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// может быть не задеплоен в окружении (поведение симметрично vpcInternalAddr /
 		// computeInternalAddr / iamAddr выше).
 		if lbAddr != "" {
-			if err := lbpb.RegisterNetworkLoadBalancerServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+			if err := lbpb.RegisterNetworkLoadBalancerServiceHandlerFromEndpoint(ctx, mux, lbAddr, optsFor("loadbalancer")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer NetworkLoadBalancerService: %w", err)
 			}
-			if err := lbpb.RegisterListenerServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+			if err := lbpb.RegisterListenerServiceHandlerFromEndpoint(ctx, mux, lbAddr, optsFor("loadbalancer")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer ListenerService: %w", err)
 			}
-			if err := lbpb.RegisterTargetGroupServiceHandlerFromEndpoint(ctx, mux, lbAddr, opts); err != nil {
+			if err := lbpb.RegisterTargetGroupServiceHandlerFromEndpoint(ctx, mux, lbAddr, optsFor("loadbalancer")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer TargetGroupService: %w", err)
 			}
 		}
@@ -445,7 +480,7 @@ func NewMux(ctx context.Context, addrs map[string]string, conns map[string]*grpc
 		// HasInternalSuffix в gRPC-director (proxy/director.go) блокирует попадание
 		// InternalResourceLifecycleService.* на external/TLS endpoint (запрет #6).
 		if lbInternalAddr != "" {
-			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, opts); err != nil {
+			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, optsFor("loadbalancerInternal")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer InternalResourceLifecycleService: %w", err)
 			}
 		}

@@ -81,6 +81,24 @@ oidc:
 # are unaffected. The dev overlay (values.dev.yaml) sets this explicitly.
 authn: {}
 
+# Hydra — OAuth2/OIDC token verification (KAC-127 Phase 2).
+# The auth path verifies Hydra-issued RS256 access tokens by fetching Hydra's
+# JWKS. config.go reads KACHO_HYDRA_JWKS_URL (explicit) and otherwise derives
+# `{KACHO_HYDRA_ISSUER}/.well-known/jwks.json` — whose default issuer
+# (`https://hydra.api.kacho.cloud`) is NOT reachable from inside the cluster
+# (in dev Hydra's self.issuer is `http://localhost:28080/...`). So the JWKS URL
+# MUST be set explicitly to the cluster-internal Hydra PUBLIC Service. Unset →
+# no env emitted; the Go config default applies (zero regression for overlays
+# that don't opt in). The dev/prod overlays set `jwksUrl` to the in-cluster
+# `kacho-umbrella-hydra-public:4444/.well-known/jwks.json`.
+#   jwksUrl:    explicit cluster-internal Hydra JWKS endpoint (reachable from
+#               the gateway pod). Drives KACHO_HYDRA_JWKS_URL.
+#   issuer:     expected `iss` claim + base for endpoint derivation. Drives
+#               KACHO_HYDRA_ISSUER. Optional; jwksUrl alone is enough for JWKS.
+hydra:
+  jwksUrl: ""
+  issuer: ""
+
 # AuthZ — Phase 3 per-RPC authorization middleware (KAC-127 #42).
 #   enabled: when true, every authenticated request is gated by a
 #     `kacho.cloud.iam.v1.AuthorizeService.Check` fan-out. When false (the
@@ -118,6 +136,10 @@ mtls:
   enable: false
   clientSecretName: api-gateway-client-tls   # cert key = api-gateway (КРИТ#1)
   mountPath: /etc/api-gateway/mtls           # <mp>/{tls.crt,tls.key,ca.crt}
+  # SEC-K hybrid: external TLS listener = VerifyClientCertIfGiven + internal CA as
+  # ClientCAs → cert-bearing client authenticates by cert SPIFFE identity, browser
+  # (no cert) falls back to JWT. Internal listeners stay strict mTLS. Default off.
+  hybridExternal: false
   edges:
     vpc: false        # gateway→vpc (+ vpcInternal)
     compute: false    # gateway→compute (+ computeInternal)
