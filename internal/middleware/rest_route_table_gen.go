@@ -330,6 +330,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/vpc/v1/networks", FQN: "kacho.cloud.vpc.v1.NetworkService/Create"},
 	{Method: "DELETE", Template: "/vpc/v1/networks/{network_id}", FQN: "kacho.cloud.vpc.v1.NetworkService/Delete"},
 	{Method: "GET", Template: "/vpc/v1/networks/{network_id}", FQN: "kacho.cloud.vpc.v1.NetworkService/Get"},
+	{Method: "GET", Template: "/vpc/v1/networks/{network_id}:internal", FQN: "kacho.cloud.vpc.v1.InternalNetworkService/GetNetwork"},
 	{Method: "PATCH", Template: "/vpc/v1/networks/{network_id}", FQN: "kacho.cloud.vpc.v1.NetworkService/Update"},
 	{Method: "DELETE", Template: "/vpc/v1/networks/{network_id}/addressPoolBinding", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/UnbindNetworkDefault"},
 	{Method: "POST", Template: "/vpc/v1/networks/{network_id}/addressPoolBinding", FQN: "kacho.cloud.vpc.v1.InternalAddressPoolService/BindAsNetworkDefault"},
