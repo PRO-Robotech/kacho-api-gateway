@@ -98,6 +98,14 @@ type ScopeExtractor struct {
 	// the middleware then falls back to the gateway-wide default scope
 	// (configured via env).
 	FromRequestField string `json:"from_request_field"`
+
+	// ObjectTypeFromRequestField — top-level proto request field name carrying
+	// the FGA *object type* at request time (scope-polymorphic RPCs, e.g.
+	// AccessBindingService.ListByResource → "resource_type" whose value is
+	// project|account|cluster). When set + non-empty, the middleware derives
+	// the FGA Check object type from this request field and `ObjectType` is the
+	// fallback. Empty for the fixed-scope majority of RPCs.
+	ObjectTypeFromRequestField string `json:"object_type_from_request_field"`
 }
 
 // IsExempt reports whether this entry is the wildcard public-allowlist marker.

@@ -145,6 +145,51 @@ func (e *ResourceExtractor) ExtractFromHTTP(r *http.Request, fqn string, entry C
 	return ResourceID("*"), true
 }
 
+// ScopeTypeFromProto reads the named top-level string field off a typed proto
+// request and returns its raw value, or "" when the field is absent/empty.
+//
+// Unlike ExtractFromProto it does NOT wildcard-default: an empty result means
+// "no dynamic object type present, use the catalog's static object_type". Used
+// for scope-polymorphic RPCs whose FGA object type is carried by a request
+// field (catalog `object_type_from_request_field`).
+func (e *ResourceExtractor) ScopeTypeFromProto(req any, field string) string {
+	field = strings.TrimSpace(field)
+	if field == "" || req == nil {
+		return ""
+	}
+	msg, ok := protoMessageFromAny(req)
+	if !ok {
+		if id, ok := extractByReflect(req, field); ok && !id.IsWildcard() {
+			return id.String()
+		}
+		return ""
+	}
+	id := extractByProtoReflect(msg, field)
+	if id.IsWildcard() {
+		return ""
+	}
+	return id.String()
+}
+
+// ScopeTypeFromHTTP reads the named field from an HTTP request's query string
+// or JSON body (REST camelCase spelling tried too) and returns its raw value,
+// or "" when absent. Like ScopeTypeFromProto it does NOT wildcard-default.
+func (e *ResourceExtractor) ScopeTypeFromHTTP(r *http.Request, field string) string {
+	field = strings.TrimSpace(field)
+	if r == nil || field == "" {
+		return ""
+	}
+	for _, key := range []string{field, snakeToCamel(field)} {
+		if q := r.URL.Query().Get(key); q != "" {
+			return q
+		}
+	}
+	if v := extractFromJSONBody(r, field); v != "" {
+		return v
+	}
+	return ""
+}
+
 // extractFromJSONBody reads a top-level string field out of the request's
 // JSON body and restores the body for downstream consumers. Returns "" when
 // the body is absent / not JSON / the field is missing.
