@@ -52,6 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: kacho-api-gateway }
+      # gh#73 transitional pin: revert to `ref: main` after kacho-corelib#21 merges.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4

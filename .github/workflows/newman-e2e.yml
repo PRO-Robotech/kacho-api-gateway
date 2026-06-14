@@ -54,6 +54,10 @@ jobs:
       # every sibling is pinned to `main`.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-deploy, ref: main, path: kacho-deploy }
+      # gh#73 transitional pin: this branch's authz middleware depends on the
+      # IAM/nlb id-prefixes added in kacho-corelib#21. Revert to `ref: main`
+      # once that PR merges (polyrepo.md: downstream CI pins upstream to its
+      # feature branch until merged).
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4

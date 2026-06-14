@@ -258,3 +258,31 @@ func shouldStepUpChallenge(reasons []string) bool {
 	}
 	return false
 }
+
+// invalidResourceIDMessage — the flat-message contract for a malformed resource
+// id (gh kacho-api-gateway#73), matching the Kachō handler-side convention
+// (`corevalidate.ResourceID` → "invalid <res> id '<X>'"). The gateway uses the
+// neutral resource type "resource" because it does not know the concrete type.
+func invalidResourceIDMessage(id string) string {
+	return "invalid resource id '" + id + "'"
+}
+
+// buildGRPCInvalidArgStatus constructs a *status.Status{Code: InvalidArgument}
+// for a malformed resource id. No PreconditionFailure / ErrorInfo details — the
+// flat message IS the contract (mirrors corevalidate.ResourceID).
+func buildGRPCInvalidArgStatus(id string) *status.Status {
+	return status.New(codes.InvalidArgument, invalidResourceIDMessage(id))
+}
+
+// writeHTTPInvalidArg renders a 400 response for a malformed resource id. Body
+// shape matches the gRPC-gateway default `{code, message}` with code 3
+// (INVALID_ARGUMENT). gh kacho-api-gateway#73.
+func writeHTTPInvalidArg(w http.ResponseWriter, id string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	body := map[string]any{
+		"code":    3, // gRPC code InvalidArgument
+		"message": invalidResourceIDMessage(id),
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}

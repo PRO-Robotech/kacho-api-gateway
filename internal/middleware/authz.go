@@ -56,6 +56,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	corevalidate "github.com/PRO-Robotech/kacho-corelib/validate"
 )
 
 // AuthzCheckInput — caller-friendly Check arguments. Mirrors
@@ -320,6 +322,9 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 		case outcomeUnauthenticated:
 			// KAC-130 BUG-2: no credentials → Unauthenticated(16), not PermissionDenied(7).
 			return nil, decision.gRPCStatus().Err()
+		case outcomeInvalidArgument:
+			// gh#73: malformed resource id → InvalidArgument(3), Check not run.
+			return nil, decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing request despite error",
@@ -356,6 +361,9 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 			return decision.gRPCStatus().Err()
 		case outcomeUnauthenticated:
 			// KAC-130 BUG-2: no credentials → Unauthenticated(16), not PermissionDenied(7).
+			return decision.gRPCStatus().Err()
+		case outcomeInvalidArgument:
+			// gh#73: malformed resource id → InvalidArgument(3), Check not run.
 			return decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
@@ -408,6 +416,9 @@ func (m *AuthzMiddleware) HTTP(next http.Handler) http.Handler {
 			// KAC-130 BUG-2: no credentials → 401 Unauthorized + code 16,
 			// not 403 Forbidden + code 7.
 			writeHTTPUnauth(w, decision.descriptor, decision.reasons)
+		case outcomeInvalidArgument:
+			// gh#73: malformed resource id → 400 + code 3, Check not run.
+			writeHTTPInvalidArg(w, decision.invalidArgID)
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing http request despite error",
@@ -449,6 +460,15 @@ const (
 	//   missing/invalid credentials → 16 UNAUTHENTICATED → HTTP 401
 	//   authenticated subject, access denied → 7 PERMISSION_DENIED → HTTP 403
 	outcomeUnauthenticated
+	// outcomeInvalidArgument — the extracted per-resource scope id is
+	// syntactically malformed (unknown 3-char prefix / wrong length). Maps to
+	// gRPC InvalidArgument(3) / HTTP 400. gh kacho-api-gateway#73: the FGA Check
+	// must NOT run for a malformed id — a no-FGA-path deny would surface as 403,
+	// masking the Kachō-convention 400 the handler itself returns first. The
+	// gateway cannot tell malformed from well-formed-but-nonexistent, so ONLY the
+	// malformed (wrong-prefix / wrong-length) case is short-circuited here;
+	// well-formed-nonexistent stays a 403 deny (existence-leak protection).
+	outcomeInvalidArgument
 )
 
 type decision struct {
@@ -457,13 +477,20 @@ type decision struct {
 	descriptor permissionDeniedDescriptor
 	checkErr   error
 	entry      CatalogEntry
+	// invalidArgID — the malformed resource id, set only for
+	// outcomeInvalidArgument (gh#73). Surfaced verbatim in the 400 message.
+	invalidArgID string
 }
 
 func (d decision) gRPCStatus() *status.Status {
-	if d.outcome == outcomeUnauthenticated {
+	switch d.outcome {
+	case outcomeUnauthenticated:
 		return buildGRPCUnauthStatus(d.descriptor, d.reasons)
+	case outcomeInvalidArgument:
+		return buildGRPCInvalidArgStatus(d.invalidArgID)
+	default:
+		return buildGRPCDenyStatus(d.descriptor, d.reasons)
 	}
-	return buildGRPCDenyStatus(d.descriptor, d.reasons)
 }
 
 // requiredACRMin returns the catalog-declared ACR floor (default "2").
@@ -649,6 +676,39 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		ResourceID:   resourceID.String(),
 	}
 
+	// 5b. Malformed-id short-circuit (gh kacho-api-gateway#73).
+	//
+	// For an entry whose scope is a CONCRETE per-resource id (the
+	// `from_request_field` names a real resource-id field, not the wildcard /
+	// subject-as-scope / scope-polymorphic forms), a syntactically-invalid id
+	// (unknown 3-char prefix / wrong length) must surface as InvalidArgument(3)
+	// /400 — the Kachō convention — instead of reaching the FGA Check, where a
+	// no-path deny would mask it as PermissionDenied(7)/403. We deliberately do
+	// NOT validate the scope-polymorphic path (`object_type_from_request_field`),
+	// where `resource_id` is a foreign-family scope id, nor the wildcard /
+	// subject forms. Well-formed-but-nonexistent ids still pass through to the
+	// FGA Check → 403 (existence-leak protection, by design). The result is NOT
+	// cached: it is a property of the request input, not of subject↔resource
+	// authz state.
+	if isConcreteResourceScope(entry) && !resourceID.IsWildcard() && resourceID.String() != "" {
+		if err := corevalidate.ResourceID("resource", "", resourceID.String()); err != nil {
+			m.metrics.RecordDeny()
+			m.cfg.Logger.Info("authz invalid resource id",
+				"fqn", dr.FQN,
+				"subject", subj.FGA,
+				"action", entry.Permission,
+				"resource", descriptor.ResourceType+":"+descriptor.ResourceID,
+			)
+			return decision{
+				outcome:      outcomeInvalidArgument,
+				reasons:      []string{"resource id is malformed"},
+				descriptor:   descriptor,
+				entry:        entry,
+				invalidArgID: resourceID.String(),
+			}
+		}
+	}
+
 	// 6. Context build.
 	var contextMap map[string]any
 	if dr.HTTPReq != nil {
@@ -755,6 +815,32 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 }
 
 // ---- helpers ----
+
+// isConcreteResourceScope reports whether the catalog entry's scope is a
+// CONCRETE per-resource id — i.e. `from_request_field` names a real resource-id
+// field (e.g. `network_id`, `access_binding_id`) rather than one of the
+// non-id forms the resource-extractor recognises:
+//
+//   - ""        — no scope field (gateway-default scope);
+//   - "*"       — wildcard (List/Search catch-all);
+//   - "subject" — the subject is its own scope (AuthorizeService.Check);
+//   - "resource"— a ResourceRef{type,id} wrapper (scope id is foreign-typed).
+//
+// It also excludes the scope-polymorphic path (`object_type_from_request_field`
+// set): there the extracted `resource_id` is a scope id of an arbitrary family
+// (project / account / cluster) carried for a ListByResource-style RPC, so the
+// per-resource-id syntax check does not apply. gh kacho-api-gateway#73.
+func isConcreteResourceScope(entry CatalogEntry) bool {
+	if strings.TrimSpace(entry.ScopeExtractor.ObjectTypeFromRequestField) != "" {
+		return false
+	}
+	switch strings.TrimSpace(entry.ScopeExtractor.FromRequestField) {
+	case "", "*", "subject", "resource":
+		return false
+	default:
+		return true
+	}
+}
 
 // normalizeFQN strips the leading `/` from gRPC FullMethod and turns the
 // `pkg.Service/Method` portion into the canonical FQN shape used by the
