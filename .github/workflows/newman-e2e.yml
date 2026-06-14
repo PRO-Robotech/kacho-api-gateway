@@ -59,7 +59,7 @@ jobs:
       # once that PR merges (polyrepo.md: downstream CI pins upstream to its
       # feature branch until merged).
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-corelib, ref: fix/gh73-resourceid-prefixes, path: kacho-corelib }
+        with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/checkout@v4
