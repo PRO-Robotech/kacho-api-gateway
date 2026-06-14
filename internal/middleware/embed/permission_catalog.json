@@ -762,7 +762,8 @@
     "required_relation": "viewer",
     "scope_extractor": {
       "object_type": "project",
-      "from_request_field": "resource_id"
+      "from_request_field": "resource_id",
+      "object_type_from_request_field": "resource_type"
     },
     "required_acr_min": "2"
   },
@@ -1264,6 +1265,24 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/PollSubjectChanges",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.InternalIAMService/RegisterResource",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.InternalIAMService/UnregisterResource",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {

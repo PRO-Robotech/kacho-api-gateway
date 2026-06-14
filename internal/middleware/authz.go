@@ -603,6 +603,23 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		resourceID = ResourceID("*")
 	}
 	resourceType := entry.ScopeExtractor.ObjectType
+	// Scope-polymorphic RPCs (e.g. AccessBindingService.ListByResource) carry
+	// the FGA object type in a request field (catalog
+	// `object_type_from_request_field`, value project|account|cluster). When
+	// declared + present, it overrides the static `object_type` — otherwise an
+	// account/cluster-scoped read would check `project:<id>` → 403 (Bug A).
+	// `object_type` remains the fallback when the field is absent/empty.
+	if otField := strings.TrimSpace(entry.ScopeExtractor.ObjectTypeFromRequestField); otField != "" {
+		var dynType string
+		if dr.HTTPReq != nil {
+			dynType = m.cfg.Resources.ScopeTypeFromHTTP(dr.HTTPReq, otField)
+		} else if dr.ProtoReq != nil {
+			dynType = m.cfg.Resources.ScopeTypeFromProto(dr.ProtoReq, otField)
+		}
+		if dynType != "" {
+			resourceType = dynType
+		}
+	}
 	if resourceType == "" {
 		// Project-level scope is the platform default per design §4 (every
 		// permission has a project scope unless overridden — top-level
