@@ -134,6 +134,19 @@ authz: {}
 # server-SAN (КРИТ#1). A single override would force one name and break the other.
 mtls:
   enable: false
+  # ─── internal-CA leaf-cert issuance (this chart owns its Certificate, rule #1) ─
+  # client-only: api-gateway dials backends over mTLS; its external server TLS uses
+  # the separate `tls.*` secret above. URI-SAN saName MUST match the IAM module-SA
+  # seed (SEC-C): kacho-api-gateway → sva(md5("kacho-api-gateway")) (identity-only role).
+  issuer:
+    name: kacho-internal-ca
+    kind: ClusterIssuer   # ClusterIssuer (cluster-scoped), NOT namespaced Issuer
+  spiffe:
+    trustDomain: kacho.cloud
+    namespace: kacho
+    saName: kacho-api-gateway
+  leafDuration: 2160h
+  leafRenewBefore: 720h
   clientSecretName: api-gateway-client-tls   # cert key = api-gateway (КРИТ#1)
   mountPath: /etc/api-gateway/mtls           # <mp>/{tls.crt,tls.key,ca.crt}
   # SEC-K hybrid: external TLS listener = VerifyClientCertIfGiven + internal CA as

@@ -1,4 +1,6 @@
-FROM mirror.gcr.io/library/golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.25-alpine AS builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 
 # Копируем зависимые модули (parent-context pattern — сборка из cloud-demo/)
@@ -8,7 +10,7 @@ COPY kacho-api-gateway /src/kacho-api-gateway
 
 WORKDIR /src/kacho-api-gateway
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o /api-gateway ./cmd/api-gateway
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /api-gateway ./cmd/api-gateway
 
 FROM mirror.gcr.io/library/alpine:3.20
 RUN apk add --no-cache ca-certificates
