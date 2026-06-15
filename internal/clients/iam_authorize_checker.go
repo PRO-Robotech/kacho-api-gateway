@@ -34,12 +34,18 @@ func NewAuthzChecker(inner AuthorizeClient) *AuthzChecker {
 // Check forwards a middleware-shaped request through the gRPC client.
 func (a *AuthzChecker) Check(ctx context.Context, in middleware.AuthzCheckInput) (middleware.AuthzCheckResult, error) {
 	res, err := a.inner.Check(ctx, AuthorizeCheckInput{
-		Subject:      in.Subject,
-		Action:       in.Action,
-		ResourceType: in.ResourceType,
-		ResourceID:   in.ResourceID,
-		Context:      in.Context,
-		TraceID:      in.TraceID,
+		Subject: in.Subject,
+		Action:  in.Action,
+		// KAC-198: forward the catalog's explicit FGA relation. Dropping it
+		// here made IAM fall back to verb→relation derivation, so admin-only
+		// RPCs (required_relation=system_admin) whose verb is `list`/`get`
+		// derived to `viewer` and slipped through the `cluster.viewer=user:*`
+		// cascade (privilege escalation), while non-CRUD verbs failed closed.
+		RequiredRelation: in.RequiredRelation,
+		ResourceType:     in.ResourceType,
+		ResourceID:       in.ResourceID,
+		Context:          in.Context,
+		TraceID:          in.TraceID,
 	})
 	if err != nil {
 		return middleware.AuthzCheckResult{}, err
