@@ -3,15 +3,15 @@
 //
 // Public allow-list rationale (acceptance §5.4 + design §17):
 //
-//	- Login / Register / Recovery flows MUST run pre-authn; the user has
-//	  no subject yet.
-//	- Back-channel logout (Hydra → kacho-iam) is HMAC-signed at a separate
-//	  layer; subject-injection is unavailable.
-//	- Health probes are infrastructure-internal — gating them would let an
-//	  authz outage cascade into rolling-restart loops.
-//	- OperationService.Get + List are intentionally cheap reads that the
-//	  client polls many times; the catalog gates them at the resource-id
-//	  level inside the IAM service itself rather than at the gateway edge.
+//   - Login / Register / Recovery flows MUST run pre-authn; the user has
+//     no subject yet.
+//   - Back-channel logout (Hydra → kacho-iam) is HMAC-signed at a separate
+//     layer; subject-injection is unavailable.
+//   - Health probes are infrastructure-internal — gating them would let an
+//     authz outage cascade into rolling-restart loops.
+//   - OperationService.Get + List are intentionally cheap reads that the
+//     client polls many times; the catalog gates them at the resource-id
+//     level inside the IAM service itself rather than at the gateway edge.
 //
 // The list is intentionally short — every entry is a known-public RPC. Any
 // additional bypass MUST go through the `authz_overrides.yaml` mechanism
@@ -57,23 +57,24 @@ func DefaultPublicAllowlist() []string {
 		// matched and silently left OperationService unprotected only at the
 		// allowlist level — the catalog path continued to apply.
 
-		// KAC-185 (F4): Internal IAM RPCs — cluster-internal listener callers
-		// (api-gateway auth-interceptor self-call, admin tooling via port-forward,
-		// kacho-iam subject-change drainer) DO NOT carry external user JWTs.
-		// The catalog marks them `<exempt>` from FGA Check but the `<exempt>`
-		// path STILL enforces authentication — so without an allowlist entry,
-		// these unauth'd internal calls would fail with Unauthenticated/401.
+		// SECURITY: Internal* FQNs are deliberately NOT on this global allowlist.
 		//
-		// §«Запреты» #6 isolation is enforced at the LISTENER layer: the
-		// external TLS listener (api.kacho.local:443) is firewalled / not
-		// exposed to tenant networks; the gRPC director's HasInternalSuffix
-		// blocks Internal* gRPC on the public listener. Adding these FQNs to
-		// the public allowlist does NOT widen exposure — it only lets the
-		// already-internal caller through the authz gate that the catalog
-		// would otherwise close.
-		"kacho.cloud.iam.v1.InternalIAMService/Check",
-		"kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
-		"kacho.cloud.iam.v1.InternalIAMService/LookupSubject",
-		"kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity",
+		// They were here (KAC-185 F4) on the assumption that listener-level
+		// firewalling alone isolated them. That was false for the REST path: the
+		// SAME *http.Server serves both the internal and the advertised external
+		// TLS listener, so a global FQN allowlist short-circuited decide() to
+		// ALLOW even for an UNAUTHENTICATED caller hitting these RPCs from the
+		// edge — an authz-oracle / user-enumeration / user-mutation priv-esc.
+		//
+		// Internal callers (api-gateway auth-interceptor self-call, admin tooling
+		// via port-forward, kacho-iam subject-change drainer) still carry no
+		// external user JWT — but they arrive on the cluster-internal listener.
+		// They are now admitted by the LISTENER-ORIGIN gate in decide()
+		// (allowlist.HasInternalSuffix + !listenerorigin.IsExternal) instead of a
+		// blanket FQN bypass, so an external caller of these is authN-required /
+		// rejected while an internal caller still passes. Defense-in-depth: the
+		// REST dispatcher additionally 404s Internal* paths on the external
+		// listener (restmux.NewMux), and the gRPC director blocks Internal* gRPC
+		// everywhere (HasInternalSuffix).
 	}
 }

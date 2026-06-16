@@ -58,6 +58,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	corevalidate "github.com/PRO-Robotech/kacho-corelib/validate"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 )
 
 // AuthzCheckInput — caller-friendly Check arguments. Mirrors
@@ -501,6 +504,21 @@ func (d decision) requiredACRMin() string {
 	return d.entry.RequiredACRMin
 }
 
+// isExternalRequest reports whether the request arrived on the advertised
+// external TLS listener. For the HTTP path the origin marker lives in the
+// request context (set per-listener by listenerorigin.ExternalConnContext). For
+// the gRPC path there is no HTTP request and Internal* RPCs never reach this
+// middleware via the gateway (the director blocks them), so we fail closed —
+// treat an unknown origin as external, meaning the internal-origin gate does NOT
+// admit it and the normal catalog/authN path decides.
+func (m *AuthzMiddleware) isExternalRequest(dr decisionRequest) bool {
+	if dr.HTTPReq != nil {
+		return listenerorigin.IsExternal(dr.HTTPReq.Context())
+	}
+	// No HTTP request → gRPC path. Fail closed for the internal-origin gate.
+	return true
+}
+
 func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decision {
 	start := m.now()
 	defer func() {
@@ -511,6 +529,35 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	if _, ok := m.allow[dr.FQN]; ok {
 		m.metrics.RecordAllow()
 		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}
+	}
+
+	// 1b. Internal-listener-origin gate (replaces the former Internal* FQN
+	// public allowlist — priv-esc fix). An Internal* RPC reaching this
+	// middleware is the cluster-internal REST flow (gRPC Internal* is blocked at
+	// the director). Internal callers (api-gateway self-call, kacho-iam drainer,
+	// port-forward admin) carry no external user JWT, so the catalog's
+	// `<exempt>` authN-enforcing path would 401 them. Admit them — but ONLY when
+	// BOTH hold:
+	//   (a) the request arrived on the cluster-internal listener (NOT the
+	//       advertised external TLS listener — listenerorigin), AND
+	//   (b) the Internal* RPC's catalog entry is `<exempt>` (the same RPCs the
+	//       removed FQN allowlist covered — they intentionally skip authN+authz).
+	// Gated Internal* RPCs (those carrying a real `required_relation`, e.g.
+	// InternalClusterService) are deliberately NOT bypassed: they still run the
+	// full subject-extraction + FGA Check below, even on the internal listener
+	// (the D-11 cluster-admin gate must hold for an ordinary authenticated user).
+	// An external caller of any Internal* RPC is not admitted here and falls
+	// through to the normal catalog/authN path (deny / 401); the REST dispatcher
+	// independently 404s these on the external listener.
+	if allowlist.HasInternalSuffix("/"+dr.FQN) && !m.isExternalRequest(dr) {
+		if entry, found := m.cfg.Catalog.Lookup(dr.FQN); found && entry.IsExempt() {
+			m.metrics.RecordAllow()
+			return decision{
+				outcome:    outcomeAllow,
+				descriptor: permissionDeniedDescriptor{FQN: dr.FQN, Action: entry.Permission},
+				entry:      entry,
+			}
+		}
 	}
 
 	// 2. Per-route override (file-based).

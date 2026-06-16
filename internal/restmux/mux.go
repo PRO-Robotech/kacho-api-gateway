@@ -81,15 +81,17 @@ import (
 	// resourcemanager.v1 / organizationmanager.v1 удалены целиком в kacho-proto.
 	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
 
 // isInternalPath решает, какой sub-mux обрабатывает запрос.
 //
 // Правила (в порядке проверки):
-//  1. Любой path-сегмент `/internal` → internal mux. Покрывает
-//     `/vpc/v1/networks/{id}/internal`, `/vpc/v1/networkInterfaces/{id}/internal`,
-//     и любые будущие `*/internal`.
+//  1. Любой path-сегмент `/internal` ИЛИ verb-suffix `:internal` → internal mux.
+//     Покрывает `/vpc/v1/networks/{id}/internal`,
+//     `/vpc/v1/networkInterfaces/{id}/internal`, `/vpc/v1/networks/{id}:internal`
+//     (InternalNetworkService.GetNetwork) и любые будущие `*/internal` / `*:internal`.
 //  2. `/vpc/v1/addressPools` → internal.
 //  3. `/vpc/v1/networks/{id}/addressPoolBinding` → internal.
 //  4. Всё остальное → public.
@@ -105,7 +107,13 @@ func isInternalPath(path string) bool {
 	// Защищаемся от ложного срабатывания на сегменте, начинающемся с
 	// "internal" но не равном ему (никаких таких путей нет в Kachō, но на
 	// будущее): требуем именно `/internal` как self-contained сегмент.
-	if strings.Contains(path, "/internal/") || strings.HasSuffix(path, "/internal") {
+	if strings.Contains(path, "/internal/") || strings.HasSuffix(path, "/internal") ||
+		strings.HasSuffix(path, ":internal") {
+		// `:internal` verb-suffix covers InternalNetworkService.GetNetwork
+		// (`/vpc/v1/networks/{id}:internal`) — an internal projection carrying
+		// infra-sensitive Network fields. Without this it routed to the public
+		// mux and would slip past the external-isolation gate (security.md
+		// §«Инфра-чувствительные данные»).
 		return true
 	}
 
@@ -506,6 +514,16 @@ func NewMux(
 	// сожмёт response пустых полей.
 	dispatcher := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isInternalPath(r.URL.Path) {
+			// SECURITY (workspace CLAUDE.md §запрет #6, security.md): Internal* REST
+			// paths are cluster-internal-only. When the request arrived on the
+			// advertised external TLS listener (listenerorigin.IsExternal), reject
+			// with 404 — existence-hiding, mirroring the gRPC director's
+			// HasInternalSuffix block. Internal-listener callers (UI / admin-tooling /
+			// port-forward / service self-calls) are unmarked → served as before.
+			if listenerorigin.IsExternal(r.Context()) {
+				http.NotFound(w, r)
+				return
+			}
 			internalMux.ServeHTTP(w, r)
 			return
 		}
