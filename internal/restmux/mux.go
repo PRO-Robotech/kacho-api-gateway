@@ -237,8 +237,6 @@ func NewMux(
 		pt := get("Grpc-Metadata-X-Kacho-Principal-Type", "X-Kacho-Principal-Type")
 		pi := get("Grpc-Metadata-X-Kacho-Principal-Id", "X-Kacho-Principal-Id")
 		pd := get("Grpc-Metadata-X-Kacho-Principal-Display-Name", "X-Kacho-Principal-Display-Name")
-		// Debug log to verify callback fires and sees headers.
-		fmt.Printf("[restmux.WithMetadata] path=%s pt=%q pi=%q pd=%q\n", r.URL.Path, pt, pi, pd)
 		if pt != "" {
 			md.Append("x-kacho-principal-type", pt)
 		}
