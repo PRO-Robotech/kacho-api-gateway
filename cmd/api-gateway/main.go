@@ -32,6 +32,7 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/config"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/handler"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/health"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/proxy"
@@ -439,6 +440,13 @@ func main() {
 		Handler:     httpHandler,
 		ReadTimeout: 30 * time.Second,
 		IdleTimeout: 120 * time.Second,
+		// SECURITY (workspace CLAUDE.md §запрет #6): the SAME httpSrv serves both
+		// the cluster-internal listener and the advertised external TLS listener.
+		// ConnContext tags requests whose connection was accepted on the external
+		// listener (wrapped with listenerorigin.ExternalListener below) so the REST
+		// dispatcher / authz middleware can reject Internal* paths arriving from the
+		// edge. Internal-listener connections pass through unmarked.
+		ConnContext: listenerorigin.ExternalConnContext,
 	}
 
 	// --- KAC-138 W1.2: internal-only gRPC listener for InternalAuthzCacheService ---
@@ -544,8 +552,14 @@ func main() {
 				logger.Error("tls grpc serve error", "error", serveErr)
 			}
 		}()
+		// SECURITY (workspace CLAUDE.md §запрет #6): wrap the EXTERNAL TLS HTTP
+		// sub-listener so every connection ConnContext receives is tagged external
+		// origin (listenerorigin.ExternalConnContext). The REST dispatcher then 404s
+		// Internal* paths arriving here; the cluster-internal listener (plain httpL)
+		// stays unmarked and keeps serving Internal* to UI / admin / port-forward.
+		externalTLSHTTPL := listenerorigin.ExternalListener(tlsHTTPL)
 		go func() {
-			if serveErr := httpSrv.Serve(tlsHTTPL); serveErr != nil && serveErr != http.ErrServerClosed {
+			if serveErr := httpSrv.Serve(externalTLSHTTPL); serveErr != nil && serveErr != http.ErrServerClosed {
 				logger.Error("tls http serve error", "error", serveErr)
 			}
 		}()
