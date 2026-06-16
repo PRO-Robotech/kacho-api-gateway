@@ -85,6 +85,47 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
 
+// buildPrincipalMetadata собирает outgoing gRPC-metadata из HTTP middleware-set
+// headers для re-dial в backend (public ИЛИ internal mux):
+//   - x-kacho-principal-{type,id,display-name} — forwarded end-user principal
+//     (KAC-107), который backend trust-aware extract заносит в ctx.
+//   - x-kacho-token-acr — validated JWT acr (sub-phase 5.4). Public DPoP-middleware
+//     уже выставляет `X-Kacho-Token-Acr` (downstream audit); здесь он
+//     пробрасывается на :9091 re-dial, чтобы iam internal acr-floor мог энфорсить
+//     `required_acr_min` на gateway-fronted privileged RPC (закрывает плечо: acr
+//     раньше обрывался на internal re-dial). Forward-only on the mTLS-verified
+//     gateway→iam edge (SEC-K); iam доверяет acr ⟺ FD-4 (corelib).
+//
+// HTTP middleware (`auth.HTTP` / DPoP) ставит headers с `Grpc-Metadata-` префиксом
+// (canonical в r.Header); читаем оба варианта (с/без префикса) чтобы быть robust.
+// Отсутствующий header → ключ не добавляется (никаких пустых значений).
+func buildPrincipalMetadata(r *http.Request) metadata.MD {
+	md := metadata.MD{}
+	get := func(canonical, fallback string) string {
+		if v := r.Header.Get(canonical); v != "" {
+			return v
+		}
+		return r.Header.Get(fallback)
+	}
+	pt := get("Grpc-Metadata-X-Kacho-Principal-Type", "X-Kacho-Principal-Type")
+	pi := get("Grpc-Metadata-X-Kacho-Principal-Id", "X-Kacho-Principal-Id")
+	pd := get("Grpc-Metadata-X-Kacho-Principal-Display-Name", "X-Kacho-Principal-Display-Name")
+	acr := get("Grpc-Metadata-X-Kacho-Token-Acr", "X-Kacho-Token-Acr")
+	if pt != "" {
+		md.Append("x-kacho-principal-type", pt)
+	}
+	if pi != "" {
+		md.Append("x-kacho-principal-id", pi)
+	}
+	if pd != "" {
+		md.Append("x-kacho-principal-display-name", pd)
+	}
+	if acr != "" {
+		md.Append("x-kacho-token-acr", acr)
+	}
+	return md
+}
+
 // isInternalPath решает, какой sub-mux обрабатывает запрос.
 //
 // Правила (в порядке проверки):
@@ -224,29 +265,7 @@ func NewMux(
 	}
 
 	principalMetadata := func(_ context.Context, r *http.Request) metadata.MD {
-		md := metadata.MD{}
-		// HTTP middleware (`auth.HTTP`) ставит headers с `Grpc-Metadata-` префиксом
-		// — это canonical name в r.Header. Читаем оба варианта (с/без префикса)
-		// чтобы быть robust.
-		get := func(canonical, fallback string) string {
-			if v := r.Header.Get(canonical); v != "" {
-				return v
-			}
-			return r.Header.Get(fallback)
-		}
-		pt := get("Grpc-Metadata-X-Kacho-Principal-Type", "X-Kacho-Principal-Type")
-		pi := get("Grpc-Metadata-X-Kacho-Principal-Id", "X-Kacho-Principal-Id")
-		pd := get("Grpc-Metadata-X-Kacho-Principal-Display-Name", "X-Kacho-Principal-Display-Name")
-		if pt != "" {
-			md.Append("x-kacho-principal-type", pt)
-		}
-		if pi != "" {
-			md.Append("x-kacho-principal-id", pi)
-		}
-		if pd != "" {
-			md.Append("x-kacho-principal-display-name", pd)
-		}
-		return md
+		return buildPrincipalMetadata(r)
 	}
 
 	publicMux := runtime.NewServeMux(
