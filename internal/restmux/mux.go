@@ -46,6 +46,11 @@
 //     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
 //   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
 //     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
+//   - geo.v1 (epic kacho-geo S5): RegionService, ZoneService — public read под /geo/v1/regions,
+//     /geo/v1/zones (geoAddr). Geography выделена из compute в leaf-сервис kacho-geo. До S7
+//     compute Region/Zone REST остаётся зарегистрированным (cutover-окно, оба пути резолвятся).
+//   - geo.v1 admin (kacho-only): InternalRegionService, InternalZoneService — admin Region/Zone
+//     CRUD на internal-порту geo backend (geoInternalAddr, 9091); cluster-internal only (ban #6).
 //   - loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancerService, ListenerService,
 //     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
 //     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
@@ -72,6 +77,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
+	// epic kacho-geo S5: geo.v1 — Region/Zone выделены в leaf-сервис kacho-geo.
+	geopb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/geo/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// KAC-161: kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
 	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
@@ -192,6 +199,8 @@ func isInternalPath(path string) bool {
 //	"loadbalancerInternal" → kacho-nlb.kacho.svc.cluster.local:9091 (KAC-161; зарезервирован
 //	                        под admin/internal REST, если в будущем добавятся http-аннотации;
 //	                        сейчас InternalResourceLifecycleService — streaming gRPC-direct only)
+//	"geo"                  → geo.kacho.svc.cluster.local:9090 (epic kacho-geo S5; Region/Zone read)
+//	"geoInternal"          → geo.kacho.svc.cluster.local:9091 (epic kacho-geo S5; admin Region/Zone CRUD)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -299,7 +308,7 @@ func NewMux(
 
 	// KAC-124: rmAddr убран — backend kacho-resource-manager упразднён.
 	// KAC-161: lbAddr / lbInternalAddr добавлены под kacho-nlb (loadbalancer.v1).
-	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr string
+	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr, geoAddr, geoInternalAddr string
 	if addrs != nil {
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
@@ -309,6 +318,8 @@ func NewMux(
 		iamInternalAddr = addrs["iamInternal"]
 		lbAddr = addrs["loadbalancer"]
 		lbInternalAddr = addrs["loadbalancerInternal"]
+		geoAddr = addrs["geo"]
+		geoInternalAddr = addrs["geoInternal"]
 	}
 
 	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
@@ -401,6 +412,40 @@ func NewMux(
 			}
 			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
+			}
+		}
+
+		// --- geo.v1: Region + Zone (public read-only) — эпик kacho-geo S5 ---
+		// Geography (Region/Zone) выделена из compute в отдельный leaf-сервис
+		// kacho-geo. RegionService/ZoneService — public read под /geo/v1/regions,
+		// /geo/v1/zones. Регистрируется условно по geoAddr (graceful: kacho-geo
+		// может быть ещё не задеплоен — симметрично lbAddr/iamAddr выше).
+		// Старая регистрация compute Region/Zone (выше) СОХРАНЯЕТСЯ до S7 (cutover-
+		// окно: оба /compute/v1/* и /geo/v1/* резолвятся транзиентно; UI/SDK
+		// переключаются на /geo, затем S7 удаляет geography из compute.v1).
+		if geoAddr != "" {
+			if err := geopb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, geoAddr, optsFor("geo")); err != nil {
+				return nil, fmt.Errorf("register geo RegionService: %w", err)
+			}
+			if err := geopb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, geoAddr, optsFor("geo")); err != nil {
+				return nil, fmt.Errorf("register geo ZoneService: %w", err)
+			}
+		}
+
+		// --- geo admin (InternalRegionService/InternalZoneService) — kacho-only, internal-port (9091) ---
+		// Admin-CRUD справочников Region/Zone (POST/PATCH/DELETE на /geo/v1/regions,
+		// /geo/v1/zones). Доступен ТОЛЬКО через cluster-internal REST listener для
+		// UI/admin-tooling (workspace CLAUDE.md §запрет #6; ban #6). На external TLS
+		// endpoint admin Region/Zone-функции не светятся: gRPC-director блокирует
+		// Internal*-сервисы через HasInternalSuffix, а authz-каталог гейтит эти RPC
+		// relation `system_admin` на cluster-singleton. Мутации Region/Zone — это
+		// catalog-паттерн (sync-ответ ресурсом, НЕ Operation; как InternalDiskType).
+		if geoInternalAddr != "" {
+			if err := geopb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, geoInternalAddr, optsFor("geoInternal")); err != nil {
+				return nil, fmt.Errorf("register geo InternalRegionService: %w", err)
+			}
+			if err := geopb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, geoInternalAddr, optsFor("geoInternal")); err != nil {
+				return nil, fmt.Errorf("register geo InternalZoneService: %w", err)
 			}
 		}
 
