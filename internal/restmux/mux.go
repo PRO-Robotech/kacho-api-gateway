@@ -200,8 +200,8 @@ func isInternalPath(path string) bool {
 //	"loadbalancerInternal" → kacho-nlb.kacho.svc.cluster.local:9091 (KAC-161; зарезервирован
 //	                        под admin/internal REST, если в будущем добавятся http-аннотации;
 //	                        сейчас InternalResourceLifecycleService — streaming gRPC-direct only)
-//	"geo"                  → geo.kacho.svc.cluster.local:9090 (epic kacho-geo S5; Region/Zone read)
-//	"geoInternal"          → geo.kacho.svc.cluster.local:9091 (epic kacho-geo S5; admin Region/Zone CRUD)
+//	"geo"                  → kacho-geo.kacho.svc.cluster.local:9090 (epic kacho-geo S5; Region/Zone read)
+//	"geoInternal"          → kacho-geo-internal.kacho.svc.cluster.local:9091 (epic kacho-geo S5; admin Region/Zone CRUD)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).

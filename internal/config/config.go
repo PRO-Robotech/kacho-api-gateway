@@ -77,12 +77,17 @@ type Config struct {
 	// Public RPC под /geo/v1/* (epic kacho-geo S5). Geography выделена из compute
 	// в отдельный leaf-сервис kacho-geo. При пустом значении geo-handlers не
 	// регистрируются (graceful — позволяет деплоить api-gateway до kacho-geo pod'a).
-	GeoAddr string `envconfig:"KACHO_API_GATEWAY_GEO_GRPC" default:"geo.kacho.svc.cluster.local:9090"`
+	// The geo k8s Service is "kacho-geo" — the bare "geo.kacho.svc.cluster.local"
+	// host does NOT resolve (NXDOMAIN) → the grpc resolver returns no addresses →
+	// "no children to pick from" 503 on every /geo/v1/* request. Target the real
+	// Service name (mirrors kacho-iam / kacho-nlb).
+	GeoAddr string `envconfig:"KACHO_API_GATEWAY_GEO_GRPC" default:"kacho-geo.kacho.svc.cluster.local:9090"`
 
 	// GeoInternalAddr — admin-only internal-port (9091) of kacho-geo backend.
 	// Routes InternalRegionService/InternalZoneService admin-CRUD endpoints
 	// (kacho-only). Cluster-internal listener only (workspace CLAUDE.md §запрет #6).
-	GeoInternalAddr string `envconfig:"KACHO_API_GATEWAY_GEO_INTERNAL_GRPC" default:"geo.kacho.svc.cluster.local:9091"`
+	// Separate Service "kacho-geo-internal" (mirrors kacho-iam-internal).
+	GeoInternalAddr string `envconfig:"KACHO_API_GATEWAY_GEO_INTERNAL_GRPC" default:"kacho-geo-internal.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
