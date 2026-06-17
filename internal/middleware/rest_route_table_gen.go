@@ -173,6 +173,21 @@ var generatedRestRoutes = []restRoute{
 	{Method: "DELETE", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.InternalZoneService/Delete"},
 	{Method: "GET", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.ZoneService/Get"},
 	{Method: "PATCH", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.InternalZoneService/Update"},
+	// epic kacho-geo S5: geo.v1 Region/Zone — public read (GET) + admin CRUD
+	// (POST/PATCH/DELETE via InternalRegionService/InternalZoneService, sharing the
+	// public path, distinguished by HTTP method — same shape as compute today).
+	// Geography extracted from compute into the kacho-geo leaf service. Hand-added
+	// here (mirroring compute Region/Zone) until the kacho-proto route extractor reruns.
+	{Method: "GET", Template: "/geo/v1/regions", FQN: "kacho.cloud.geo.v1.RegionService/List"},
+	{Method: "POST", Template: "/geo/v1/regions", FQN: "kacho.cloud.geo.v1.InternalRegionService/Create"},
+	{Method: "DELETE", Template: "/geo/v1/regions/{region_id}", FQN: "kacho.cloud.geo.v1.InternalRegionService/Delete"},
+	{Method: "GET", Template: "/geo/v1/regions/{region_id}", FQN: "kacho.cloud.geo.v1.RegionService/Get"},
+	{Method: "PATCH", Template: "/geo/v1/regions/{region_id}", FQN: "kacho.cloud.geo.v1.InternalRegionService/Update"},
+	{Method: "GET", Template: "/geo/v1/zones", FQN: "kacho.cloud.geo.v1.ZoneService/List"},
+	{Method: "POST", Template: "/geo/v1/zones", FQN: "kacho.cloud.geo.v1.InternalZoneService/Create"},
+	{Method: "DELETE", Template: "/geo/v1/zones/{zone_id}", FQN: "kacho.cloud.geo.v1.InternalZoneService/Delete"},
+	{Method: "GET", Template: "/geo/v1/zones/{zone_id}", FQN: "kacho.cloud.geo.v1.ZoneService/Get"},
+	{Method: "PATCH", Template: "/geo/v1/zones/{zone_id}", FQN: "kacho.cloud.geo.v1.InternalZoneService/Update"},
 	{Method: "POST", Template: "/iam/v1/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},

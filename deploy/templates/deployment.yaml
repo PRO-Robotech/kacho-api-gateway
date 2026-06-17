@@ -59,6 +59,14 @@ spec:
             - name: KACHO_API_GATEWAY_NLB_INTERNAL_GRPC
               value: "{{ .Values.backends.nlbInternal }}"
             {{- end }}
+            {{- if .Values.backends.geo }}
+            - name: KACHO_API_GATEWAY_GEO_GRPC
+              value: "{{ .Values.backends.geo }}"
+            {{- end }}
+            {{- if .Values.backends.geoInternal }}
+            - name: KACHO_API_GATEWAY_GEO_INTERNAL_GRPC
+              value: "{{ .Values.backends.geoInternal }}"
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
               value: ":{{ .Values.tlsPort }}"

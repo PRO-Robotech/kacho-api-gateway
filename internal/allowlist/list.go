@@ -5,7 +5,7 @@ import "strings"
 // AllowedMethods — публичные RPC-пути, маршрутизируемые через api-gateway.
 // Методы *InternalService.* НИКОГДА не включаются (запрет #6, workspace CLAUDE.md):
 // их REST-проекция доступна только на cluster-internal listener (см. restmux/mux.go).
-// Активны: iam, vpc, compute, loadbalancer, operation.
+// Активны: iam, vpc, compute, geo, loadbalancer, operation.
 // KAC-124: resourcemanager/organizationmanager удалены — backend упразднён,
 // заменён на kacho-iam (Account/Project).
 // KAC-161: loadbalancer активирован (kacho-nlb) — NetworkLoadBalancer / Listener /
@@ -129,6 +129,17 @@ var AllowedMethods = map[string]struct{}{
 	// compute.v1 — ZoneService (read-only справочник)
 	"/kacho.cloud.compute.v1.ZoneService/Get":  {},
 	"/kacho.cloud.compute.v1.ZoneService/List": {},
+
+	// geo.v1 — RegionService (read-only справочник; эпик kacho-geo S5).
+	// Geography выделена в leaf-сервис kacho-geo. Старые compute.v1 Region/Zone
+	// записи СОХРАНЯЮТСЯ до S7 (cutover-окно: оба /compute/v1/* и /geo/v1/* резолвятся).
+	"/kacho.cloud.geo.v1.RegionService/Get":  {},
+	"/kacho.cloud.geo.v1.RegionService/List": {},
+	// geo.v1 — ZoneService (read-only справочник)
+	"/kacho.cloud.geo.v1.ZoneService/Get":  {},
+	"/kacho.cloud.geo.v1.ZoneService/List": {},
+	// geo.v1 — InternalRegionService / InternalZoneService.* — НЕ в allowlist
+	// (admin-CRUD на :9091; HasInternalSuffix блокирует автоматически, запрет #6).
 
 	// iam.v1 — AccountService (KAC-105, E0)
 	"/kacho.cloud.iam.v1.AccountService/Get":            {},

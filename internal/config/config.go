@@ -27,6 +27,8 @@ import (
 //	KACHO_API_GATEWAY_IAM_INTERNAL_GRPC   — адрес backend iam internal-port (9091)
 //	KACHO_API_GATEWAY_NLB_GRPC            — адрес backend kacho-nlb (public, port 9090) (KAC-161)
 //	KACHO_API_GATEWAY_NLB_INTERNAL_GRPC   — адрес backend kacho-nlb internal-port (9091) (KAC-161)
+//	KACHO_API_GATEWAY_GEO_GRPC            — адрес backend kacho-geo (public, port 9090) (epic kacho-geo S5)
+//	KACHO_API_GATEWAY_GEO_INTERNAL_GRPC   — адрес backend kacho-geo internal-port (9091) (epic kacho-geo S5)
 //
 // TLS требуется для совместимости с CLI-клиентами (yc CLI hardcoded требует TLS).
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
@@ -70,6 +72,17 @@ type Config struct {
 	// напрямую). Регистрируется в REST mux pro-forma (как iam InternalUserService),
 	// реальный трафик идёт через gRPC-direct. См. workspace CLAUDE.md §запрет #6.
 	NLBInternalAddr string `envconfig:"KACHO_API_GATEWAY_NLB_INTERNAL_GRPC" default:"kacho-nlb.kacho.svc.cluster.local:9091"`
+
+	// GeoAddr — public gRPC backend of kacho-geo (RegionService/ZoneService read).
+	// Public RPC под /geo/v1/* (epic kacho-geo S5). Geography выделена из compute
+	// в отдельный leaf-сервис kacho-geo. При пустом значении geo-handlers не
+	// регистрируются (graceful — позволяет деплоить api-gateway до kacho-geo pod'a).
+	GeoAddr string `envconfig:"KACHO_API_GATEWAY_GEO_GRPC" default:"geo.kacho.svc.cluster.local:9090"`
+
+	// GeoInternalAddr — admin-only internal-port (9091) of kacho-geo backend.
+	// Routes InternalRegionService/InternalZoneService admin-CRUD endpoints
+	// (kacho-only). Cluster-internal listener only (workspace CLAUDE.md §запрет #6).
+	GeoInternalAddr string `envconfig:"KACHO_API_GATEWAY_GEO_INTERNAL_GRPC" default:"geo.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises in
 	// the yc CLI compatibility shim (yandex.cloud.endpoint.ApiEndpointService).
@@ -220,12 +233,14 @@ type Config struct {
 	MTLSComputeEnable bool `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE" default:"false"`
 	MTLSIAMEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_ENABLE"     default:"false"`
 	MTLSNLBEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_ENABLE"     default:"false"`
+	MTLSGeoEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_ENABLE"     default:"false"`
 
 	// Per-edge SNI/server-name overrides. Empty ⇒ derive from the dial-addr host.
 	MTLSVPCServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_SERVER_NAME"     default:""`
 	MTLSComputeServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_SERVER_NAME" default:""`
 	MTLSIAMServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_SERVER_NAME"     default:""`
 	MTLSNLBServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"     default:""`
+	MTLSGeoServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_SERVER_NAME"     default:""`
 
 	// SEC-K hybrid external listener: when true, the external TLS listener
 	// (TLSListenAddr) runs with tls.VerifyClientCertIfGiven and the internal CA
@@ -353,6 +368,8 @@ func (c Config) ResolvedIAMAuthorizeURL() string {
 // KAC-161: "loadbalancer" / "loadbalancerInternal" — kacho-nlb public / internal endpoints.
 // Domain-ключ "loadbalancer" совпадает с proto-package `kacho.cloud.loadbalancer.v1.*`,
 // который парсит director (proxy/director.go) для маршрутизации gRPC-вызовов.
+// epic kacho-geo S5: "geo" / "geoInternal" — kacho-geo public / internal endpoints.
+// Domain-ключ "geo" совпадает с proto-package `kacho.cloud.geo.v1.*` (director-routing).
 func (c Config) BackendAddrs() map[string]string {
 	return map[string]string{
 		"vpc":                  c.VPCAddr,
@@ -363,12 +380,14 @@ func (c Config) BackendAddrs() map[string]string {
 		"iamInternal":          c.IAMInternalAddr,
 		"loadbalancer":         c.NLBAddr,
 		"loadbalancerInternal": c.NLBInternalAddr,
+		"geo":                  c.GeoAddr,
+		"geoInternal":          c.GeoInternalAddr,
 	}
 }
 
 // EdgeTLSClient assembles the corelib grpcclient.TLSClient value-struct for a
-// backend edge ("vpc" | "compute" | "iam" | "nlb"), deriving the server-name
-// from the dial address host when no per-edge override is set.
+// backend edge ("vpc" | "compute" | "iam" | "nlb" | "geo"), deriving the
+// server-name from the dial address host when no per-edge override is set.
 //
 // Contract (SEC-E §1.1/§3.1-§3.3):
 //   - edge disabled ⇒ {Enable:false}; cert material is NOT consulted (insecure
@@ -425,6 +444,8 @@ func (c Config) edgeMTLS(edge string) (enable bool, serverName string, err error
 		return c.MTLSIAMEnable, c.MTLSIAMServerName, nil
 	case "nlb":
 		return c.MTLSNLBEnable, c.MTLSNLBServerName, nil
+	case "geo":
+		return c.MTLSGeoEnable, c.MTLSGeoServerName, nil
 	default:
 		return false, "", fmt.Errorf("unknown mtls edge %q", edge)
 	}

@@ -20,6 +20,9 @@ backends:
   # KAC-161: kacho-nlb public + internal endpoints
   nlb: kacho-nlb.kacho.svc.cluster.local:9090
   nlbInternal: kacho-nlb.kacho.svc.cluster.local:9091
+  # epic kacho-geo S5: kacho-geo public + internal endpoints (Geography Region/Zone leaf service)
+  geo: geo.kacho.svc.cluster.local:9090
+  geoInternal: geo.kacho.svc.cluster.local:9091
 
 # TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
 # Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.

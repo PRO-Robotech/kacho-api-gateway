@@ -104,6 +104,7 @@ func dialBackends(cfg config.Config) (proxy.Backends, func(), error) {
 // (one backend identity, one enable flag): "vpc"+"vpcInternal" → "vpc", etc.
 // "loadbalancer"+"loadbalancerInternal" → "nlb" (the nlb service is keyed
 // "loadbalancer" in BackendAddrs to match its proto package, KAC-161).
+// "geo"+"geoInternal" → "geo" (epic kacho-geo S5).
 func backendEdge(backendKey string) string {
 	switch backendKey {
 	case "vpc", "vpcInternal":
@@ -114,6 +115,8 @@ func backendEdge(backendKey string) string {
 		return "iam"
 	case "loadbalancer", "loadbalancerInternal":
 		return "nlb"
+	case "geo", "geoInternal":
+		return "geo"
 	default:
 		// Unknown keys (e.g. "operation" self-loopback) have no cross-pod edge.
 		// They are never passed here in the production wiring; returning "" makes
