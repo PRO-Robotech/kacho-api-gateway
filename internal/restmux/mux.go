@@ -42,13 +42,14 @@
 //   - vpc.v1 admin (kacho-only, NOT YC-verbatim): AddressPool, InternalNetwork —
 //     обслуживаются internal-портом vpc backend (9091); см. kacho-vpc/CLAUDE.md §16.
 //     (KAC-266: InternalCloudService poolSelector удалён из proto.)
-//   - compute.v1: Disk, Image, Snapshot, Instance, DiskType, Zone, Region
-//     (Geography Region/Zone перенесены сюда из vpc — эпик KAC-15)
-//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType, InternalZone, InternalRegion —
-//     обслуживаются internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
+//   - compute.v1: Disk, Image, Snapshot, Instance, DiskType
+//     (Geography Region/Zone вынесены в leaf-сервис geo.v1 — epic kacho-geo;
+//     compute.v1 Region/Zone REST-регистрации удалены в S7 Phase 1.)
+//   - compute.v1 admin (kacho-only, NOT YC-verbatim): InternalDiskType —
+//     обслуживается internal-портом compute backend (9091); см. kacho-compute/CLAUDE.md.
 //   - geo.v1 (epic kacho-geo S5): RegionService, ZoneService — public read под /geo/v1/regions,
-//     /geo/v1/zones (geoAddr). Geography выделена из compute в leaf-сервис kacho-geo. До S7
-//     compute Region/Zone REST остаётся зарегистрированным (cutover-окно, оба пути резолвятся).
+//     /geo/v1/zones (geoAddr). Geography выделена из compute в leaf-сервис kacho-geo. После S7
+//     geography обслуживается ИСКЛЮЧИТЕЛЬНО geo.v1 (compute Region/Zone REST удалены).
 //   - geo.v1 admin (kacho-only): InternalRegionService, InternalZoneService — admin Region/Zone
 //     CRUD на internal-порту geo backend (geoInternalAddr, 9091); cluster-internal only (ban #6).
 //   - loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancerService, ListenerService,
@@ -373,7 +374,11 @@ func NewMux(
 			}
 		}
 
-		// --- compute: Disk + Image + Snapshot + Instance + DiskType + Zone + Region (read-only) ---
+		// --- compute: Disk + Image + Snapshot + Instance + DiskType ---
+		// Geography (Region/Zone) больше НЕ обслуживается compute.v1 — выделена в
+		// leaf-сервис kacho-geo (/geo/v1/regions, /geo/v1/zones; см. ниже). Старые
+		// compute.v1 Region/Zone REST-регистрации удалены в epic kacho-geo S7 (Phase 1).
+		// proto-стабы compute Region/Zone убираются отдельно в Phase 2.
 		if err := computepb.RegisterDiskServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute DiskService: %w", err)
 		}
@@ -389,29 +394,17 @@ func NewMux(
 		if err := computepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
 			return nil, fmt.Errorf("register compute DiskTypeService: %w", err)
 		}
-		if err := computepb.RegisterZoneServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
-			return nil, fmt.Errorf("register compute ZoneService: %w", err)
-		}
-		if err := computepb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, computeAddr, optsFor("compute")); err != nil {
-			return nil, fmt.Errorf("register compute RegionService: %w", err)
-		}
 
-		// --- compute admin (InternalDiskType/InternalZone/InternalRegion) — kacho-only, internal-port (9091) ---
-		// CRUD справочников DiskType/Zone (POST/PATCH/DELETE на /compute/v1/diskTypes,
-		// /compute/v1/zones). Не верстается на verbatim-YC, доступен только через
-		// cluster-internal REST listener для UI/admin-tooling (CLAUDE.md §запрет 6,
-		// kacho-compute/CLAUDE.md §16). InternalWatchService — gRPC server-streaming
-		// (outbox), через grpc-gateway REST не проксируется; consumer'ы ходят в
-		// compute.kacho.svc:9091 напрямую gRPC.
+		// --- compute admin (InternalDiskType) — kacho-only, internal-port (9091) ---
+		// CRUD справочника DiskType (POST/PATCH/DELETE на /compute/v1/diskTypes).
+		// Доступен только через cluster-internal REST listener для UI/admin-tooling
+		// (CLAUDE.md §запрет 6, kacho-compute/CLAUDE.md §16). InternalWatchService —
+		// gRPC server-streaming (outbox), через grpc-gateway REST не проксируется;
+		// consumer'ы ходят в compute.kacho.svc:9091 напрямую gRPC. Admin Region/Zone
+		// (InternalRegion/InternalZone) удалены в epic kacho-geo S7 — теперь geo.v1.
 		if computeInternalAddr != "" {
 			if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
-			}
-			if err := computepb.RegisterInternalZoneServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
-				return nil, fmt.Errorf("register compute InternalZoneService: %w", err)
-			}
-			if err := computepb.RegisterInternalRegionServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
-				return nil, fmt.Errorf("register compute InternalRegionService: %w", err)
 			}
 		}
 
@@ -420,9 +413,8 @@ func NewMux(
 		// kacho-geo. RegionService/ZoneService — public read под /geo/v1/regions,
 		// /geo/v1/zones. Регистрируется условно по geoAddr (graceful: kacho-geo
 		// может быть ещё не задеплоен — симметрично lbAddr/iamAddr выше).
-		// Старая регистрация compute Region/Zone (выше) СОХРАНЯЕТСЯ до S7 (cutover-
-		// окно: оба /compute/v1/* и /geo/v1/* резолвятся транзиентно; UI/SDK
-		// переключаются на /geo, затем S7 удаляет geography из compute.v1).
+		// Cutover завершён в S7: compute.v1 Region/Zone REST-регистрации удалены
+		// (см. выше); geography обслуживается ИСКЛЮЧИТЕЛЬНО geo.v1.
 		if geoAddr != "" {
 			if err := geopb.RegisterRegionServiceHandlerFromEndpoint(ctx, mux, geoAddr, optsFor("geo")); err != nil {
 				return nil, fmt.Errorf("register geo RegionService: %w", err)

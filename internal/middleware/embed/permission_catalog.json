@@ -510,36 +510,6 @@
     "required_acr_min": "2"
   },
   {
-    "fqn": "kacho.cloud.compute.v1.InternalRegionService/Create",
-    "permission": "compute.regions.create",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.InternalRegionService/Delete",
-    "permission": "compute.regions.delete",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.InternalRegionService/Update",
-    "permission": "compute.regions.update",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
     "fqn": "kacho.cloud.compute.v1.InternalResourceLifecycleService/Subscribe",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
@@ -556,56 +526,6 @@
       "object_type": "",
       "from_request_field": ""
     }
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.InternalZoneService/Create",
-    "permission": "compute.zones.create",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.InternalZoneService/Delete",
-    "permission": "compute.zones.delete",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.InternalZoneService/Update",
-    "permission": "compute.zones.update",
-    "required_relation": "system_admin",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.RegionService/Get",
-    "permission": "compute.regions.get",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.RegionService/List",
-    "permission": "compute.regionses.list",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Create",
@@ -693,26 +613,6 @@
     "required_relation": "editor",
     "scope_extractor": {
       "object_type": "project",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.ZoneService/Get",
-    "permission": "compute.zones.get",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.compute.v1.ZoneService/List",
-    "permission": "compute.zoneses.list",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "cluster",
       "from_request_field": "*"
     },
     "required_acr_min": "2"

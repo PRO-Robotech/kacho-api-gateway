@@ -133,11 +133,6 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/compute/v1/placementGroups/{resource_id}:listAccessBindings", FQN: "kacho.cloud.compute.v1.PlacementGroupService/ListAccessBindings"},
 	{Method: "POST", Template: "/compute/v1/placementGroups/{resource_id}:setAccessBindings", FQN: "kacho.cloud.compute.v1.PlacementGroupService/SetAccessBindings"},
 	{Method: "POST", Template: "/compute/v1/placementGroups/{resource_id}:updateAccessBindings", FQN: "kacho.cloud.compute.v1.PlacementGroupService/UpdateAccessBindings"},
-	{Method: "GET", Template: "/compute/v1/regions", FQN: "kacho.cloud.compute.v1.RegionService/List"},
-	{Method: "POST", Template: "/compute/v1/regions", FQN: "kacho.cloud.compute.v1.InternalRegionService/Create"},
-	{Method: "DELETE", Template: "/compute/v1/regions/{region_id}", FQN: "kacho.cloud.compute.v1.InternalRegionService/Delete"},
-	{Method: "GET", Template: "/compute/v1/regions/{region_id}", FQN: "kacho.cloud.compute.v1.RegionService/Get"},
-	{Method: "PATCH", Template: "/compute/v1/regions/{region_id}", FQN: "kacho.cloud.compute.v1.InternalRegionService/Update"},
 	{Method: "GET", Template: "/compute/v1/reservedInstancePools", FQN: "kacho.cloud.compute.v1.ReservedInstancePoolService/List"},
 	{Method: "POST", Template: "/compute/v1/reservedInstancePools", FQN: "kacho.cloud.compute.v1.ReservedInstancePoolService/Create"},
 	{Method: "DELETE", Template: "/compute/v1/reservedInstancePools/{reserved_instance_pool_id}", FQN: "kacho.cloud.compute.v1.ReservedInstancePoolService/Delete"},
@@ -168,11 +163,9 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/compute/v1/snapshots/{snapshot_id}", FQN: "kacho.cloud.compute.v1.SnapshotService/Get"},
 	{Method: "PATCH", Template: "/compute/v1/snapshots/{snapshot_id}", FQN: "kacho.cloud.compute.v1.SnapshotService/Update"},
 	{Method: "GET", Template: "/compute/v1/snapshots/{snapshot_id}/operations", FQN: "kacho.cloud.compute.v1.SnapshotService/ListOperations"},
-	{Method: "GET", Template: "/compute/v1/zones", FQN: "kacho.cloud.compute.v1.ZoneService/List"},
-	{Method: "POST", Template: "/compute/v1/zones", FQN: "kacho.cloud.compute.v1.InternalZoneService/Create"},
-	{Method: "DELETE", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.InternalZoneService/Delete"},
-	{Method: "GET", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.ZoneService/Get"},
-	{Method: "PATCH", Template: "/compute/v1/zones/{zone_id}", FQN: "kacho.cloud.compute.v1.InternalZoneService/Update"},
+	// epic kacho-geo S7: compute.v1 Region/Zone REST routes removed (geography is
+	// now served exclusively by geo.v1 below). compute.v1 Region/Zone proto stubs
+	// are dropped separately in Phase 2.
 	// epic kacho-geo S5: geo.v1 Region/Zone — public read (GET) + admin CRUD
 	// (POST/PATCH/DELETE via InternalRegionService/InternalZoneService, sharing the
 	// public path, distinguished by HTTP method — same shape as compute today).
