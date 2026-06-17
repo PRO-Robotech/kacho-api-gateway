@@ -20,9 +20,12 @@ backends:
   # KAC-161: kacho-nlb public + internal endpoints
   nlb: kacho-nlb.kacho.svc.cluster.local:9090
   nlbInternal: kacho-nlb.kacho.svc.cluster.local:9091
-  # epic kacho-geo S5: kacho-geo public + internal endpoints (Geography Region/Zone leaf service)
-  geo: geo.kacho.svc.cluster.local:9090
-  geoInternal: geo.kacho.svc.cluster.local:9091
+  # epic kacho-geo S5: kacho-geo public + internal endpoints (Geography Region/Zone leaf service).
+  # The geo k8s Service is "kacho-geo" / "kacho-geo-internal" (mirrors kacho-iam /
+  # kacho-iam-internal). The bare "geo.kacho.svc.cluster.local" host does NOT resolve
+  # (NXDOMAIN) → grpc "no children to pick from" 503 on every /geo/v1/* request.
+  geo: kacho-geo.kacho.svc.cluster.local:9090
+  geoInternal: kacho-geo-internal.kacho.svc.cluster.local:9091
 
 # TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
 # Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.
@@ -161,6 +164,8 @@ mtls:
     compute: false    # gateway→compute (+ computeInternal)
     iam: false        # gateway→iam (+ iamInternal); shared by authz/subject dials
     nlb: false        # gateway→nlb (+ nlbInternal)
+    geo: false        # gateway→geo (+ geoInternal); SERVER_NAME unset → derived per
+                      # dial-host (kacho-geo / kacho-geo-internal), both in peer SAN
 
 # Arbitrary env vars escape-hatch (key: value).
 extraEnv: {}

@@ -170,6 +170,10 @@ spec:
             - name: KACHO_API_GATEWAY_MTLS_NLB_ENABLE
               value: "true"
             {{- end }}
+            {{- if .Values.mtls.edges.geo }}
+            - name: KACHO_API_GATEWAY_MTLS_GEO_ENABLE
+              value: "true"
+            {{- end }}
             {{- if .Values.mtls.hybridExternal }}
             # SEC-K hybrid: external TLS listener uses VerifyClientCertIfGiven with
             # the internal CA (MTLS_CA_FILE above) as ClientCAs — a client WITH a
