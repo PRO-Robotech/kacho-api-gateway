@@ -513,6 +513,19 @@ func NewMux(
 			if err := iampb.RegisterInternalClusterServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, optsFor("iamInternal")); err != nil {
 				return nil, fmt.Errorf("register iam InternalClusterService: %w", err)
 			}
+			// sub-phase 1.2: InternalOperationsService.ListIamOperations — cluster-wide
+			// IAM operations dump for admin-UI under GET /iam/v1/internal/operations.
+			// Internal-only (workspace CLAUDE.md §«Запрет 6», ban #6); isInternalPath
+			// routes /iam/v1/internal/* to the internal sub-mux and the dispatcher 404s
+			// it on the external TLS listener. The gRPC director's HasInternalSuffix
+			// also blocks the InternalOperationsService suffix on the public listener.
+			// admin-tier is enforced by the permission-catalog entry
+			// (required_relation: system_admin, scope cluster:cluster_kacho_root, acr 2),
+			// parity with InternalClusterService/*; the iam :9091 backend additionally
+			// runs its own per-RPC authz-Check (security.md §AuthN+AuthZ ВЕЗДЕ).
+			if err := iampb.RegisterInternalOperationsServiceHandlerFromEndpoint(ctx, mux, iamInternalAddr, optsFor("iamInternal")); err != nil {
+				return nil, fmt.Errorf("register iam InternalOperationsService: %w", err)
+			}
 		}
 
 		// --- loadbalancer.v1 (KAC-161, kacho-nlb): NetworkLoadBalancer + Listener + TargetGroup ---

@@ -778,6 +778,26 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListOperations",
+    "permission": "iam.access_binding_operationses.listOperations",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_access_binding",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges",
+    "permission": "iam.access_bindings_by_subjects.listSubjectPrivileges",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.AccessReviewService/ApproveReviewItem",
     "permission": "iam.access_review_items.approve",
     "required_relation": "editor",
@@ -884,6 +904,16 @@
       "object_type": "",
       "from_request_field": ""
     }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.AccountService/ListAllOperations",
+    "permission": "iam.account_operationses.listAll",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "account",
+      "from_request_field": "account_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/ListOperations",
@@ -1318,6 +1348,16 @@
     }
   },
   {
+    "fqn": "kacho.cloud.iam.v1.InternalOperationsService/ListIamOperations",
+    "permission": "iam.internal_operationses.listIamOperations",
+    "required_relation": "system_admin",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.InternalSessionRevocationsService/IsRevoked",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
@@ -1693,6 +1733,16 @@
       "object_type": "",
       "from_request_field": ""
     }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.UserService/ListOperations",
+    "permission": "iam.user_operationses.listOperations",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "iam_user",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
@@ -2303,6 +2353,16 @@
       "object_type": "",
       "from_request_field": ""
     }
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.InternalNetworkService/GetNetwork",
+    "permission": "vpc.networks.get_internal",
+    "required_relation": "system_viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalNetworkService/SetDefaultSecurityGroupId",
