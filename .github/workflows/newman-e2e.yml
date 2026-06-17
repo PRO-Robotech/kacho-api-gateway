@@ -73,6 +73,10 @@ jobs:
         # §«Кросс-репо зависимости» allows temporary ref pinning while a
         # cross-repo chain converges.
         with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
+      # kacho-geo leaf-service (Geography Region/Zone, extracted from compute):
+      # helm dep (vendored sub-chart) + Dockerfile build context for kacho-geo:dev.
+      - uses: actions/checkout@v4
+        with: { repository: PRO-Robotech/kacho-geo, ref: main, path: kacho-geo }
       # KAC-NLB / KAC-161: kacho-nlb sibling — helm umbrella sub-chart
       # (file://../../../kacho-nlb/deploy) + Dockerfile build context.
       # Without this checkout, `helm install umbrella` fails with
@@ -125,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           # KAC-177: nlb added — umbrella chart now includes kacho-nlb sub-chart (KAC-161).
-          for svc in vpc iam compute api-gateway nlb; do
+          for svc in vpc iam compute geo api-gateway nlb; do
             echo "=== build kacho-$svc:dev ==="
             docker build -f "kacho-$svc/Dockerfile" -t "kacho-$svc:dev" .
           done
@@ -143,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           # KAC-177: kacho-nlb:dev added — umbrella sub-chart (KAC-161).
-          for img in kacho-vpc:dev kacho-iam:dev kacho-compute:dev kacho-api-gateway:dev kacho-nlb:dev; do
+          for img in kacho-vpc:dev kacho-iam:dev kacho-compute:dev kacho-geo:dev kacho-api-gateway:dev kacho-nlb:dev; do
             kind load docker-image "$img" --name kacho
           done
           docker image inspect kacho-ui:dev >/dev/null 2>&1 \
@@ -174,7 +178,8 @@ jobs:
             --set compute.mtls.enable=false \
             --set api-gateway.mtls.enable=false \
             --set kacho-nlb.mtls.enable=false \
-            --set kacho-iam.mtls.enable=false
+            --set kacho-iam.mtls.enable=false \
+            --set kacho-geo.mtls.enable=false
 
       # Phase 1 — wait for the data-plane Deployments + Postgres to converge.
       - name: wait for core deployments

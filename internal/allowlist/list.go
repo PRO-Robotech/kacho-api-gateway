@@ -126,13 +126,12 @@ var AllowedMethods = map[string]struct{}{
 	// compute.v1 — DiskTypeService (read-only справочник)
 	"/kacho.cloud.compute.v1.DiskTypeService/Get":  {},
 	"/kacho.cloud.compute.v1.DiskTypeService/List": {},
-	// compute.v1 — ZoneService (read-only справочник)
-	"/kacho.cloud.compute.v1.ZoneService/Get":  {},
-	"/kacho.cloud.compute.v1.ZoneService/List": {},
+	// compute.v1 — Geography (Region/Zone) больше НЕ публичная поверхность compute:
+	// выделена в leaf-сервис kacho-geo (см. geo.v1 ниже). Старые compute.v1 Region/Zone
+	// allowlist-записи удалены в epic kacho-geo S7 (Phase 1); proto-стабы — Phase 2.
 
 	// geo.v1 — RegionService (read-only справочник; эпик kacho-geo S5).
-	// Geography выделена в leaf-сервис kacho-geo. Старые compute.v1 Region/Zone
-	// записи СОХРАНЯЮТСЯ до S7 (cutover-окно: оба /compute/v1/* и /geo/v1/* резолвятся).
+	// Geography выделена в leaf-сервис kacho-geo; теперь единственный owner.
 	"/kacho.cloud.geo.v1.RegionService/Get":  {},
 	"/kacho.cloud.geo.v1.RegionService/List": {},
 	// geo.v1 — ZoneService (read-only справочник)
@@ -247,7 +246,7 @@ func IsAllowed(methodPath string) bool {
 //   - суффикс  "<Xxx>InternalService" (resource-manager: FolderInternalService);
 //   - префикс  "Internal<Xxx>Service" (vpc: InternalAddressPoolService,
 //     InternalNetworkService; compute: InternalDiskTypeService,
-//     InternalZoneService, InternalWatchService).
+//     InternalWatchService; geo: InternalRegionService, InternalZoneService).
 //
 // Путь имеет вид "/kacho.cloud.<domain>.v1.<Service>/<Method>"; проверяем сегмент
 // между последней "." и "/".

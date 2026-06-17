@@ -165,7 +165,7 @@ func TestGateway_A6b_ComputeRoutesToBackend(t *testing.T) {
 
 	for _, m := range []string{
 		"/kacho.cloud.compute.v1.InternalDiskTypeService/Create",
-		"/kacho.cloud.compute.v1.InternalZoneService/Delete",
+		"/kacho.cloud.compute.v1.InternalDiskTypeService/Delete",
 		"/kacho.cloud.compute.v1.InternalWatchService/Watch",
 	} {
 		m := m
