@@ -28,12 +28,12 @@ import (
 
 // fakeChecker — programmable mock implementing middleware.AuthorizeChecker.
 type fakeChecker struct {
-	calls       atomic.Int64
-	allowed     bool
-	reasons     []string
-	returnErr   error
-	delay       time.Duration
-	lastInput   atomic.Pointer[middleware.AuthzCheckInput]
+	calls     atomic.Int64
+	allowed   bool
+	reasons   []string
+	returnErr error
+	delay     time.Duration
+	lastInput atomic.Pointer[middleware.AuthzCheckInput]
 }
 
 func (f *fakeChecker) Check(ctx context.Context, in middleware.AuthzCheckInput) (middleware.AuthzCheckResult, error) {
@@ -548,6 +548,14 @@ func TestAuthz_EmbeddedCatalog_OperationServiceFQNsCorrect(t *testing.T) {
 
 	_, okListBySubject := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListBySubject")
 	assert.True(t, okListBySubject, "catalog must have AccessBindingService/ListBySubject")
+
+	// sub-phase 1.3: ListSubjectPrivileges — public read, mirrors ListBySubject
+	// (viewer relation, cluster scope-floor, ACR>=2). Catalog entry must exist so
+	// the per-RPC authz middleware applies the anti-anon + ACR floor (the precise
+	// self/account-admin policy is enforced in the iam handler).
+	lsp, okListSubjectPrivileges := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges")
+	require.True(t, okListSubjectPrivileges, "catalog must have AccessBindingService/ListSubjectPrivileges")
+	assert.False(t, lsp.IsExempt(), "ListSubjectPrivileges must NOT be <exempt> — it carries a real viewer permission gate")
 }
 
 // TestAuthz_DefaultPublicAllowlist_NoOperationV1FQN — KAC-127 BUG-1:
