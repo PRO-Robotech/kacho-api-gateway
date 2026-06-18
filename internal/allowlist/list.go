@@ -186,13 +186,14 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.RoleService/Delete":         {},
 	"/kacho.cloud.iam.v1.RoleService/ListOperations": {},
 	// iam.v1 — AccessBindingService
-	"/kacho.cloud.iam.v1.AccessBindingService/Get":            {},
-	"/kacho.cloud.iam.v1.AccessBindingService/Create":         {},
-	"/kacho.cloud.iam.v1.AccessBindingService/Delete":         {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource": {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":  {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":  {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListOperations": {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/accessBindings/{access_binding_id}/operations)
+	"/kacho.cloud.iam.v1.AccessBindingService/Get":                   {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Create":                {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Delete":                {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource":        {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListOperations":        {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/accessBindings/{access_binding_id}/operations)
+	"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges": {}, // sub-phase 1.3 — public sync read
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 
