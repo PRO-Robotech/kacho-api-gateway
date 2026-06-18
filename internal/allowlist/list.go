@@ -141,12 +141,13 @@ var AllowedMethods = map[string]struct{}{
 	// (admin-CRUD на :9091; HasInternalSuffix блокирует автоматически, запрет #6).
 
 	// iam.v1 — AccountService (KAC-105, E0)
-	"/kacho.cloud.iam.v1.AccountService/Get":            {},
-	"/kacho.cloud.iam.v1.AccountService/List":           {},
-	"/kacho.cloud.iam.v1.AccountService/Create":         {},
-	"/kacho.cloud.iam.v1.AccountService/Update":         {},
-	"/kacho.cloud.iam.v1.AccountService/Delete":         {},
-	"/kacho.cloud.iam.v1.AccountService/ListOperations": {},
+	"/kacho.cloud.iam.v1.AccountService/Get":               {},
+	"/kacho.cloud.iam.v1.AccountService/List":              {},
+	"/kacho.cloud.iam.v1.AccountService/Create":            {},
+	"/kacho.cloud.iam.v1.AccountService/Update":            {},
+	"/kacho.cloud.iam.v1.AccountService/Delete":            {},
+	"/kacho.cloud.iam.v1.AccountService/ListOperations":    {},
+	"/kacho.cloud.iam.v1.AccountService/ListAllOperations": {}, // sub-phase 1.2 — account-scoped module list (REST GET /iam/v1/accounts/{id}/operations:all)
 	// iam.v1 — ProjectService
 	"/kacho.cloud.iam.v1.ProjectService/Get":            {},
 	"/kacho.cloud.iam.v1.ProjectService/List":           {},
@@ -156,9 +157,10 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.ProjectService/ListOperations": {},
 	// iam.v1 — UserService (НЕТ Create/Update — Users создаются через
 	// InternalUserService.UpsertFromIdentity; см. workspace CLAUDE.md / E0 §5.10)
-	"/kacho.cloud.iam.v1.UserService/Get":    {},
-	"/kacho.cloud.iam.v1.UserService/List":   {},
-	"/kacho.cloud.iam.v1.UserService/Delete": {},
+	"/kacho.cloud.iam.v1.UserService/Get":            {},
+	"/kacho.cloud.iam.v1.UserService/List":           {},
+	"/kacho.cloud.iam.v1.UserService/Delete":         {},
+	"/kacho.cloud.iam.v1.UserService/ListOperations": {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/users/{user_id}/operations)
 	// iam.v1 — ServiceAccountService
 	"/kacho.cloud.iam.v1.ServiceAccountService/Get":            {},
 	"/kacho.cloud.iam.v1.ServiceAccountService/List":           {},
@@ -190,6 +192,7 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource":        {},
 	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":         {},
 	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListOperations":        {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/accessBindings/{access_binding_id}/operations)
 	"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges": {}, // sub-phase 1.3 — public sync read
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.

@@ -32,6 +32,10 @@ var internalRESTPaths = []struct{ method, path string }{
 	{"POST", "/iam/v1/internal/iam:lookupSubject"},
 	{"GET", "/iam/v1/internal/iam/permissions"},
 	{"GET", "/iam/v1/internal/cluster"},
+	// sub-phase 1.2 — InternalOperationsService.ListIamOperations: cluster-wide
+	// IAM operations dump, admin-only (:9091). MUST be 404 on the external
+	// listener (ban #6) and reachable on the internal listener.
+	{"GET", "/iam/v1/internal/operations"},
 	{"GET", "/vpc/v1/addressPools"},
 	// :internal verb-suffix (InternalNetworkService.GetNetwork REST path) — the
 	// real internal projection route. isInternalPath must match this too.

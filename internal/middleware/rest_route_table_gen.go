@@ -184,6 +184,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},
+	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"}, // sub-phase 1.2
 	{Method: "GET", Template: "/iam/v1/accessBindings:listByResource", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByResource"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listBySubject", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListBySubject"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listSubjectPrivileges", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges"},
@@ -194,6 +195,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "PATCH", Template: "/iam/v1/accounts/{account_id}", FQN: "kacho.cloud.iam.v1.AccountService/Update"},
 	{Method: "GET", Template: "/iam/v1/accounts/{account_id}/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByAccount"},
 	{Method: "GET", Template: "/iam/v1/accounts/{account_id}/operations", FQN: "kacho.cloud.iam.v1.AccountService/ListOperations"},
+	{Method: "GET", Template: "/iam/v1/accounts/{account_id}/operations:all", FQN: "kacho.cloud.iam.v1.AccountService/ListAllOperations"}, // sub-phase 1.2 — account-scoped module list
 	{Method: "POST", Template: "/iam/v1/authorize:batchCheck", FQN: "kacho.cloud.iam.v1.AuthorizeService/BatchCheck"},
 	{Method: "POST", Template: "/iam/v1/authorize:check", FQN: "kacho.cloud.iam.v1.AuthorizeService/Check"},
 	{Method: "POST", Template: "/iam/v1/authorize:expandRelations", FQN: "kacho.cloud.iam.v1.AuthorizeService/ExpandRelations"},
@@ -251,6 +253,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/iam/v1/users", FQN: "kacho.cloud.iam.v1.UserService/List"},
 	{Method: "DELETE", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Delete"},
 	{Method: "GET", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Get"},
+	{Method: "GET", Template: "/iam/v1/users/{user_id}/operations", FQN: "kacho.cloud.iam.v1.UserService/ListOperations"}, // sub-phase 1.2
 	{Method: "POST", Template: "/iam/v1/users:invite", FQN: "kacho.cloud.iam.v1.UserService/Invite"},
 	// KAC-185 (F4): Internal IAM services — cluster-internal listener only (CLAUDE.md §Запрет 6).
 	// Registered here so the authz middleware can resolve the gRPC FQN and apply the
@@ -269,6 +272,10 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/iam/v1/internal/cluster/admins", FQN: "kacho.cloud.iam.v1.InternalClusterService/ListAdmins"},
 	{Method: "POST", Template: "/iam/v1/internal/cluster/admins", FQN: "kacho.cloud.iam.v1.InternalClusterService/GrantAdmin"},
 	{Method: "DELETE", Template: "/iam/v1/internal/cluster/admins/{subject_id}", FQN: "kacho.cloud.iam.v1.InternalClusterService/RevokeAdmin"},
+	// sub-phase 1.2: InternalOperationsService — cluster-wide IAM operations dump
+	// (internal-only, admin-tier system_admin@cluster). isInternalPath gates
+	// /iam/v1/internal/* to the cluster-internal listener; never on external (ban #6).
+	{Method: "GET", Template: "/iam/v1/internal/operations", FQN: "kacho.cloud.iam.v1.InternalOperationsService/ListIamOperations"},
 	// KAC-161: kacho-nlb routes — path /nlb/v1/* (не /load-balancer/v1/*),
 	// Listener — отдельный first-class service (не sub-resource NLB), no zonal-shift.
 	// NetworkLoadBalancerService
