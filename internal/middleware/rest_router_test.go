@@ -21,6 +21,10 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// sub-phase 1.3: AccessBindingService.ListSubjectPrivileges — public read,
 		// GET suffix-action; must resolve so the catalog gate (viewer floor) fires.
 		{"GET", "/iam/v1/accessBindings:listSubjectPrivileges", "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges"},
+		// sub-phase 1.5: AccessBindingService.ListAssignableRoles — public read,
+		// GET suffix-action; must resolve so the scope-polymorphic catalog gate
+		// (viewer floor + dynamic object_type) fires.
+		{"GET", "/iam/v1/accessBindings:listAssignableRoles", "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},
 		// KAC-225: WhoAmI (GET /iam/v1/me) must resolve — was missing from the
 		// route table, so path->FQN failed and the <exempt> bypass never fired
 		// → 403 "catalog: no entry for method" broke UI permission bootstrap.
