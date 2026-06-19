@@ -55,11 +55,8 @@ jobs:
       # gh#73 transitional pin: revert to `ref: main` after kacho-corelib#21 merges.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
-      # sub-phase 1.5 transitional pin: ListAssignableRoles proto lives on
-      # kacho-proto#63 (iam-list-assignable-roles), not yet on main. Revert to
-      # `ref: main` after kacho-proto#63 merges.
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: iam-list-assignable-roles, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
 
       - uses: benjlevesque/short-sha@v3.0
         id: short-sha
