@@ -320,6 +320,9 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		"/kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
 		"/kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
 		"/kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources",
+		// epic-rsab γ — public, replace bySelector-target selector (async Operation).
+		// On external (NOT Internal); exempt — handler-authoritative grant-authority.
+		"/kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
 	}
 	for _, m := range publicMethods {
 		m := m

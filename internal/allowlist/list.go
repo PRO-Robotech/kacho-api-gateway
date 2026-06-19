@@ -198,6 +198,7 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.AccessBindingService/AddTargetResources":     {}, // epic-100 α — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:addTargetResources)
 	"/kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources":  {}, // epic-100 α — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:removeTargetResources)
 	"/kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources": {}, // epic-100 α — public sync read (REST GET /iam/v1/accessBindings:listGrantableResources)
+	"/kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector":  {}, // epic-rsab γ — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:replaceTargetSelector)
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 

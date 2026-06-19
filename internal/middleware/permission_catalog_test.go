@@ -259,6 +259,10 @@ func TestPermissionCatalog_AddRemoveTargetResources_Exempt(t *testing.T) {
 	for _, fqn := range []string{
 		"kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
 		"kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
+		// epic-rsab γ — selector replace shares the same exempt pattern:
+		// grant-authority on the binding's scope is handler-authoritative
+		// (requireGrantAuthority), not derivable by the gateway.
+		"kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
 	} {
 		t.Run(fqn, func(t *testing.T) {
 			entry, ok := c.Lookup(fqn)
