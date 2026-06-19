@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto } # sub-phase 1.5: kacho-proto#63 — revert to ref:main after merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: epic100-rsab-gamma, path: kacho-proto } # epic-rsab γ: kacho-proto#69 — revert to ref:main after merge
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4

@@ -34,6 +34,10 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// floor + dynamic object_type from scope_type) fires.
 		{"POST", "/iam/v1/accessBindings/iab0000000000000001:addTargetResources", "kacho.cloud.iam.v1.AccessBindingService/AddTargetResources"},
 		{"POST", "/iam/v1/accessBindings/iab0000000000000001:removeTargetResources", "kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources"},
+		// epic-rsab γ: ReplaceTargetSelector — POST suffix-action on an existing
+		// binding ({access_binding_id}); must resolve so the <exempt> catalog
+		// bypass fires (authN enforced, FGA skipped — handler authoritative).
+		{"POST", "/iam/v1/accessBindings/iab0000000000000001:replaceTargetSelector", "kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector"},
 		{"GET", "/iam/v1/accessBindings:listGrantableResources", "kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources"},
 		// KAC-225: WhoAmI (GET /iam/v1/me) must resolve — was missing from the
 		// route table, so path->FQN failed and the <exempt> bypass never fired
