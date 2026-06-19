@@ -25,6 +25,16 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// GET suffix-action; must resolve so the scope-polymorphic catalog gate
 		// (viewer floor + dynamic object_type) fires.
 		{"GET", "/iam/v1/accessBindings:listAssignableRoles", "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},
+		// epic-100 α: AccessBindingService resource-scoped target mutations +
+		// grantable-resources picker. Add/Remove are POST suffix-actions on an
+		// existing binding ({access_binding_id}); must resolve so the <exempt>
+		// catalog bypass fires (authN enforced, FGA skipped — handler authoritative,
+		// parity with Create). ListGrantableResources is a GET suffix-action on the
+		// collection; must resolve so the scope-polymorphic catalog gate (viewer
+		// floor + dynamic object_type from scope_type) fires.
+		{"POST", "/iam/v1/accessBindings/iab0000000000000001:addTargetResources", "kacho.cloud.iam.v1.AccessBindingService/AddTargetResources"},
+		{"POST", "/iam/v1/accessBindings/iab0000000000000001:removeTargetResources", "kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources"},
+		{"GET", "/iam/v1/accessBindings:listGrantableResources", "kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources"},
 		// KAC-225: WhoAmI (GET /iam/v1/me) must resolve — was missing from the
 		// route table, so path->FQN failed and the <exempt> bypass never fired
 		// → 403 "catalog: no entry for method" broke UI permission bootstrap.
