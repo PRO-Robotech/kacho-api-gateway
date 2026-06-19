@@ -314,6 +314,12 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges",
 		// sub-phase 1.5 — public, sync read (NOT Internal; goes on external).
 		"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
+		// epic-100 α — public, resource-scoped target mutations (async Operation)
+		// + grantable-resources picker (sync read). All on external (NOT Internal;
+		// ListGrantableResources returns tenant-facing id/name/type only).
+		"/kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
+		"/kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
+		"/kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources",
 	}
 	for _, m := range publicMethods {
 		m := m
