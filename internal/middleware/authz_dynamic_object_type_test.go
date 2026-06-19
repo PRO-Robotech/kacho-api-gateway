@@ -101,6 +101,81 @@ func TestAuthz_GRPC_ListByResource_AccountScope_DerivesObjectType(t *testing.T) 
 	assert.Equal(t, "acc_A", in.ResourceID)
 }
 
+// listAssignableRolesEntry — sub-phase 1.5 catalog row. ListAssignableRoles
+// is scope-polymorphic exactly like ListByResource: the FGA object type is
+// carried by the request's `resource_type` field (account|project|cluster), so
+// the entry MUST declare `object_type_from_request_field = "resource_type"`.
+// A static `object_type:"project"` would make an account/cluster-scoped read
+// check `project:<id>` → 403 for the account owner / cluster-admin (Bug A).
+const listAssignableRolesEntry = `{"fqn":"kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles","permission":"iam.access_bindings_by_resources.listAssignableRoles","required_relation":"viewer","scope_extractor":{"object_type":"project","from_request_field":"resource_id","object_type_from_request_field":"resource_type"},"required_acr_min":"2","risk_level":"LOW"}`
+
+func TestAuthz_HTTP_ListAssignableRoles_AccountScope_DerivesObjectType(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	router := &fakeRestRouter{m: map[string]string{
+		"GET /iam/v1/accessBindings:listAssignableRoles": "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, listAssignableRolesEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	r := httptest.NewRequest(http.MethodGet,
+		"/iam/v1/accessBindings:listAssignableRoles?resourceType=account&resourceId=acc_A", nil)
+	r.Header.Set("X-Kacho-Principal-Id", "usr_owner")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	in := checker.lastInput.Load()
+	require.NotNil(t, in, "checker must be called")
+	assert.Equal(t, "account", in.ResourceType,
+		"FGA object_type must be derived from request resource_type=account (scope-polymorphic, D-5)")
+	assert.Equal(t, "acc_A", in.ResourceID,
+		"FGA object id must still come from resource_id")
+}
+
+func TestAuthz_HTTP_ListAssignableRoles_ClusterScope_DerivesObjectType(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	router := &fakeRestRouter{m: map[string]string{
+		"GET /iam/v1/accessBindings:listAssignableRoles": "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
+	}}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, listAssignableRolesEntry), checker, func(c *middleware.AuthzMiddlewareConfig) {
+		c.RestRouter = router
+	})
+	h := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	r := httptest.NewRequest(http.MethodGet,
+		"/iam/v1/accessBindings:listAssignableRoles?resourceType=cluster&resourceId=cluster_kacho_root", nil)
+	r.Header.Set("X-Kacho-Principal-Id", "usr_boot")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	in := checker.lastInput.Load()
+	require.NotNil(t, in)
+	assert.Equal(t, "cluster", in.ResourceType,
+		"FGA object_type must be derived from request resource_type=cluster (scope-polymorphic, D-5)")
+	assert.Equal(t, "cluster_kacho_root", in.ResourceID)
+}
+
+func TestAuthz_GRPC_ListAssignableRoles_AccountScope_DerivesObjectType(t *testing.T) {
+	checker := &fakeChecker{allowed: true}
+	mw := buildAuthzMiddleware(t, buildCatalog(t, listAssignableRolesEntry), checker)
+	_, err := mw.Unary()(withTokenMD("usr_owner", "user"),
+		&iamv1.ListAssignableRolesRequest{ResourceType: "account", ResourceId: "acc_A"},
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},
+		func(ctx context.Context, req any) (any, error) { return "ok", nil })
+	require.NoError(t, err)
+
+	in := checker.lastInput.Load()
+	require.NotNil(t, in)
+	assert.Equal(t, "account", in.ResourceType,
+		"FGA object_type must be derived from proto resource_type=account (scope-polymorphic, D-5)")
+	assert.Equal(t, "acc_A", in.ResourceID)
+}
+
 // TestAuthz_HTTP_StaticObjectType_Unaffected — a catalog entry WITHOUT the
 // dynamic directive keeps the static object_type (no regression for the 99%
 // of fixed-scope RPCs).

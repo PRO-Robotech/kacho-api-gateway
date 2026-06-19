@@ -185,6 +185,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"}, // sub-phase 1.2
+	{Method: "GET", Template: "/iam/v1/accessBindings:listAssignableRoles", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"}, // sub-phase 1.5
 	{Method: "GET", Template: "/iam/v1/accessBindings:listByResource", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByResource"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listBySubject", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListBySubject"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listSubjectPrivileges", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges"},

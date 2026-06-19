@@ -312,6 +312,8 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount",
 		// sub-phase 1.3 — public, sync read (NOT Internal; goes on external).
 		"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges",
+		// sub-phase 1.5 — public, sync read (NOT Internal; goes on external).
+		"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
 	}
 	for _, m := range publicMethods {
 		m := m

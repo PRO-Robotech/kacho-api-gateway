@@ -220,6 +220,30 @@ func TestPermissionCatalog_LookupKnownEntries_FromEmbed(t *testing.T) {
 	}
 }
 
+// TestPermissionCatalog_ListAssignableRoles_ScopePolymorphic (sub-phase 1.5,
+// D-5) — the embedded catalog MUST carry AccessBindingService/ListAssignableRoles
+// as a scope-polymorphic viewer-floor entry, exactly like ListByResource: the
+// FGA object type is derived from the request `resource_type` field (the
+// `object_type_from_request_field` directive), not the static `object_type`.
+// Without `object_type_from_request_field`, an account/cluster-scoped grant
+// palette read would be checked as `project:<id>` → 403 (Bug A regression).
+func TestPermissionCatalog_ListAssignableRoles_ScopePolymorphic(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	entry, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles")
+	require.True(t, ok, "ListAssignableRoles missing from embedded catalog (sub-phase 1.5)")
+	assert.Equal(t, "iam.access_bindings_by_resources.listAssignableRoles", entry.Permission)
+	assert.Equal(t, "viewer", entry.RequiredRelation,
+		"catalog floor must be viewer (handler requireGrantAuthority is the precise gate, D-5)")
+	assert.Equal(t, "project", entry.ScopeExtractor.ObjectType,
+		"static object_type is the fallback (parity with ListByResource)")
+	assert.Equal(t, "resource_id", entry.ScopeExtractor.FromRequestField)
+	assert.Equal(t, "resource_type", entry.ScopeExtractor.ObjectTypeFromRequestField,
+		"object_type must be derived from request resource_type (scope-polymorphic, Bug A)")
+	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor (D-5)")
+}
+
 // TestPermissionCatalog_InternalClusterService_LockedSystemAdmin (item-2b) —
 // regression guard: every RPC of `InternalClusterService` must be gated by
 // the FGA relation `system_admin` on `cluster:<cluster-singleton>` in the

@@ -747,6 +747,17 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
+    "permission": "iam.access_bindings_by_resources.listAssignableRoles",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "resource_id",
+      "object_type_from_request_field": "resource_type"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByAccount",
     "permission": "iam.access_bindings_by_account.list",
     "required_relation": "admin",
