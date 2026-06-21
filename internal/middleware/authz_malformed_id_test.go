@@ -32,10 +32,10 @@ import (
 // embedded permission_catalog.json AccessBindingService/Get entry.
 const acbGetEntry = `{"fqn":"kacho.cloud.iam.v1.AccessBindingService/Get","permission":"iam.access_bindings.get","required_relation":"viewer","scope_extractor":{"object_type":"iam_access_binding","from_request_field":"access_binding_id"},"required_acr_min":"2","risk_level":"LOW"}`
 
-// acbListByResourceEntry — scope-polymorphic (object_type_from_request_field).
+// acbListByScopeEntry — scope-polymorphic (object_type_from_request_field).
 // MUST NOT be id-validated: resource_id may be an account/project/cluster id of
 // a foreign family, and the malformed-id guard explicitly excludes this path.
-const acbListByResourceEntry = `{"fqn":"kacho.cloud.iam.v1.AccessBindingService/ListByResource","permission":"iam.access_bindings_by_resources.listByResource","required_relation":"viewer","scope_extractor":{"object_type":"project","from_request_field":"resource_id","object_type_from_request_field":"resource_type"},"required_acr_min":"2"}`
+const acbListByScopeEntry = `{"fqn":"kacho.cloud.iam.v1.AccessBindingService/ListByScope","permission":"iam.access_bindings_by_resources.listByScope","required_relation":"viewer","scope_extractor":{"object_type":"project","from_request_field":"resource_id","object_type_from_request_field":"resource_type"},"required_acr_min":"2"}`
 
 const malformedACB = "not-a-valid-acb-id-at-all-verylongstring"
 const wellFormedNonexistentACB = "acb00000000000notfnd"
@@ -140,13 +140,13 @@ func TestAuthz_HTTP_WellFormedDeny_StillReturns403(t *testing.T) {
 // A "malformed-looking" value must reach the FGA Check (not 400).
 func TestAuthz_GRPC_ScopePolymorphicMalformed_NotShortCircuited(t *testing.T) {
 	checker := &fakeChecker{allowed: false, reasons: []string{"no path"}}
-	mw := buildAuthzMiddleware(t, buildCatalog(t, acbListByResourceEntry), checker)
-	req := &iamv1.ListAccessBindingsByResourceRequest{
+	mw := buildAuthzMiddleware(t, buildCatalog(t, acbListByScopeEntry), checker)
+	req := &iamv1.ListAccessBindingsByScopeRequest{
 		ResourceType: "project",
 		ResourceId:   malformedACB,
 	}
 	_, err := mw.Unary()(withTokenMD("usr_x", "user"), req,
-		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.iam.v1.AccessBindingService/ListByResource"},
+		&grpc.UnaryServerInfo{FullMethod: "/kacho.cloud.iam.v1.AccessBindingService/ListByScope"},
 		func(ctx context.Context, req any) (any, error) { return "ok", nil })
 	require.Error(t, err)
 	st, _ := status.FromError(err)

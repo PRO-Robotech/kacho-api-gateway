@@ -222,7 +222,7 @@ func TestPermissionCatalog_LookupKnownEntries_FromEmbed(t *testing.T) {
 
 // TestPermissionCatalog_ListAssignableRoles_ScopePolymorphic (sub-phase 1.5,
 // D-5) — the embedded catalog MUST carry AccessBindingService/ListAssignableRoles
-// as a scope-polymorphic viewer-floor entry, exactly like ListByResource: the
+// as a scope-polymorphic viewer-floor entry, exactly like ListByScope: the
 // FGA object type is derived from the request `resource_type` field (the
 // `object_type_from_request_field` directive), not the static `object_type`.
 // Without `object_type_from_request_field`, an account/cluster-scoped grant
@@ -237,70 +237,46 @@ func TestPermissionCatalog_ListAssignableRoles_ScopePolymorphic(t *testing.T) {
 	assert.Equal(t, "viewer", entry.RequiredRelation,
 		"catalog floor must be viewer (handler requireGrantAuthority is the precise gate, D-5)")
 	assert.Equal(t, "project", entry.ScopeExtractor.ObjectType,
-		"static object_type is the fallback (parity with ListByResource)")
+		"static object_type is the fallback (parity with ListByScope)")
 	assert.Equal(t, "resource_id", entry.ScopeExtractor.FromRequestField)
 	assert.Equal(t, "resource_type", entry.ScopeExtractor.ObjectTypeFromRequestField,
 		"object_type must be derived from request resource_type (scope-polymorphic, Bug A)")
 	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor (D-5)")
 }
 
-// TestPermissionCatalog_AddRemoveTargetResources_Exempt (epic-100 α) — the
-// resource-scoped target mutations carry permission "<exempt>": grant-authority
-// on the binding's scope is resolved from the binding row and enforced
-// authoritatively in the kacho-iam handler (requireGrantAuthority), not derivable
-// by the gateway. Same exempt pattern as AccessBindingService/Create. <exempt>
-// still enforces authentication at the gateway (anti-anon) — it only skips the
-// FGA Check. Regressing either to a static FGA permission would double-gate (and
-// likely mis-gate, since the gateway can't resolve the scope from the request).
-func TestPermissionCatalog_AddRemoveTargetResources_Exempt(t *testing.T) {
+// TestPermissionCatalog_ListByScope_ScopePolymorphic (RBAC rules-model F
+// clean-cut) — ListByResource was renamed → ListByScope (proto-F). The embedded
+// catalog MUST carry the renamed entry as a scope-polymorphic viewer-floor entry:
+// the FGA object type is derived from the request `resource_type` field via
+// `object_type_from_request_field`, with static `project` only as fallback
+// (Bug A). The permission key was renamed in lockstep (…listByScope).
+func TestPermissionCatalog_ListByScope_ScopePolymorphic(t *testing.T) {
 	c, err := middleware.LoadEmbeddedPermissionCatalog("")
 	require.NoError(t, err)
 
-	for _, fqn := range []string{
+	entry, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListByScope")
+	require.True(t, ok, "ListByScope missing from embedded catalog (RBAC rules-model F)")
+	assert.Equal(t, "iam.access_bindings_by_resources.listByScope", entry.Permission)
+	assert.Equal(t, "viewer", entry.RequiredRelation,
+		"catalog floor must be viewer (handler is the precise gate)")
+	assert.Equal(t, "project", entry.ScopeExtractor.ObjectType,
+		"static object_type is the fallback (scope-polymorphic)")
+	assert.Equal(t, "resource_id", entry.ScopeExtractor.FromRequestField)
+	assert.Equal(t, "resource_type", entry.ScopeExtractor.ObjectTypeFromRequestField,
+		"object_type must be derived from request resource_type (scope-polymorphic, Bug A)")
+	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor")
+
+	// The removed target/selector RPCs (proto-F clean-cut) must NOT be present.
+	for _, gone := range []string{
 		"kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
 		"kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
-		// epic-rsab γ — selector replace shares the same exempt pattern:
-		// grant-authority on the binding's scope is handler-authoritative
-		// (requireGrantAuthority), not derivable by the gateway.
 		"kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
+		"kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources",
+		"kacho.cloud.iam.v1.AccessBindingService/ListByResource",
 	} {
-		t.Run(fqn, func(t *testing.T) {
-			entry, ok := c.Lookup(fqn)
-			require.True(t, ok, "fqn missing from embedded catalog (epic-100 α): %s", fqn)
-			assert.True(t, entry.IsExempt(),
-				"%s must be <exempt> — handler-authoritative grant-authority, parity with Create", fqn)
-		})
+		_, present := c.Lookup(gone)
+		assert.False(t, present, "removed/renamed RPC must NOT be in catalog: %s", gone)
 	}
-
-	// Parity anchor: Create carries the same exempt shape.
-	create, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/Create")
-	require.True(t, ok)
-	assert.True(t, create.IsExempt(), "Create is the exempt parity anchor for Add/RemoveTargetResources")
-}
-
-// TestPermissionCatalog_ListGrantableResources_ScopePolymorphic (epic-100 α) —
-// the grantable-resources picker is a scope-polymorphic viewer-floor entry,
-// parity with ListAssignableRoles/ListByResource: the FGA object type is derived
-// from the request `scope_type` field (account|project|cluster) via
-// `object_type_from_request_field`, with static `project` only as fallback.
-// `from_request_field` is `scope_id` (the picker's own request shape), unlike
-// ListAssignableRoles/ListByResource which use `resource_id`.
-func TestPermissionCatalog_ListGrantableResources_ScopePolymorphic(t *testing.T) {
-	c, err := middleware.LoadEmbeddedPermissionCatalog("")
-	require.NoError(t, err)
-
-	entry, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources")
-	require.True(t, ok, "ListGrantableResources missing from embedded catalog (epic-100 α)")
-	assert.Equal(t, "iam.access_bindings_by_resources.listGrantableResources", entry.Permission)
-	assert.Equal(t, "viewer", entry.RequiredRelation,
-		"catalog floor must be viewer (handler requireGrantAuthority is the precise gate)")
-	assert.Equal(t, "project", entry.ScopeExtractor.ObjectType,
-		"static object_type is the fallback (parity with ListAssignableRoles)")
-	assert.Equal(t, "scope_id", entry.ScopeExtractor.FromRequestField,
-		"grantable-resources picker keys scope on scope_id")
-	assert.Equal(t, "scope_type", entry.ScopeExtractor.ObjectTypeFromRequestField,
-		"object_type must be derived from request scope_type (scope-polymorphic)")
-	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor")
 }
 
 // TestPermissionCatalog_InternalClusterService_LockedSystemAdmin (item-2b) —

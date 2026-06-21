@@ -677,7 +677,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		resourceID = ResourceID("*")
 	}
 	resourceType := entry.ScopeExtractor.ObjectType
-	// Scope-polymorphic RPCs (e.g. AccessBindingService.ListByResource) carry
+	// Scope-polymorphic RPCs (e.g. AccessBindingService.ListByScope) carry
 	// the FGA object type in a request field (catalog
 	// `object_type_from_request_field`, value project|account|cluster). When
 	// declared + present, it overrides the static `object_type` — otherwise an
@@ -875,7 +875,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 //
 // It also excludes the scope-polymorphic path (`object_type_from_request_field`
 // set): there the extracted `resource_id` is a scope id of an arbitrary family
-// (project / account / cluster) carried for a ListByResource-style RPC, so the
+// (project / account / cluster) carried for a ListByScope-style RPC, so the
 // per-resource-id syntax check does not apply. gh kacho-api-gateway#73.
 func isConcreteResourceScope(entry CatalogEntry) bool {
 	if strings.TrimSpace(entry.ScopeExtractor.ObjectTypeFromRequestField) != "" {

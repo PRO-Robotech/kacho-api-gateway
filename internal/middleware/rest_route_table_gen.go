@@ -184,13 +184,9 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},
-	{Method: "POST", Template: "/iam/v1/accessBindings/{access_binding_id}:addTargetResources", FQN: "kacho.cloud.iam.v1.AccessBindingService/AddTargetResources"},       // epic-100 α
-	{Method: "POST", Template: "/iam/v1/accessBindings/{access_binding_id}:removeTargetResources", FQN: "kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources"}, // epic-100 α
-	{Method: "POST", Template: "/iam/v1/accessBindings/{access_binding_id}:replaceTargetSelector", FQN: "kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector"}, // epic-rsab γ
-	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"},                    // sub-phase 1.2
-	{Method: "GET", Template: "/iam/v1/accessBindings:listAssignableRoles", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},                          // sub-phase 1.5
-	{Method: "GET", Template: "/iam/v1/accessBindings:listGrantableResources", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources"},                    // epic-100 α
-	{Method: "GET", Template: "/iam/v1/accessBindings:listByResource", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByResource"},
+	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"}, // sub-phase 1.2
+	{Method: "GET", Template: "/iam/v1/accessBindings:listAssignableRoles", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},       // sub-phase 1.5
+	{Method: "GET", Template: "/iam/v1/accessBindings:listByScope", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},                       // RBAC rules-model F (was :listByResource → ListByResource)
 	{Method: "GET", Template: "/iam/v1/accessBindings:listBySubject", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListBySubject"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listSubjectPrivileges", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges"},
 	{Method: "GET", Template: "/iam/v1/accessBindings:listByRole", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByRole"},     // RBAC rules-model E

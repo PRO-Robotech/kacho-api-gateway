@@ -718,15 +718,6 @@
     "required_acr_min": "2"
   },
   {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Create",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
@@ -787,8 +778,8 @@
     "required_acr_min": "2"
   },
   {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByResource",
-    "permission": "iam.access_bindings_by_resources.listByResource",
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByScope",
+    "permission": "iam.access_bindings_by_resources.listByScope",
     "required_relation": "viewer",
     "scope_extractor": {
       "object_type": "project",
@@ -818,17 +809,6 @@
     "required_acr_min": "2"
   },
   {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources",
-    "permission": "iam.access_bindings_by_resources.listGrantableResources",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "scope_id",
-      "object_type_from_request_field": "scope_type"
-    },
-    "required_acr_min": "2"
-  },
-  {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListOperations",
     "permission": "iam.access_binding_operationses.listOperations",
     "required_relation": "viewer",
@@ -847,24 +827,6 @@
       "from_request_field": "*"
     },
     "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
   },
   {
     "fqn": "kacho.cloud.iam.v1.AccessReviewService/ApproveReviewItem",

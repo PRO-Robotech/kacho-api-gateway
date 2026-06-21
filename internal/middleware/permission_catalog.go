@@ -101,7 +101,7 @@ type ScopeExtractor struct {
 
 	// ObjectTypeFromRequestField — top-level proto request field name carrying
 	// the FGA *object type* at request time (scope-polymorphic RPCs, e.g.
-	// AccessBindingService.ListByResource → "resource_type" whose value is
+	// AccessBindingService.ListByScope → "resource_type" whose value is
 	// project|account|cluster). When set + non-empty, the middleware derives
 	// the FGA Check object type from this request field and `ObjectType` is the
 	// fallback. Empty for the fixed-scope majority of RPCs.
