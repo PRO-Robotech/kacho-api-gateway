@@ -186,19 +186,21 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.RoleService/Delete":         {},
 	"/kacho.cloud.iam.v1.RoleService/ListOperations": {},
 	// iam.v1 — AccessBindingService
-	"/kacho.cloud.iam.v1.AccessBindingService/Get":                   {},
-	"/kacho.cloud.iam.v1.AccessBindingService/Create":                {},
-	"/kacho.cloud.iam.v1.AccessBindingService/Delete":                {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource":        {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":         {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":         {},
-	"/kacho.cloud.iam.v1.AccessBindingService/ListOperations":        {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/accessBindings/{access_binding_id}/operations)
-	"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges": {}, // sub-phase 1.3 — public sync read
-	"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles":   {}, // sub-phase 1.5 — public sync read (REST GET /iam/v1/accessBindings:listAssignableRoles)
+	"/kacho.cloud.iam.v1.AccessBindingService/Get":                    {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Create":                 {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Delete":                 {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByResource":         {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":          {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount":          {},
+	"/kacho.cloud.iam.v1.AccessBindingService/ListOperations":         {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/accessBindings/{access_binding_id}/operations)
+	"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges":  {}, // sub-phase 1.3 — public sync read
+	"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles":    {}, // sub-phase 1.5 — public sync read (REST GET /iam/v1/accessBindings:listAssignableRoles)
 	"/kacho.cloud.iam.v1.AccessBindingService/AddTargetResources":     {}, // epic-100 α — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:addTargetResources)
 	"/kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources":  {}, // epic-100 α — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:removeTargetResources)
 	"/kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources": {}, // epic-100 α — public sync read (REST GET /iam/v1/accessBindings:listGrantableResources)
 	"/kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector":  {}, // epic-rsab γ — public async Operation (REST POST /iam/v1/accessBindings/{access_binding_id}:replaceTargetSelector)
+	"/kacho.cloud.iam.v1.AccessBindingService/ListByRole":             {}, // RBAC rules-model E — public sync read (REST GET /iam/v1/accessBindings:listByRole)
+	"/kacho.cloud.iam.v1.AccessBindingService/ExpandAccess":           {}, // RBAC rules-model E — public sync read (REST GET /iam/v1/accessBindings:expandAccess)
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 

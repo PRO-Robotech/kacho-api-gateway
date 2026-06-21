@@ -323,6 +323,11 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		// epic-rsab γ — public, replace bySelector-target selector (async Operation).
 		// On external (NOT Internal); exempt — handler-authoritative grant-authority.
 		"/kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
+		// RBAC rules-model 2026 sub-phase E — public, sync reads (NOT Internal; on external).
+		// ListByRole: bindings of a role; ExpandAccess: principals expansion. Both
+		// cluster-scoped viewer floor (catalog), acr 2.
+		"/kacho.cloud.iam.v1.AccessBindingService/ListByRole",
+		"/kacho.cloud.iam.v1.AccessBindingService/ExpandAccess",
 	}
 	for _, m := range publicMethods {
 		m := m
