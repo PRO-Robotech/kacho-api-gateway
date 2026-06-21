@@ -304,25 +304,19 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		// RoleService
 		"/kacho.cloud.iam.v1.RoleService/Create",
 		"/kacho.cloud.iam.v1.RoleService/Delete",
-		// AccessBindingService (+ ListByResource/ListBySubject/ListByAccount/ListSubjectPrivileges)
+		// AccessBindingService (+ ListByScope/ListBySubject/ListByAccount/ListSubjectPrivileges)
 		"/kacho.cloud.iam.v1.AccessBindingService/Create",
 		"/kacho.cloud.iam.v1.AccessBindingService/Delete",
-		"/kacho.cloud.iam.v1.AccessBindingService/ListByResource",
+		// RBAC rules-model F clean-cut — ListByResource renamed → ListByScope
+		// (target/selector RPCs AddTargetResources/RemoveTargetResources/
+		// ReplaceTargetSelector/ListGrantableResources removed in proto-F).
+		"/kacho.cloud.iam.v1.AccessBindingService/ListByScope",
 		"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject",
 		"/kacho.cloud.iam.v1.AccessBindingService/ListByAccount",
 		// sub-phase 1.3 — public, sync read (NOT Internal; goes on external).
 		"/kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges",
 		// sub-phase 1.5 — public, sync read (NOT Internal; goes on external).
 		"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles",
-		// epic-100 α — public, resource-scoped target mutations (async Operation)
-		// + grantable-resources picker (sync read). All on external (NOT Internal;
-		// ListGrantableResources returns tenant-facing id/name/type only).
-		"/kacho.cloud.iam.v1.AccessBindingService/AddTargetResources",
-		"/kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources",
-		"/kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources",
-		// epic-rsab γ — public, replace bySelector-target selector (async Operation).
-		// On external (NOT Internal); exempt — handler-authoritative grant-authority.
-		"/kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector",
 		// RBAC rules-model 2026 sub-phase E — public, sync reads (NOT Internal; on external).
 		// ListByRole: bindings of a role; ExpandAccess: principals expansion. Both
 		// cluster-scoped viewer floor (catalog), acr 2.

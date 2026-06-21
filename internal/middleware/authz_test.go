@@ -542,9 +542,10 @@ func TestAuthz_EmbeddedCatalog_OperationServiceFQNsCorrect(t *testing.T) {
 	_, badGet := cat.Lookup("kacho.cloud.operation.v1.OperationService/Get")
 	assert.False(t, badGet, "catalog must NOT have the wrong v1-suffixed FQN")
 
-	// AccessBindingService listBy* entries must exist (BUG-8).
-	_, okListByResource := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListByResource")
-	assert.True(t, okListByResource, "catalog must have AccessBindingService/ListByResource")
+	// AccessBindingService listBy* entries must exist (BUG-8). ListByResource
+	// was renamed → ListByScope in RBAC rules-model F clean-cut.
+	_, okListByScope := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListByScope")
+	assert.True(t, okListByScope, "catalog must have AccessBindingService/ListByScope")
 
 	_, okListBySubject := cat.Lookup("kacho.cloud.iam.v1.AccessBindingService/ListBySubject")
 	assert.True(t, okListBySubject, "catalog must have AccessBindingService/ListBySubject")

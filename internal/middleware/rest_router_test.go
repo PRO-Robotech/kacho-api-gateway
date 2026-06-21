@@ -25,20 +25,13 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// GET suffix-action; must resolve so the scope-polymorphic catalog gate
 		// (viewer floor + dynamic object_type) fires.
 		{"GET", "/iam/v1/accessBindings:listAssignableRoles", "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},
-		// epic-100 α: AccessBindingService resource-scoped target mutations +
-		// grantable-resources picker. Add/Remove are POST suffix-actions on an
-		// existing binding ({access_binding_id}); must resolve so the <exempt>
-		// catalog bypass fires (authN enforced, FGA skipped — handler authoritative,
-		// parity with Create). ListGrantableResources is a GET suffix-action on the
-		// collection; must resolve so the scope-polymorphic catalog gate (viewer
-		// floor + dynamic object_type from scope_type) fires.
-		{"POST", "/iam/v1/accessBindings/iab0000000000000001:addTargetResources", "kacho.cloud.iam.v1.AccessBindingService/AddTargetResources"},
-		{"POST", "/iam/v1/accessBindings/iab0000000000000001:removeTargetResources", "kacho.cloud.iam.v1.AccessBindingService/RemoveTargetResources"},
-		// epic-rsab γ: ReplaceTargetSelector — POST suffix-action on an existing
-		// binding ({access_binding_id}); must resolve so the <exempt> catalog
-		// bypass fires (authN enforced, FGA skipped — handler authoritative).
-		{"POST", "/iam/v1/accessBindings/iab0000000000000001:replaceTargetSelector", "kacho.cloud.iam.v1.AccessBindingService/ReplaceTargetSelector"},
-		{"GET", "/iam/v1/accessBindings:listGrantableResources", "kacho.cloud.iam.v1.AccessBindingService/ListGrantableResources"},
+		// RBAC rules-model F clean-cut: ListByScope (renamed from ListByResource) —
+		// public read, GET suffix-action on the collection; must resolve so the
+		// scope-polymorphic catalog gate (viewer floor + dynamic object_type from
+		// resource_type) fires. The target/selector RPCs (addTargetResources,
+		// removeTargetResources, replaceTargetSelector, listGrantableResources)
+		// were removed in proto-F and must NOT resolve anymore.
+		{"GET", "/iam/v1/accessBindings:listByScope", "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},
 		// RBAC rules-model 2026 sub-phase E: ListByRole + ExpandAccess — public
 		// reads, GET suffix-actions on the collection; must resolve so the
 		// cluster-scoped catalog gate (viewer floor, acr 2) fires.

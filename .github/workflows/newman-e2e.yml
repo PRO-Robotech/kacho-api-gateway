@@ -61,15 +61,17 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto } # TEMP-PIN RBAC rules-model E (ListByRole+ExpandAccess stubs); revert to ref:main after kacho-proto merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto } # TEMP-PIN RBAC rules-model F clean-cut (ListByResource→ListByScope, target/selector RPCs removed); revert to ref:main after kacho-proto#77 merge
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-compute, ref: main, path: kacho-compute }
       - uses: actions/checkout@v4
-        # KAC-198 transitional pin: kacho-iam:main still references deleted
-        # proto types (jit_pending_operation_adapter.go). Unpin to `main` once
-        # kacho-iam#76 merges (which deletes that adapter). Workspace CLAUDE.md
+        # TEMP-PIN RBAC rules-model F clean-cut: proto-F removes the
+        # target/selector RPCs and renames ListByResource→ListByScope; kacho-iam
+        # must be on the matching F branch so the full-stack e2e (iam authz newman
+        # matrices reference listByScope) converges against proto@F. Revert to
+        # `ref: main` after kacho-iam#<F> merges. Workspace CLAUDE.md
         # §«Кросс-репо зависимости» allows temporary ref pinning while a
         # cross-repo chain converges.
         with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
