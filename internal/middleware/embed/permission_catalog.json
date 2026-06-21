@@ -746,6 +746,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ExpandAccess",
+    "permission": "iam.access_bindings_by_resources.expandAccess",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Get",
     "permission": "iam.access_bindings.get",
     "required_relation": "viewer",
@@ -784,6 +794,16 @@
       "object_type": "project",
       "from_request_field": "resource_id",
       "object_type_from_request_field": "resource_type"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByRole",
+    "permission": "iam.access_bindings_by_roles.listByRole",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
