@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: rbac-rules-f-cleancut, path: kacho-proto } # TEMP-PIN RBAC rules-model F clean-cut (ListByResource→ListByScope, target/selector RPCs removed); revert to ref:main after kacho-proto#77 merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto } # TEMP-PIN RBAC rules-model F clean-cut (ListByResource→ListByScope, target/selector RPCs removed); revert to ref:main after kacho-proto#77 merge
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
@@ -74,7 +74,7 @@ jobs:
         # `ref: main` after kacho-iam#<F> merges. Workspace CLAUDE.md
         # §«Кросс-репо зависимости» allows temporary ref pinning while a
         # cross-repo chain converges.
-        with: { repository: PRO-Robotech/kacho-iam, ref: rbac-rules-f-cleancut, path: kacho-iam }
+        with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
       # kacho-geo leaf-service (Geography Region/Zone, extracted from compute):
       # helm dep (vendored sub-chart) + Dockerfile build context for kacho-geo:dev.
       - uses: actions/checkout@v4

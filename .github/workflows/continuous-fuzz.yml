@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: rbac-rules-f-cleancut, path: kacho-proto } # TEMP-PIN RBAC rules-model F clean-cut (ListByResource→ListByScope, target/selector RPCs removed); revert to ref:main after kacho-proto#77 merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto } # TEMP-PIN RBAC rules-model F clean-cut (ListByResource→ListByScope, target/selector RPCs removed); revert to ref:main after kacho-proto#77 merge
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
 
