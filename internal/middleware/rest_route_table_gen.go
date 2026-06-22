@@ -232,6 +232,10 @@ var generatedRestRoutes = []restRoute{
 	// not regenerated when WhoAmI was synced into the catalog. Proper fix:
 	// re-run the kacho-proto route extractor. See PRO-Robotech/kacho-api-gateway issue.
 	{Method: "GET", Template: "/iam/v1/me", FQN: "kacho.cloud.iam.v1.AuthorizeService/WhoAmI"},
+	// RBAC rules-model G: PermissionCatalogService.ListPermissionCatalog — public
+	// read (<exempt> catalog entry) replacing the tombstoned
+	// InternalIAMService.ListPermissions (GET /iam/v1/internal/iam/permissions).
+	{Method: "GET", Template: "/iam/v1/permissionCatalog", FQN: "kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog"},
 	{Method: "GET", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/List"},
 	{Method: "POST", Template: "/iam/v1/projects", FQN: "kacho.cloud.iam.v1.ProjectService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/projects/{project_id}", FQN: "kacho.cloud.iam.v1.ProjectService/Delete"},
@@ -268,7 +272,9 @@ var generatedRestRoutes = []restRoute{
 	// via authzguard interceptor whitelist).
 	{Method: "POST", Template: "/iam/v1/internal/users:upsertFromIdentity", FQN: "kacho.cloud.iam.v1.InternalUserService/UpsertFromIdentity"},
 	{Method: "POST", Template: "/iam/v1/internal/iam:lookupSubject", FQN: "kacho.cloud.iam.v1.InternalIAMService/LookupSubject"},
-	{Method: "GET", Template: "/iam/v1/internal/iam/permissions", FQN: "kacho.cloud.iam.v1.InternalIAMService/ListPermissions"},
+	// RBAC rules-model G: InternalIAMService.ListPermissions (GET
+	// /iam/v1/internal/iam/permissions) tombstoned in proto-G — replaced by the
+	// public PermissionCatalogService.ListPermissionCatalog (see above). Route removed.
 	{Method: "POST", Template: "/iam/v1/internal/iam:check", FQN: "kacho.cloud.iam.v1.InternalIAMService/Check"},
 	// KAC-196: InternalClusterService — cluster-admin RBAC management (internal-only).
 	{Method: "GET", Template: "/iam/v1/internal/cluster", FQN: "kacho.cloud.iam.v1.InternalClusterService/Get"},

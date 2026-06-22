@@ -319,6 +319,36 @@ func TestPermissionCatalog_InternalClusterService_LockedSystemAdmin(t *testing.T
 	}
 }
 
+// TestPermissionCatalog_ListPermissionCatalog_ExemptAndTombstones (RBAC
+// rules-model 2026 sub-phase G) — after the proto-G tombstones + catalog resync
+// the embedded catalog MUST:
+//   - carry PermissionCatalogService.ListPermissionCatalog as an authenticated-
+//     floor read (<exempt> permission — no FGA Check; reachable on the external
+//     listener so the UI can build its role/permission palette);
+//   - NO LONGER carry the two tombstoned RPCs InternalIAMService.ListPermissions
+//     and InternalAuthorizeService.RunRegoTest.
+//
+// Goes RED on the stale embedded copy (still has the tombstones, lacks the new
+// entry) and GREEN after `make sync-permission-catalog` resyncs from proto-gen.
+func TestPermissionCatalog_ListPermissionCatalog_ExemptAndTombstones(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	entry, ok := c.Lookup("kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog")
+	require.True(t, ok, "ListPermissionCatalog missing from embedded catalog (sub-phase G — resync not run?)")
+	assert.Equal(t, "<exempt>", entry.Permission,
+		"ListPermissionCatalog must be <exempt> (authenticated-floor read, no FGA Check)")
+	assert.True(t, entry.IsExempt(), "ListPermissionCatalog must be exempt")
+
+	for _, gone := range []string{
+		"kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
+		"kacho.cloud.iam.v1.InternalAuthorizeService/RunRegoTest",
+	} {
+		_, present := c.Lookup(gone)
+		assert.False(t, present, "tombstoned RPC must NOT be in embedded catalog (proto-G): %s", gone)
+	}
+}
+
 func TestPermissionCatalog_RejectBadVersionFlavour(t *testing.T) {
 	// Truncated input — must fail with descriptive error.
 	raw := []byte(`{"entries":`)

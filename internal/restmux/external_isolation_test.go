@@ -30,7 +30,12 @@ var internalRESTPaths = []struct{ method, path string }{
 	{"POST", "/iam/v1/internal/users:upsertFromIdentity"},
 	{"POST", "/iam/v1/internal/iam:check"},
 	{"POST", "/iam/v1/internal/iam:lookupSubject"},
-	{"GET", "/iam/v1/internal/iam/permissions"},
+	// RBAC rules-model G: GET /iam/v1/internal/iam/permissions
+	// (InternalIAMService.ListPermissions) was tombstoned in proto-G and replaced
+	// by the public PermissionCatalogService.ListPermissionCatalog
+	// (GET /iam/v1/permissionCatalog). The internal route no longer exists, so it
+	// is removed from this isolation list (the public replacement is covered by
+	// the public-paths test / the allowlist + route-router tests).
 	{"GET", "/iam/v1/internal/cluster"},
 	// sub-phase 1.2 — InternalOperationsService.ListIamOperations: cluster-wide
 	// IAM operations dump, admin-only (:9091). MUST be 404 on the external

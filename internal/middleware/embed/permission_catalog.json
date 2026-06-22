@@ -778,6 +778,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByRole",
+    "permission": "iam.access_bindings_by_roles.listByRole",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByScope",
     "permission": "iam.access_bindings_by_resources.listByScope",
     "required_relation": "viewer",
@@ -785,16 +795,6 @@
       "object_type": "project",
       "from_request_field": "resource_id",
       "object_type_from_request_field": "resource_type"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByRole",
-    "permission": "iam.access_bindings_by_roles.listByRole",
-    "required_relation": "viewer",
-    "scope_extractor": {
-      "object_type": "cluster",
-      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
@@ -1213,15 +1213,6 @@
     }
   },
   {
-    "fqn": "kacho.cloud.iam.v1.InternalAuthorizeService/RunRegoTest",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
     "fqn": "kacho.cloud.iam.v1.InternalAuthorizeService/WriteTuples",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
@@ -1299,15 +1290,6 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.InternalIAMService/GetJWKSStatus",
-    "permission": "\u003cexempt\u003e",
-    "required_relation": "",
-    "scope_extractor": {
-      "object_type": "",
-      "from_request_field": ""
-    }
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
@@ -1462,6 +1444,15 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.OpaBundleService/GetRevision",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",
     "scope_extractor": {
