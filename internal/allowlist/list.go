@@ -179,6 +179,9 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.GroupService/ListMembers":    {},
 	"/kacho.cloud.iam.v1.GroupService/ListOperations": {},
 	// iam.v1 — RoleService
+	// sub-phase H: Role.rules[].module is now a scalar string (was repeated
+	// `modules`) — grpc-gateway stubs rebuilt against proto module-scalar so
+	// REST Create/Update marshal the scalar field; no allowlist change (no new RPC).
 	"/kacho.cloud.iam.v1.RoleService/Get":            {},
 	"/kacho.cloud.iam.v1.RoleService/List":           {},
 	"/kacho.cloud.iam.v1.RoleService/Create":         {},
