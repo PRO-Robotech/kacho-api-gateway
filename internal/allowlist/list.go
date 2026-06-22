@@ -201,6 +201,13 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles":   {}, // sub-phase 1.5 — public sync read (REST GET /iam/v1/accessBindings:listAssignableRoles)
 	"/kacho.cloud.iam.v1.AccessBindingService/ListByRole":            {}, // RBAC rules-model E — public sync read (REST GET /iam/v1/accessBindings:listByRole)
 	"/kacho.cloud.iam.v1.AccessBindingService/ExpandAccess":          {}, // RBAC rules-model E — public sync read (REST GET /iam/v1/accessBindings:expandAccess)
+	// iam.v1 — PermissionCatalogService (RBAC rules-model G)
+	// Public, sync read (REST GET /iam/v1/permissionCatalog). Replaces the
+	// tombstoned InternalIAMService.ListPermissions: an authenticated-floor read
+	// (<exempt> in the generated catalog — no FGA Check) so the UI can build its
+	// role/permission palette without an Internal* RPC. MUST be reachable on the
+	// external listener (else 404/NotFound at the gRPC-director).
+	"/kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog": {},
 	// iam.v1 — InternalIAMService / InternalUserService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only.
 

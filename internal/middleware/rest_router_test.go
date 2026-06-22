@@ -41,6 +41,12 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// route table, so path->FQN failed and the <exempt> bypass never fired
 		// → 403 "catalog: no entry for method" broke UI permission bootstrap.
 		{"GET", "/iam/v1/me", "kacho.cloud.iam.v1.AuthorizeService/WhoAmI"},
+		// RBAC rules-model 2026 sub-phase G: PermissionCatalogService.ListPermissionCatalog
+		// — public read (GET /iam/v1/permissionCatalog) on the EXTERNAL listener; must
+		// resolve so the <exempt> catalog bypass fires. Replaces the tombstoned
+		// InternalIAMService.ListPermissions (GET /iam/v1/internal/iam/permissions),
+		// which must NOT resolve anymore (see TestRestRouter_TombstonedRoutesGone).
+		{"GET", "/iam/v1/permissionCatalog", "kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog"},
 		// list with query string is stripped before matching
 		{"GET", "/iam/v1/projects?accountId=acc1", "kacho.cloud.iam.v1.ProjectService/List"},
 		// vpc resource
@@ -69,6 +75,31 @@ func TestRestRouter_Resolve_UnknownRoute(t *testing.T) {
 	// Wrong method for an existing path.
 	if _, ok := r.Resolve("DELETE", "/iam/v1/accounts"); ok {
 		t.Errorf("Resolve(DELETE /iam/v1/accounts): want no match (collection has no DELETE)")
+	}
+}
+
+// TestRestRouter_TombstonedRoutesGone (RBAC rules-model 2026 sub-phase G) — the
+// two RPCs tombstoned in proto-G must no longer resolve to a route:
+//   - InternalIAMService.ListPermissions (GET /iam/v1/internal/iam/permissions)
+//     replaced by the public PermissionCatalogService.ListPermissionCatalog;
+//   - InternalAuthorizeService.RunRegoTest (had no REST gateway binding — never
+//     in this table — guarded here so a future re-add does not slip through).
+//
+// If the route table is not regenerated after the tombstones, the stale
+// /iam/v1/internal/iam/permissions entry keeps resolving → this test fails (RED),
+// signalling the sync was skipped.
+func TestRestRouter_TombstonedRoutesGone(t *testing.T) {
+	r := NewRestRouter()
+	if fqn, ok := r.Resolve("GET", "/iam/v1/internal/iam/permissions"); ok {
+		t.Errorf("Resolve(GET /iam/v1/internal/iam/permissions) = %s, want no match — ListPermissions tombstoned in proto-G", fqn)
+	}
+	// No route may still map to either tombstoned FQN.
+	for _, rt := range generatedRestRoutes {
+		switch rt.FQN {
+		case "kacho.cloud.iam.v1.InternalIAMService/ListPermissions",
+			"kacho.cloud.iam.v1.InternalAuthorizeService/RunRegoTest":
+			t.Errorf("route table still contains tombstoned FQN %q (template %q)", rt.FQN, rt.Template)
+		}
 	}
 }
 

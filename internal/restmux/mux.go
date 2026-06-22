@@ -465,6 +465,16 @@ func NewMux(
 			if err := iampb.RegisterRoleServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam RoleService: %w", err)
 			}
+			// RBAC rules-model G: PermissionCatalogService.ListPermissionCatalog —
+			// public read under GET /iam/v1/permissionCatalog. Replaces the tombstoned
+			// InternalIAMService.ListPermissions: an authenticated-floor read (<exempt>
+			// in the permission catalog — no FGA Check) that the UI calls to build its
+			// role/permission palette. PUBLIC (external) on purpose, NOT an Internal*
+			// service — registered here in the public iam block, not the iamInternalAddr
+			// block; gRPC-director allowlists it for the external listener.
+			if err := iampb.RegisterPermissionCatalogServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
+				return nil, fmt.Errorf("register iam PermissionCatalogService: %w", err)
+			}
 			if err := iampb.RegisterAccessBindingServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AccessBindingService: %w", err)
 			}

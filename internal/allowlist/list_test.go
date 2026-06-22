@@ -322,6 +322,13 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		// cluster-scoped viewer floor (catalog), acr 2.
 		"/kacho.cloud.iam.v1.AccessBindingService/ListByRole",
 		"/kacho.cloud.iam.v1.AccessBindingService/ExpandAccess",
+		// RBAC rules-model 2026 sub-phase G — public, sync read (NOT Internal; on
+		// external). PermissionCatalogService.ListPermissionCatalog replaces the
+		// tombstoned InternalIAMService.ListPermissions: it is an authenticated-floor
+		// read (<exempt> permission in the generated catalog), reachable via REST
+		// GET /iam/v1/permissionCatalog on the external listener so the UI can build
+		// its role/permission palette without an Internal* RPC.
+		"/kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog",
 	}
 	for _, m := range publicMethods {
 		m := m
