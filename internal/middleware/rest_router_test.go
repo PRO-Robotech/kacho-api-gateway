@@ -37,6 +37,11 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		// cluster-scoped catalog gate (viewer floor, acr 2) fires.
 		{"GET", "/iam/v1/accessBindings:listByRole", "kacho.cloud.iam.v1.AccessBindingService/ListByRole"},
 		{"GET", "/iam/v1/accessBindings:expandAccess", "kacho.cloud.iam.v1.AccessBindingService/ExpandAccess"},
+		// RBAC explicit-model 2026 sub-phase P6 (C-03): AccessBindingService.Update —
+		// public PATCH on the item path (clears deletion_protection); must resolve so
+		// the catalog gate (editor on iam_access_binding, acr 2 — parity with Delete)
+		// fires instead of "no entry for method". Same item template as GET/DELETE.
+		{"PATCH", "/iam/v1/accessBindings/abd0000000000000001", "kacho.cloud.iam.v1.AccessBindingService/Update"},
 		// KAC-225: WhoAmI (GET /iam/v1/me) must resolve — was missing from the
 		// route table, so path->FQN failed and the <exempt> bypass never fired
 		// → 403 "catalog: no entry for method" broke UI permission bootstrap.

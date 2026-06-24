@@ -279,6 +279,26 @@ func TestPermissionCatalog_ListByScope_ScopePolymorphic(t *testing.T) {
 	}
 }
 
+// TestPermissionCatalog_AccessBindingUpdate_EditorScoped (RBAC explicit-model
+// 2026 sub-phase P6, C-03) — AccessBindingService.Update clears
+// deletion_protection so a protected binding can be deleted. It is a public
+// mutation gated exactly like Delete: editor relation on the
+// `iam_access_binding` object resolved from the `access_binding_id` request
+// field, acr floor 2. Without this embedded entry the per-RPC authz middleware
+// has "no entry for method" → the PATCH is denied (catalog miss).
+func TestPermissionCatalog_AccessBindingUpdate_EditorScoped(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	entry, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/Update")
+	require.True(t, ok, "AccessBindingService/Update missing from embedded catalog (sub-phase P6, C-03)")
+	assert.Equal(t, "iam.access_bindings.update", entry.Permission)
+	assert.Equal(t, "editor", entry.RequiredRelation, "Update is a mutation — editor floor, parity with Delete")
+	assert.Equal(t, "iam_access_binding", entry.ScopeExtractor.ObjectType)
+	assert.Equal(t, "access_binding_id", entry.ScopeExtractor.FromRequestField)
+	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor")
+}
+
 // TestPermissionCatalog_InternalClusterService_LockedSystemAdmin (item-2b) —
 // regression guard: every RPC of `InternalClusterService` must be gated by
 // the FGA relation `system_admin` on `cluster:<cluster-singleton>` in the
