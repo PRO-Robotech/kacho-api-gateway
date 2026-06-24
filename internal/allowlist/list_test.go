@@ -306,6 +306,10 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		"/kacho.cloud.iam.v1.RoleService/Delete",
 		// AccessBindingService (+ ListByScope/ListBySubject/ListByAccount/ListSubjectPrivileges)
 		"/kacho.cloud.iam.v1.AccessBindingService/Create",
+		// RBAC explicit-model 2026 sub-phase P6 (C-03) — Update clears
+		// deletion_protection so a protected binding can be deleted; public mutation
+		// (NOT Internal; goes on external), editor relation, same surface as Delete.
+		"/kacho.cloud.iam.v1.AccessBindingService/Update",
 		"/kacho.cloud.iam.v1.AccessBindingService/Delete",
 		// RBAC rules-model F clean-cut — ListByResource renamed → ListByScope
 		// (target/selector RPCs AddTargetResources/RemoveTargetResources/

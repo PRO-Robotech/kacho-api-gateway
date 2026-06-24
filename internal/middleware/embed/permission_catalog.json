@@ -829,6 +829,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.AccessBindingService/Update",
+    "permission": "iam.access_bindings.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "iam_access_binding",
+      "from_request_field": "access_binding_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.iam.v1.AccessReviewService/ApproveReviewItem",
     "permission": "iam.access_review_items.approve",
     "required_relation": "editor",

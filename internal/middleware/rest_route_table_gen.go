@@ -184,6 +184,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},
+	{Method: "PATCH", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Update"}, // sub-phase P6 (C-03)
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"}, // sub-phase 1.2
 	{Method: "GET", Template: "/iam/v1/accessBindings:listAssignableRoles", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},       // sub-phase 1.5
 	{Method: "GET", Template: "/iam/v1/accessBindings:listByScope", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},                       // RBAC rules-model F (was :listByResource → ListByResource)

@@ -195,6 +195,7 @@ var AllowedMethods = map[string]struct{}{
 	// ListByScope (REST :listByResource → :listByScope, permission key in lockstep).
 	"/kacho.cloud.iam.v1.AccessBindingService/Get":                   {},
 	"/kacho.cloud.iam.v1.AccessBindingService/Create":                {},
+	"/kacho.cloud.iam.v1.AccessBindingService/Update":                {}, // RBAC explicit-model 2026 sub-phase P6 (C-03) — public mutation (REST PATCH /iam/v1/accessBindings/{access_binding_id}); clears deletion_protection, editor relation (parity with Delete)
 	"/kacho.cloud.iam.v1.AccessBindingService/Delete":                {},
 	"/kacho.cloud.iam.v1.AccessBindingService/ListByScope":           {}, // RBAC rules-model F — public sync read (REST GET /iam/v1/accessBindings:listByScope); was ListByResource
 	"/kacho.cloud.iam.v1.AccessBindingService/ListBySubject":         {},
