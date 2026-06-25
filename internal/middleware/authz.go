@@ -328,6 +328,9 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 		case outcomeInvalidArgument:
 			// gh#73: malformed resource id → InvalidArgument(3), Check not run.
 			return nil, decision.gRPCStatus().Err()
+		case outcomeNotFound:
+			// Hide existence: read-deny on a verb-bearing IAM read → NotFound(5).
+			return nil, decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing request despite error",
@@ -367,6 +370,9 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 			return decision.gRPCStatus().Err()
 		case outcomeInvalidArgument:
 			// gh#73: malformed resource id → InvalidArgument(3), Check not run.
+			return decision.gRPCStatus().Err()
+		case outcomeNotFound:
+			// Hide existence: read-deny on a verb-bearing IAM read → NotFound(5).
 			return decision.gRPCStatus().Err()
 		case outcomeError:
 			if m.cfg.FailOpen {
@@ -422,6 +428,9 @@ func (m *AuthzMiddleware) HTTP(next http.Handler) http.Handler {
 		case outcomeInvalidArgument:
 			// gh#73: malformed resource id → 400 + code 3, Check not run.
 			writeHTTPInvalidArg(w, decision.invalidArgID)
+		case outcomeNotFound:
+			// Hide existence: read-deny on a verb-bearing IAM read → 404, no reasons.
+			writeHTTPNotFound(w, decision.descriptor)
 		case outcomeError:
 			if m.cfg.FailOpen {
 				m.cfg.Logger.Error("authz middleware fail-open: passing http request despite error",
@@ -472,6 +481,16 @@ const (
 	// malformed (wrong-prefix / wrong-length) case is short-circuited here;
 	// well-formed-nonexistent stays a 403 deny (existence-leak protection).
 	outcomeInvalidArgument
+	// outcomeNotFound — an authz deny on a hide-existence read RPC (catalog
+	// HideExistence / IAM verb-bearing `v_get` read). Maps to gRPC NotFound(5) /
+	// HTTP 404 with NO deny reasons. The gateway Check runs BEFORE the resource
+	// owner (kacho-iam), which itself returns NotFound for a denied read; surfacing
+	// a 403 here would override that hide-existence contract and leak both existence
+	// and the deny reasons. Enforcement is unchanged — the deny still blocks the
+	// request and the handler is never reached; only the surfaced code/body differ.
+	// A well-formed-but-nonexistent id and an existing-but-denied id both yield the
+	// same FGA deny → the same NotFound → no enumeration leak.
+	outcomeNotFound
 )
 
 type decision struct {
@@ -491,6 +510,8 @@ func (d decision) gRPCStatus() *status.Status {
 		return buildGRPCUnauthStatus(d.descriptor, d.reasons)
 	case outcomeInvalidArgument:
 		return buildGRPCInvalidArgStatus(d.invalidArgID)
+	case outcomeNotFound:
+		return buildGRPCNotFoundStatus(d.descriptor)
 	default:
 		return buildGRPCDenyStatus(d.descriptor, d.reasons)
 	}
@@ -776,12 +797,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			return decision{outcome: outcomeAllow, descriptor: descriptor, entry: entry}
 		}
 		m.metrics.RecordDeny()
-		return decision{
-			outcome:    outcomeDeny,
-			reasons:    cached.reasons,
-			descriptor: descriptor,
-			entry:      entry,
-		}
+		return denyDecision(dr.FQN, entry, descriptor, cached.reasons)
 	}
 	m.metrics.RecordCacheMiss()
 
@@ -807,12 +823,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			m.metrics.RecordDeny()
 			reasons := []string{st.Message()}
 			m.cache.put(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons})
-			return decision{
-				outcome:    outcomeDeny,
-				reasons:    reasons,
-				descriptor: descriptor,
-				entry:      entry,
-			}
+			return denyDecision(dr.FQN, entry, descriptor, reasons)
 		}
 		m.metrics.RecordError()
 		m.cfg.Logger.Error("authz check failed",
@@ -852,7 +863,25 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		"resource", descriptor.ResourceType+":"+descriptor.ResourceID,
 		"reasons", reasons,
 		"risk", entry.RiskLevel,
+		"hide_existence", entry.HidesExistenceOnDeny(dr.FQN),
 	)
+	return denyDecision(dr.FQN, entry, descriptor, reasons)
+}
+
+// denyDecision builds the terminal decision for an authz deny on a known catalog
+// entry. For a hide-existence read RPC (HidesExistenceOnDeny) it returns
+// outcomeNotFound — NotFound(5)/404 with NO deny reasons — so the gateway does
+// not override the resource owner's hide-existence contract or leak the reasons.
+// Otherwise it returns the regular outcomeDeny — PermissionDenied(7)/403 with
+// reasons. Enforcement is identical in both cases: the request is blocked.
+func denyDecision(fqn string, entry CatalogEntry, descriptor permissionDeniedDescriptor, reasons []string) decision {
+	if entry.HidesExistenceOnDeny(fqn) {
+		return decision{
+			outcome:    outcomeNotFound,
+			descriptor: descriptor,
+			entry:      entry,
+		}
+	}
 	return decision{
 		outcome:    outcomeDeny,
 		reasons:    reasons,

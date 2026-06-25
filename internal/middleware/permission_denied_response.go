@@ -84,6 +84,40 @@ func buildGRPCDenyStatus(desc permissionDeniedDescriptor, reasons []string) *sta
 	return stWithDetails
 }
 
+// buildGRPCNotFoundStatus constructs a *status.Status{Code: NotFound} for a
+// hide-existence read deny. It carries NO PreconditionFailure / deny reasons /
+// ErrorInfo — the flat message IS the contract, and any reason text would leak
+// the existence of (and the authz path to) the resource. The message is a fixed,
+// resource-neutral string so a denied caller cannot distinguish "exists but
+// forbidden" from "does not exist".
+func buildGRPCNotFoundStatus(desc permissionDeniedDescriptor) *status.Status {
+	return status.New(codes.NotFound, notFoundMessage(desc))
+}
+
+// notFoundMessage — the stable hide-existence message. Uses the resource type
+// when known ("account not found") and a neutral fallback otherwise. It never
+// includes the id, the subject, or any deny reason.
+func notFoundMessage(desc permissionDeniedDescriptor) string {
+	if desc.ResourceType != "" {
+		return desc.ResourceType + " not found"
+	}
+	return "not found"
+}
+
+// writeHTTPNotFound renders a 404 response for a hide-existence read deny. Body
+// shape matches the gRPC-gateway default `{code, message}` with code 5
+// (NOT_FOUND) and NO details — no deny reasons, no resource id (existence-leak
+// guard).
+func writeHTTPNotFound(w http.ResponseWriter, desc permissionDeniedDescriptor) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	body := map[string]any{
+		"code":    5, // gRPC code NotFound
+		"message": notFoundMessage(desc),
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
 // buildGRPCUnauthStatus constructs a *status.Status for missing/invalid
 // credentials. Returns Unauthenticated (16) with attached ErrorInfo so the
 // client can distinguish "no credentials" from "authenticated but denied".
@@ -148,7 +182,7 @@ func writeHTTPDeny(w http.ResponseWriter, desc permissionDeniedDescriptor, reaso
 	details := make([]map[string]any, 0, len(reasons)+1)
 	if len(reasons) == 0 {
 		details = append(details, map[string]any{
-			"@type":   "type.googleapis.com/google.rpc.PreconditionFailure",
+			"@type": "type.googleapis.com/google.rpc.PreconditionFailure",
 			"violations": []map[string]any{{
 				"type":        "authz.no_path",
 				"subject":     resourceLabel(desc),

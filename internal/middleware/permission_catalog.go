@@ -33,6 +33,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -86,6 +87,20 @@ type CatalogEntry struct {
 	// EmittedBuildSHA — git-SHA at catalog emission time; used by audit to
 	// detect catalog-vs-binary drift.
 	EmittedBuildSHA string `json:"emitted_build_sha"`
+
+	// HideExistence — when true, an authz deny on this RPC is surfaced as
+	// NotFound (gRPC 5 / HTTP 404) with no deny reasons, instead of
+	// PermissionDenied (gRPC 7 / HTTP 403). Used for read RPCs whose owner
+	// (kacho-iam) returns NotFound for a denied caller — the gateway Check runs
+	// BEFORE the owner, so a 403 here would override the owner's hide-existence
+	// contract and leak both existence and the deny reasons. The flag keeps
+	// enforcement intact (the deny still blocks the request) while removing the
+	// enumeration / existence leak.
+	//
+	// Optional in the catalog JSON. When absent, HidesExistenceOnDeny falls back
+	// to a heuristic so the gateway hides existence for IAM verb-bearing reads
+	// even before the emitter sets the flag explicitly.
+	HideExistence bool `json:"hide_existence"`
 }
 
 // ScopeExtractor — mirrored from `kacho.cloud.iam.v1.PermissionScopeExtractor`.
@@ -113,6 +128,34 @@ type ScopeExtractor struct {
 // is empty AND the FQN is on the hard-coded login/health/recovery allowlist).
 func (e CatalogEntry) IsExempt() bool {
 	return e.Permission == "<exempt>"
+}
+
+// HidesExistenceOnDeny reports whether an authz deny on this RPC must be surfaced
+// as NotFound (hide existence, no deny reasons) instead of PermissionDenied.
+//
+// Resolution order:
+//  1. Explicit catalog flag `HideExistence` — authoritative when the emitter
+//     sets it.
+//  2. Fallback heuristic — a read (`/Get`) RPC that checks the verb-bearing
+//     `v_get` relation against a concrete per-resource scope. This is exactly
+//     the IAM verb-bearing read surface (account / project / user /
+//     service_account / group / access_binding Get), whose owner returns
+//     NotFound for a denied caller; the gateway must not pre-empt that with a 403.
+//
+// The fqn argument is the normalized gRPC FQN ("kacho.cloud.iam.v1.AccountService/Get").
+func (e CatalogEntry) HidesExistenceOnDeny(fqn string) bool {
+	if e.HideExistence {
+		return true
+	}
+	return isReadGetFQN(fqn) && e.RequiredRelation == "v_get" && isConcreteResourceScope(e)
+}
+
+// isReadGetFQN reports whether the FQN is a unary read `Get` method. The Kachō
+// convention (api-conventions.md) reserves `/Get` for the sync single-resource
+// read; mutations are `/Create` / `/Update` / `/Delete`, and `/List` is a
+// wildcard-scoped collection read (no per-object existence to hide).
+func isReadGetFQN(fqn string) bool {
+	return strings.HasSuffix(fqn, "/Get")
 }
 
 // PermissionCatalog — in-memory immutable lookup map. Reload via
