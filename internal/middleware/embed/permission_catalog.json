@@ -12,7 +12,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Delete",
     "permission": "compute.disks.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -22,7 +22,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Get",
     "permission": "compute.disks.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -32,7 +32,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/List",
     "permission": "compute.diskses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -52,7 +52,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/ListOperations",
     "permission": "compute.disk_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -62,7 +62,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/ListSnapshotSchedules",
     "permission": "compute.disk_snapshot_scheduleses.listSnapshotSchedules",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -72,7 +72,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Relocate",
     "permission": "compute.disks.relocate",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -92,7 +92,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.DiskService/Update",
     "permission": "compute.disks.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_disk",
       "from_request_field": "disk_id"
@@ -142,7 +142,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Delete",
     "permission": "compute.images.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "compute_image",
       "from_request_field": "image_id"
@@ -152,7 +152,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Get",
     "permission": "compute.images.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "compute_image",
       "from_request_field": "image_id"
@@ -162,7 +162,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/GetLatestByFamily",
     "permission": "compute.image_latest_by_families.getLatestByFamily",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -172,7 +172,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/List",
     "permission": "compute.imageses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -192,7 +192,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/ListOperations",
     "permission": "compute.image_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "compute_image",
       "from_request_field": "image_id"
@@ -212,7 +212,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.ImageService/Update",
     "permission": "compute.images.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_image",
       "from_request_field": "image_id"
@@ -232,7 +232,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AddOneToOneNat",
     "permission": "compute.instance_one_to_one_nats.addOneToOneNat",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -242,7 +242,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachDisk",
     "permission": "compute.instance_disks.attachDisk",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -252,7 +252,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachFilesystem",
     "permission": "compute.instance_filesystems.attachFilesystem",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -262,7 +262,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/AttachNetworkInterface",
     "permission": "compute.instance_network_interfaces.attachNetworkInterface",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -282,7 +282,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Delete",
     "permission": "compute.instances.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -292,7 +292,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachDisk",
     "permission": "compute.instance_disks.detachDisk",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -302,7 +302,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachFilesystem",
     "permission": "compute.instance_filesystems.detachFilesystem",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -312,7 +312,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/DetachNetworkInterface",
     "permission": "compute.instance_network_interfaces.detachNetworkInterface",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -322,7 +322,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Get",
     "permission": "compute.instances.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -332,7 +332,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/GetSerialPortOutput",
     "permission": "compute.instance_serial_port_outputs.getSerialPortOutput",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -342,7 +342,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/List",
     "permission": "compute.instanceses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -362,7 +362,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/ListOperations",
     "permission": "compute.instance_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -372,7 +372,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Relocate",
     "permission": "compute.instances.relocate",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -382,7 +382,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/RemoveOneToOneNat",
     "permission": "compute.instance_one_to_one_nats.removeOneToOneNat",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -392,7 +392,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Restart",
     "permission": "compute.instances.restart",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -412,7 +412,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/SimulateMaintenanceEvent",
     "permission": "compute.instance_maintenance_events.simulateMaintenanceEvent",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -422,7 +422,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Start",
     "permission": "compute.instances.start",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -432,7 +432,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Stop",
     "permission": "compute.instances.stop",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -442,7 +442,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/Update",
     "permission": "compute.instances.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -462,7 +462,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/UpdateMetadata",
     "permission": "compute.instance_metadatas.updateMetadata",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -472,7 +472,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.InstanceService/UpdateNetworkInterface",
     "permission": "compute.instance_network_interfaces.updateNetworkInterface",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_instance",
       "from_request_field": "instance_id"
@@ -540,7 +540,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Delete",
     "permission": "compute.snapshots.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "compute_snapshot",
       "from_request_field": "snapshot_id"
@@ -550,7 +550,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Get",
     "permission": "compute.snapshots.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "compute_snapshot",
       "from_request_field": "snapshot_id"
@@ -560,7 +560,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/List",
     "permission": "compute.snapshotses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -580,7 +580,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/ListOperations",
     "permission": "compute.snapshot_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "compute_snapshot",
       "from_request_field": "snapshot_id"
@@ -600,7 +600,7 @@
   {
     "fqn": "kacho.cloud.compute.v1.SnapshotService/Update",
     "permission": "compute.snapshots.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "compute_snapshot",
       "from_request_field": "snapshot_id"
@@ -729,7 +729,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Delete",
     "permission": "iam.access_bindings.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "iam_access_binding",
       "from_request_field": "access_binding_id"
@@ -749,7 +749,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Get",
     "permission": "iam.access_bindings.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "iam_access_binding",
       "from_request_field": "access_binding_id"
@@ -770,7 +770,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListByAccount",
     "permission": "iam.access_bindings_by_account.list",
-    "required_relation": "admin",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -811,7 +811,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/ListOperations",
     "permission": "iam.access_binding_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_access_binding",
       "from_request_field": "access_binding_id"
@@ -831,7 +831,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessBindingService/Update",
     "permission": "iam.access_bindings.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_access_binding",
       "from_request_field": "access_binding_id"
@@ -881,7 +881,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessReviewService/ListAccessReviews",
     "permission": "iam.access_reviews.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -901,7 +901,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccessReviewService/ScheduleAccessReview",
     "permission": "iam.access_reviews.schedule",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -920,7 +920,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Delete",
     "permission": "iam.accounts.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -930,7 +930,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Get",
     "permission": "iam.accounts.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -949,7 +949,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/ListAllOperations",
     "permission": "iam.account_operationses.listAll",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -959,7 +959,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/ListOperations",
     "permission": "iam.account_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -969,7 +969,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.AccountService/Update",
     "permission": "iam.accounts.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -1108,7 +1108,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/AddMember",
     "permission": "iam.group_members.addMember",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1128,7 +1128,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Delete",
     "permission": "iam.groups.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1138,7 +1138,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Get",
     "permission": "iam.groups.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1148,7 +1148,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/List",
     "permission": "iam.groupses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -1158,7 +1158,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListMembers",
     "permission": "iam.group_memberses.listMembers",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1168,7 +1168,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListOperations",
     "permission": "iam.group_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1178,7 +1178,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/RemoveMember",
     "permission": "iam.group_members.removeMember",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1188,7 +1188,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/Update",
     "permission": "iam.groups.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_group",
       "from_request_field": "group_id"
@@ -1483,7 +1483,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Delete",
     "permission": "iam.projects.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1493,7 +1493,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Get",
     "permission": "iam.projects.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1503,7 +1503,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/List",
     "permission": "iam.projectses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "account",
       "from_request_field": "account_id"
@@ -1513,7 +1513,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/ListOperations",
     "permission": "iam.project_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1523,7 +1523,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/Update",
     "permission": "iam.projects.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1543,7 +1543,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Delete",
     "permission": "iam.roles.delete",
-    "required_relation": "admin",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "iam_role",
       "from_request_field": "role_id"
@@ -1571,7 +1571,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/ListOperations",
     "permission": "iam.role_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_role",
       "from_request_field": "role_id"
@@ -1581,7 +1581,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.RoleService/Update",
     "permission": "iam.roles.update",
-    "required_relation": "admin",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_role",
       "from_request_field": "role_id"
@@ -1591,7 +1591,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.SAKeyService/Issue",
     "permission": "iam.issue_s_a_keies.issue",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1601,7 +1601,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.SAKeyService/List",
     "permission": "iam.s_a_keyses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1611,7 +1611,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.SAKeyService/Revoke",
     "permission": "iam.revoke_s_a_keies.revoke",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1631,7 +1631,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Delete",
     "permission": "iam.service_accounts.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1641,7 +1641,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Get",
     "permission": "iam.service_accounts.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1660,7 +1660,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/ListOperations",
     "permission": "iam.service_account_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1670,7 +1670,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Update",
     "permission": "iam.service_accounts.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_service_account",
       "from_request_field": "service_account_id"
@@ -1730,7 +1730,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Delete",
     "permission": "iam.users.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -1740,7 +1740,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserService/Get",
     "permission": "iam.users.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -1769,7 +1769,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserService/ListOperations",
     "permission": "iam.user_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -1798,7 +1798,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Delete",
     "permission": "loadbalancer.listeners.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "lb_listener",
       "from_request_field": "listener_id"
@@ -1808,7 +1808,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Get",
     "permission": "loadbalancer.listeners.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "lb_listener",
       "from_request_field": "listener_id"
@@ -1818,7 +1818,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/List",
     "permission": "loadbalancer.listeners.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1828,7 +1828,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/ListOperations",
     "permission": "loadbalancer.listeners.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "lb_listener",
       "from_request_field": "listener_id"
@@ -1838,7 +1838,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/Update",
     "permission": "loadbalancer.listeners.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_listener",
       "from_request_field": "listener_id"
@@ -1848,7 +1848,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/AttachTargetGroup",
     "permission": "loadbalancer.networkLoadBalancers.attachTargetGroup",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1868,7 +1868,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Delete",
     "permission": "loadbalancer.networkLoadBalancers.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1878,7 +1878,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/DetachTargetGroup",
     "permission": "loadbalancer.networkLoadBalancers.detachTargetGroup",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1888,7 +1888,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
     "permission": "loadbalancer.networkLoadBalancers.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1898,7 +1898,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/GetTargetStates",
     "permission": "loadbalancer.networkLoadBalancers.getTargetStates",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1908,7 +1908,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
     "permission": "loadbalancer.networkLoadBalancers.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -1918,7 +1918,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations",
     "permission": "loadbalancer.networkLoadBalancers.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1928,7 +1928,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Move",
     "permission": "loadbalancer.networkLoadBalancers.move",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1938,7 +1938,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Start",
     "permission": "loadbalancer.networkLoadBalancers.start",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1948,7 +1948,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Stop",
     "permission": "loadbalancer.networkLoadBalancers.stop",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1958,7 +1958,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Update",
     "permission": "loadbalancer.networkLoadBalancers.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_network_load_balancer",
       "from_request_field": "network_load_balancer_id"
@@ -1968,7 +1968,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets",
     "permission": "loadbalancer.targetGroups.addTargets",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -1988,7 +1988,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Delete",
     "permission": "loadbalancer.targetGroups.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -1998,7 +1998,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Get",
     "permission": "loadbalancer.targetGroups.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -2008,7 +2008,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/List",
     "permission": "loadbalancer.targetGroups.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2018,7 +2018,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/ListOperations",
     "permission": "loadbalancer.targetGroups.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -2028,7 +2028,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Move",
     "permission": "loadbalancer.targetGroups.move",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -2038,7 +2038,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/RemoveTargets",
     "permission": "loadbalancer.targetGroups.removeTargets",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -2048,7 +2048,7 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/Update",
     "permission": "loadbalancer.targetGroups.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "lb_target_group",
       "from_request_field": "target_group_id"
@@ -2086,7 +2086,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Delete",
     "permission": "vpc.addresses.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_address",
       "from_request_field": "address_id"
@@ -2096,7 +2096,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Get",
     "permission": "vpc.addresses.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_address",
       "from_request_field": "address_id"
@@ -2106,7 +2106,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/GetByValue",
     "permission": "vpc.address_by_values.getByValue",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2116,7 +2116,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/List",
     "permission": "vpc.addresseses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2126,7 +2126,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/ListBySubnet",
     "permission": "vpc.addresses_by_subnets.listBySubnet",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2136,7 +2136,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/ListOperations",
     "permission": "vpc.address_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_address",
       "from_request_field": "address_id"
@@ -2146,7 +2146,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Update",
     "permission": "vpc.addresses.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_address",
       "from_request_field": "address_id"
@@ -2166,7 +2166,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Delete",
     "permission": "vpc.gatewaies.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_gateway",
       "from_request_field": "gateway_id"
@@ -2176,7 +2176,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Get",
     "permission": "vpc.gatewaies.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_gateway",
       "from_request_field": "gateway_id"
@@ -2186,7 +2186,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/List",
     "permission": "vpc.gatewayses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2196,7 +2196,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/ListOperations",
     "permission": "vpc.gateway_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_gateway",
       "from_request_field": "gateway_id"
@@ -2206,7 +2206,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Update",
     "permission": "vpc.gatewaies.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_gateway",
       "from_request_field": "gateway_id"
@@ -2437,7 +2437,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Delete",
     "permission": "vpc.network_interfaces.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_network_interface",
       "from_request_field": "network_interface_id"
@@ -2447,7 +2447,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Get",
     "permission": "vpc.network_interfaces.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_network_interface",
       "from_request_field": "network_interface_id"
@@ -2457,7 +2457,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/List",
     "permission": "vpc.network_interfaceses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2467,7 +2467,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/ListOperations",
     "permission": "vpc.network_interface_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_network_interface",
       "from_request_field": "network_interface_id"
@@ -2477,7 +2477,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkInterfaceService/Update",
     "permission": "vpc.network_interfaces.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_network_interface",
       "from_request_field": "network_interface_id"
@@ -2497,7 +2497,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Delete",
     "permission": "vpc.networks.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2507,7 +2507,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Get",
     "permission": "vpc.networks.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2526,7 +2526,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListOperations",
     "permission": "vpc.network_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2536,7 +2536,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListRouteTables",
     "permission": "vpc.network_route_tableses.listRouteTables",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2546,7 +2546,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListSecurityGroups",
     "permission": "vpc.network_security_groupses.listSecurityGroups",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2556,7 +2556,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/ListSubnets",
     "permission": "vpc.network_subnetses.listSubnets",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2566,7 +2566,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.NetworkService/Update",
     "permission": "vpc.networks.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_network",
       "from_request_field": "network_id"
@@ -2576,7 +2576,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/AddRoutes",
     "permission": "vpc.route_tables.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2596,7 +2596,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Delete",
     "permission": "vpc.route_tables.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2606,7 +2606,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Get",
     "permission": "vpc.route_tables.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2616,7 +2616,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/List",
     "permission": "vpc.route_tableses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2626,7 +2626,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/ListOperations",
     "permission": "vpc.route_table_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2636,7 +2636,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/RemoveRoutes",
     "permission": "vpc.route_tables.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2646,7 +2646,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/Update",
     "permission": "vpc.route_tables.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2656,7 +2656,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.RouteTableService/UpdateRoute",
     "permission": "vpc.route_tables.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_route_table",
       "from_request_field": "route_table_id"
@@ -2676,7 +2676,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Delete",
     "permission": "vpc.security_groups.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2686,7 +2686,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Get",
     "permission": "vpc.security_groups.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2696,7 +2696,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/List",
     "permission": "vpc.security_groupses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2706,7 +2706,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/ListOperations",
     "permission": "vpc.security_group_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2716,7 +2716,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/Update",
     "permission": "vpc.security_groups.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2726,7 +2726,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/UpdateRule",
     "permission": "vpc.security_group_rules.updateRule",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2736,7 +2736,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SecurityGroupService/UpdateRules",
     "permission": "vpc.security_group_ruleses.updateRules",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_security_group",
       "from_request_field": "security_group_id"
@@ -2746,7 +2746,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/AddCidrBlocks",
     "permission": "vpc.subnet_cidr_blockses.addCidrBlocks",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2766,7 +2766,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Delete",
     "permission": "vpc.subnets.delete",
-    "required_relation": "editor",
+    "required_relation": "v_delete",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2776,7 +2776,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Get",
     "permission": "vpc.subnets.get",
-    "required_relation": "viewer",
+    "required_relation": "v_get",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2786,7 +2786,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/List",
     "permission": "vpc.subnetses.list",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "project_id"
@@ -2796,7 +2796,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/ListOperations",
     "permission": "vpc.subnet_operationses.listOperations",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2806,7 +2806,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/ListUsedAddresses",
     "permission": "vpc.used_addresseses.listUsedAddresses",
-    "required_relation": "viewer",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2816,7 +2816,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/RemoveCidrBlocks",
     "permission": "vpc.subnet_cidr_blockses.removeCidrBlocks",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
@@ -2826,7 +2826,7 @@
   {
     "fqn": "kacho.cloud.vpc.v1.SubnetService/Update",
     "permission": "vpc.subnets.update",
-    "required_relation": "editor",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "vpc_subnet",
       "from_request_field": "subnet_id"
