@@ -279,21 +279,23 @@ func TestPermissionCatalog_ListByScope_ScopePolymorphic(t *testing.T) {
 	}
 }
 
-// TestPermissionCatalog_AccessBindingUpdate_EditorScoped (RBAC explicit-model
-// 2026 sub-phase P6, C-03) — AccessBindingService.Update clears
-// deletion_protection so a protected binding can be deleted. It is a public
-// mutation gated exactly like Delete: editor relation on the
-// `iam_access_binding` object resolved from the `access_binding_id` request
-// field, acr floor 2. Without this embedded entry the per-RPC authz middleware
-// has "no entry for method" → the PATCH is denied (catalog miss).
-func TestPermissionCatalog_AccessBindingUpdate_EditorScoped(t *testing.T) {
+// TestPermissionCatalog_AccessBindingUpdate_VerbBearing (Design-B verb-bearing
+// complete) — AccessBindingService.Update is an object-self mutation on the
+// `iam_access_binding` object. Enforcement references the verb-bearing relation
+// `v_update` (not the coarse `editor` tier): the gate resolves on the verb, so
+// a v_update-grant satisfies it while a v_list/v_get grant does not (D-6
+// see-in-selector-without-content). Object/field scope is unchanged: object
+// `iam_access_binding` resolved from `access_binding_id`, acr floor 2. Without
+// this embedded entry the per-RPC authz middleware has "no entry for method" →
+// the PATCH is denied (catalog miss).
+func TestPermissionCatalog_AccessBindingUpdate_VerbBearing(t *testing.T) {
 	c, err := middleware.LoadEmbeddedPermissionCatalog("")
 	require.NoError(t, err)
 
 	entry, ok := c.Lookup("kacho.cloud.iam.v1.AccessBindingService/Update")
-	require.True(t, ok, "AccessBindingService/Update missing from embedded catalog (sub-phase P6, C-03)")
+	require.True(t, ok, "AccessBindingService/Update missing from embedded catalog")
 	assert.Equal(t, "iam.access_bindings.update", entry.Permission)
-	assert.Equal(t, "editor", entry.RequiredRelation, "Update is a mutation — editor floor, parity with Delete")
+	assert.Equal(t, "v_update", entry.RequiredRelation, "Update is an object-self mutation — verb-bearing v_update (Design B), not editor tier")
 	assert.Equal(t, "iam_access_binding", entry.ScopeExtractor.ObjectType)
 	assert.Equal(t, "access_binding_id", entry.ScopeExtractor.FromRequestField)
 	assert.Equal(t, "2", entry.RequiredACRMin, "anti-anon ACR floor")
@@ -366,6 +368,76 @@ func TestPermissionCatalog_ListPermissionCatalog_ExemptAndTombstones(t *testing.
 	} {
 		_, present := c.Lookup(gone)
 		assert.False(t, present, "tombstoned RPC must NOT be in embedded catalog (proto-G): %s", gone)
+	}
+}
+
+// TestPermissionCatalog_VBC22_VerbBearingFlip (sub-phase flat-authz verb-bearing
+// complete, VBC-22) — the embedded catalog must mirror the Design-B proto-gen
+// source: object-self get/list/update/delete RPCs are gated by the verb-bearing
+// relations v_get/v_list/v_update/v_delete, while create-child stays `editor`
+// on the parent (F-7, create on a not-yet-existing object is meaningless),
+// Internal.* admin RPCs stay `system_admin` (ban #6 — no surface/relation
+// downgrade on cluster-internal admin methods), and exempt RPCs stay exempt.
+// Goes RED on the stale (tier) embed; GREEN after `make sync-permission-catalog`
+// pulls the Design-B catalog from kacho-proto/gen.
+func TestPermissionCatalog_VBC22_VerbBearingFlip(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	cases := []struct {
+		fqn      string
+		relation string
+		note     string
+	}{
+		// object-self reads → v_get / v_list
+		{"kacho.cloud.iam.v1.UserService/Get", "v_get", "object-self get"},
+		{"kacho.cloud.vpc.v1.NetworkService/Get", "v_get", "object-self get"},
+		{"kacho.cloud.compute.v1.InstanceService/Get", "v_get", "object-self get"},
+		{"kacho.cloud.compute.v1.InstanceService/List", "v_list", "object-self list"},
+		// account/project get → v_get (R6 default = consistency; List stays use-case viewer∪v_list)
+		{"kacho.cloud.iam.v1.AccountService/Get", "v_get", "account get → v_get (R6)"},
+		{"kacho.cloud.iam.v1.ProjectService/Get", "v_get", "project get → v_get (R6)"},
+		// object-self mutations → v_update / v_delete
+		{"kacho.cloud.vpc.v1.NetworkService/Update", "v_update", "object-self update"},
+		{"kacho.cloud.vpc.v1.NetworkService/Delete", "v_delete", "object-self delete"},
+		{"kacho.cloud.iam.v1.AccessBindingService/Delete", "v_delete", "object-self delete"},
+		// create-child stays editor on parent (F-7)
+		{"kacho.cloud.vpc.v1.NetworkService/Create", "editor", "create-child → editor on parent (F-7)"},
+		{"kacho.cloud.compute.v1.InstanceService/Create", "editor", "create-child → editor on parent (F-7)"},
+		// Internal.* admin RPCs unchanged — system_admin (ban #6)
+		{"kacho.cloud.iam.v1.InternalClusterService/Get", "system_admin", "Internal admin — no downgrade"},
+		{"kacho.cloud.geo.v1.InternalRegionService/Create", "system_admin", "Internal admin — no downgrade"},
+		// scope-polymorphic AB reads stay viewer (handler is the precise gate)
+		{"kacho.cloud.iam.v1.AccessBindingService/ListByScope", "viewer", "scope-polymorphic read floor"},
+		{"kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles", "viewer", "scope-polymorphic read floor"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fqn, func(t *testing.T) {
+			entry, ok := c.Lookup(tc.fqn)
+			require.True(t, ok, "fqn missing from embedded catalog: %s", tc.fqn)
+			assert.Equal(t, tc.relation, entry.RequiredRelation, "%s (%s)", tc.fqn, tc.note)
+		})
+	}
+
+	// Exempt RPCs stay exempt (authenticated-floor reads, no FGA Check).
+	for _, fqn := range []string{
+		"kacho.cloud.iam.v1.PermissionCatalogService/ListPermissionCatalog",
+		"kacho.cloud.iam.v1.AccountService/List",
+	} {
+		entry, ok := c.Lookup(fqn)
+		require.True(t, ok, "exempt fqn missing: %s", fqn)
+		assert.True(t, entry.IsExempt(), "%s must stay exempt", fqn)
+	}
+
+	// Invariant: no Internal.* RPC carries a v_* verb-bearing relation (ban #6 —
+	// cluster-internal admin methods are tier/system_admin, never object-self verbs).
+	for _, fqn := range c.FQNs() {
+		if !strings.Contains(fqn, "Internal") {
+			continue
+		}
+		entry, _ := c.Lookup(fqn)
+		assert.False(t, strings.HasPrefix(entry.RequiredRelation, "v_"),
+			"Internal.* RPC %s must not carry a verb-bearing relation %q", fqn, entry.RequiredRelation)
 	}
 }
 
