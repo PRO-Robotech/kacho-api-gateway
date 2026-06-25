@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: rbac-flat-verb-bearing-proto, path: kacho-proto } # TEMP-PIN Design-B verb-bearing permission_catalog (object-self → v_*); revert to ref:main after kacho-proto#88 merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
       - run: |
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: rbac-flat-verb-bearing-proto, path: kacho-proto } # TEMP-PIN Design-B verb-bearing permission_catalog (object-self → v_*); revert to ref:main after kacho-proto#88 merge
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
       - run: |
