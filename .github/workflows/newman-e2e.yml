@@ -81,7 +81,11 @@ jobs:
         # `ref: main` after kacho-iam#<F> merges. Workspace CLAUDE.md
         # §«Кросс-репо зависимости» allows temporary ref pinning while a
         # cross-repo chain converges.
-        with: { repository: PRO-Robotech/kacho-iam, ref: main, path: kacho-iam }
+        # TEMP-PIN BUG-2 hide-existence: this PR makes read-deny on verb-bearing
+        # IAM/vpc Get return 404 (was 403); the matching iam newman cases that
+        # assert 404 live on rbac-2026-bug2-hide-existence-newman. Revert to
+        # `ref: main` after PRO-Robotech/kacho-iam#248 merges.
+        with: { repository: PRO-Robotech/kacho-iam, ref: rbac-2026-bug2-hide-existence-newman, path: kacho-iam }
       # kacho-geo leaf-service (Geography Region/Zone, extracted from compute):
       # helm dep (vendored sub-chart) + Dockerfile build context for kacho-geo:dev.
       - uses: actions/checkout@v4
