@@ -24,7 +24,7 @@ import (
 	// "failed to marshal error message".
 	_ "google.golang.org/genproto/googleapis/rpc/errdetails"
 
-	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+	operationpb "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/cloud/operation"
 
 	// KAC-122: kacho-yc-shim удалён (yc CLI compatibility deprecated).
 

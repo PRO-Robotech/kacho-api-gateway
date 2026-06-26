@@ -83,7 +83,7 @@ import (
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// KAC-161: kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
 	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
-	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+	operationpb "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/cloud/operation"
 	// KAC-124: rmpb/orgpb убраны — kacho-resource-manager заменён на kacho-iam
 	// (Organization/Cloud/Folder → Account/Project). Proto-пакеты
 	// resourcemanager.v1 / organizationmanager.v1 удалены целиком в kacho-proto.
