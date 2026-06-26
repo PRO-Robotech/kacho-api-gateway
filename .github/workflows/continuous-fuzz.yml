@@ -40,7 +40,7 @@ jobs:
       # Transitional pin: gateway registers the public iam.v1 UserService.Update RPC
       # added in proto#89. Revert to `ref: main` once proto#89 merges.
       - uses: actions/checkout@v6
-        with: { repository: PRO-Robotech/kacho-proto, ref: unify-iam-label-scope, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6
         with: { go-version-file: kacho-api-gateway/go.mod }
 

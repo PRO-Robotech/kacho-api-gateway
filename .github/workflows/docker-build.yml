@@ -60,7 +60,7 @@ jobs:
       # Revert to `ref: main` once proto#89 merges (polyrepo.md: downstream CI pins
       # upstream to its feature branch until merged).
       - uses: actions/checkout@v4
-        with: { repository: PRO-Robotech/kacho-proto, ref: unify-iam-label-scope, path: kacho-proto }
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
 
       - uses: benjlevesque/short-sha@v3.0
         id: short-sha
