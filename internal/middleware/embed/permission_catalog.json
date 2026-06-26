@@ -1147,13 +1147,12 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/List",
-    "permission": "iam.groupses.list",
-    "required_relation": "v_list",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "account",
-      "from_request_field": "account_id"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.iam.v1.GroupService/ListMembers",
@@ -1502,13 +1501,12 @@
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/List",
-    "permission": "iam.projectses.list",
-    "required_relation": "v_list",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "account",
-      "from_request_field": "account_id"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.iam.v1.ProjectService/ListOperations",
