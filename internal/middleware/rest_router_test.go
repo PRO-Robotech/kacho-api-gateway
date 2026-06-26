@@ -18,6 +18,11 @@ func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 		{"DELETE", "/iam/v1/accounts/acc0000000000000001", "kacho.cloud.iam.v1.AccountService/Delete"},
 		// suffix-action `:verb`
 		{"POST", "/iam/v1/users:invite", "kacho.cloud.iam.v1.UserService/Invite"},
+		// UserService.Update — public async mutation (User labels-only); PATCH on the
+		// item path `/iam/v1/users/{user_id}`, same template as GET/DELETE. Must resolve
+		// so the catalog gate (v_update on iam_user, acr 2 — parity with Role/SA Update)
+		// fires instead of "no entry for method".
+		{"PATCH", "/iam/v1/users/usr0000000000000001", "kacho.cloud.iam.v1.UserService/Update"},
 		// sub-phase 1.3: AccessBindingService.ListSubjectPrivileges — public read,
 		// GET suffix-action; must resolve so the catalog gate (viewer floor) fires.
 		{"GET", "/iam/v1/accessBindings:listSubjectPrivileges", "kacho.cloud.iam.v1.AccessBindingService/ListSubjectPrivileges"},

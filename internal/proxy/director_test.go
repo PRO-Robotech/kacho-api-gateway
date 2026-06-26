@@ -40,6 +40,18 @@ func TestGateway_A2_DirectorRoutesToIAM(t *testing.T) {
 	if conn != backends["iam"] {
 		t.Error("директор должен вернуть iam-backend")
 	}
+
+	// UserService.Update — публичная async-мутация (labels-only User), parity с
+	// RoleService/ServiceAccountService Update. Должна маршрутизироваться на
+	// iam-backend (allowlist пропускает; HasInternalSuffix не ловит — сервис
+	// публичный, не Internal*).
+	_, conn, err = director(context.Background(), "/kacho.cloud.iam.v1.UserService/Update")
+	if err != nil {
+		t.Fatalf("ожидали успех для iam UserService.Update: %v", err)
+	}
+	if conn != backends["iam"] {
+		t.Error("директор должен вернуть iam-backend для UserService.Update")
+	}
 }
 
 // TestGateway_A3_DirectorRoutesToVPC проверяет маршрутизацию на vpc.
