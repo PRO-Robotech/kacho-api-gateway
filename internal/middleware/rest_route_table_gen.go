@@ -184,7 +184,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/iam/v1/accessBindings", FQN: "kacho.cloud.iam.v1.AccessBindingService/Create"},
 	{Method: "DELETE", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Delete"},
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Get"},
-	{Method: "PATCH", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Update"}, // sub-phase P6 (C-03)
+	{Method: "PATCH", Template: "/iam/v1/accessBindings/{access_binding_id}", FQN: "kacho.cloud.iam.v1.AccessBindingService/Update"},                  // sub-phase P6 (C-03)
 	{Method: "GET", Template: "/iam/v1/accessBindings/{access_binding_id}/operations", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListOperations"}, // sub-phase 1.2
 	{Method: "GET", Template: "/iam/v1/accessBindings:listAssignableRoles", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListAssignableRoles"},       // sub-phase 1.5
 	{Method: "GET", Template: "/iam/v1/accessBindings:listByScope", FQN: "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},                       // RBAC rules-model F (was :listByResource → ListByResource)
@@ -261,6 +261,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/iam/v1/users", FQN: "kacho.cloud.iam.v1.UserService/List"},
 	{Method: "DELETE", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Delete"},
 	{Method: "GET", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Get"},
+	{Method: "PATCH", Template: "/iam/v1/users/{user_id}", FQN: "kacho.cloud.iam.v1.UserService/Update"},                  // public labels-only mutation (parity Role/SA Update)
 	{Method: "GET", Template: "/iam/v1/users/{user_id}/operations", FQN: "kacho.cloud.iam.v1.UserService/ListOperations"}, // sub-phase 1.2
 	{Method: "POST", Template: "/iam/v1/users:invite", FQN: "kacho.cloud.iam.v1.UserService/Invite"},
 	// KAC-185 (F4): Internal IAM services — cluster-internal listener only (CLAUDE.md §Запрет 6).

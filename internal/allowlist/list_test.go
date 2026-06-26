@@ -289,10 +289,14 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		// ProjectService (KAC-266: Move removed)
 		"/kacho.cloud.iam.v1.ProjectService/Get",
 		"/kacho.cloud.iam.v1.ProjectService/Create",
-		// UserService (read+delete only)
+		// UserService (read + delete + labels-only Update; Create остаётся
+		// internal-only через InternalUserService.UpsertFromIdentity).
 		"/kacho.cloud.iam.v1.UserService/Get",
 		"/kacho.cloud.iam.v1.UserService/List",
 		"/kacho.cloud.iam.v1.UserService/Delete",
+		// Public async mutation: User.labels mutable (identity-поля immutable),
+		// возвращает Operation; parity с RoleService/ServiceAccountService Update.
+		"/kacho.cloud.iam.v1.UserService/Update",
 		// ServiceAccountService
 		"/kacho.cloud.iam.v1.ServiceAccountService/Create",
 		"/kacho.cloud.iam.v1.ServiceAccountService/Delete",
@@ -346,12 +350,12 @@ func TestGateway_KAC105_IamActive(t *testing.T) {
 		})
 	}
 
-	// UserService.Create/Update — отсутствуют by-design: на E0 Users создаются
-	// через InternalUserService.UpsertFromIdentity (admin via grpcurl), на E2 —
-	// из OIDC-callback в api-gateway. Никакого публичного REST POST/PATCH /iam/v1/users.
+	// UserService.Create — отсутствует by-design: Users создаются через
+	// InternalUserService.UpsertFromIdentity (OIDC-callback в api-gateway /
+	// admin via grpcurl). Никакого публичного REST POST /iam/v1/users.
+	// Update — наоборот, публичный (labels-only), см. publicMethods выше.
 	excludedUserMethods := []string{
 		"/kacho.cloud.iam.v1.UserService/Create",
-		"/kacho.cloud.iam.v1.UserService/Update",
 	}
 	for _, m := range excludedUserMethods {
 		m := m

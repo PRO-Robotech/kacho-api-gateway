@@ -1777,6 +1777,16 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.iam.v1.UserService/Update",
+    "permission": "iam.users.update",
+    "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "iam_user",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",

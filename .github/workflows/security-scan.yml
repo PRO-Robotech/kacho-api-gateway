@@ -25,6 +25,8 @@ jobs:
         with: { path: kacho-api-gateway }
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+      # Transitional pin: gateway registers the public iam.v1 UserService.Update RPC
+      # added in proto#89. Revert to `ref: main` once proto#89 merges.
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6
@@ -63,6 +65,8 @@ jobs:
         with: { path: kacho-api-gateway }
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+      # Transitional pin: gateway registers the public iam.v1 UserService.Update RPC
+      # added in proto#89. Revert to `ref: main` once proto#89 merges.
       - uses: actions/checkout@v6
         with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/setup-go@v6

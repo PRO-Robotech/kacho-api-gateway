@@ -55,6 +55,10 @@ jobs:
       # gh#73 transitional pin: revert to `ref: main` after kacho-corelib#21 merges.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+      # Transitional pin: gateway registers the public iam.v1 UserService.Update RPC
+      # added in proto#89 (UpdateUserRequest + PATCH /iam/v1/users/{user_id}).
+      # Revert to `ref: main` once proto#89 merges (polyrepo.md: downstream CI pins
+      # upstream to its feature branch until merged).
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
 

@@ -398,6 +398,7 @@ func TestPermissionCatalog_VBC22_VerbBearingFlip(t *testing.T) {
 		{"kacho.cloud.iam.v1.AccountService/Get", "v_get", "account get → v_get (R6)"},
 		{"kacho.cloud.iam.v1.ProjectService/Get", "v_get", "project get → v_get (R6)"},
 		// object-self mutations → v_update / v_delete
+		{"kacho.cloud.iam.v1.UserService/Update", "v_update", "object-self update (User labels-only, parity with Role/SA Update)"},
 		{"kacho.cloud.vpc.v1.NetworkService/Update", "v_update", "object-self update"},
 		{"kacho.cloud.vpc.v1.NetworkService/Delete", "v_delete", "object-self delete"},
 		{"kacho.cloud.iam.v1.AccessBindingService/Delete", "v_delete", "object-self delete"},

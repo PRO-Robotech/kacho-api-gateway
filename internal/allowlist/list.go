@@ -155,10 +155,13 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.iam.v1.ProjectService/Update":         {},
 	"/kacho.cloud.iam.v1.ProjectService/Delete":         {},
 	"/kacho.cloud.iam.v1.ProjectService/ListOperations": {},
-	// iam.v1 — UserService (НЕТ Create/Update — Users создаются через
-	// InternalUserService.UpsertFromIdentity; см. workspace CLAUDE.md / E0 §5.10)
+	// iam.v1 — UserService (НЕТ публичного Create — Users создаются через
+	// InternalUserService.UpsertFromIdentity; см. workspace CLAUDE.md / E0 §5.10).
+	// Update — публичная async-мутация: mutable только labels (identity-поля
+	// immutable), возвращает Operation; parity с RoleService/ServiceAccountService.
 	"/kacho.cloud.iam.v1.UserService/Get":            {},
 	"/kacho.cloud.iam.v1.UserService/List":           {},
+	"/kacho.cloud.iam.v1.UserService/Update":         {}, // public labels-only mutation (REST PATCH /iam/v1/users/{user_id}); v_update on iam_user, acr 2
 	"/kacho.cloud.iam.v1.UserService/Delete":         {},
 	"/kacho.cloud.iam.v1.UserService/ListOperations": {}, // sub-phase 1.2 — per-resource ops (REST GET /iam/v1/users/{user_id}/operations)
 	// iam.v1 — ServiceAccountService
