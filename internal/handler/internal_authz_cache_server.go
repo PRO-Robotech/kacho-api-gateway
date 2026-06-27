@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	apigatewayv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/apigateway/v1"
+	apigatewayv1 "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/cloud/apigateway/v1"
 )
 
 // Invalidator — minimal port the InternalAuthzCacheServer depends on.
