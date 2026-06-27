@@ -79,7 +79,7 @@ import (
 
 	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	// epic kacho-geo S5: geo.v1 — Region/Zone выделены в leaf-сервис kacho-geo.
-	geopb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/geo/v1"
+	geopb "github.com/PRO-Robotech/kacho-geo/proto/gen/go/kacho/cloud/geo/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// KAC-161: kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
 	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
