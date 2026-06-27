@@ -3,12 +3,10 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
 
-# Копируем зависимые модули (parent-context pattern — сборка из cloud-demo/)
-COPY kacho-corelib /src/kacho-corelib
-COPY kacho-proto /src/kacho-proto
-COPY kacho-api-gateway /src/kacho-api-gateway
-
-WORKDIR /src/kacho-api-gateway
+# Single-repo build: зависимости (kacho-corelib + proto-stubs доменов
+# kacho-compute/geo/iam/nlb/vpc) тянутся как versioned-модули из GitHub
+# (go.mod без replace), build-context — этот репо.
+COPY . .
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /api-gateway ./cmd/api-gateway
 

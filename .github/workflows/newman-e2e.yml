@@ -134,17 +134,22 @@ jobs:
           sudo tar -xzf /tmp/grpcurl.tar.gz -C /usr/local/bin grpcurl
           grpcurl --version
 
-      # Build every kacho-* :dev image. Go services build with context = the
-      # workspace root (Dockerfile COPY kacho-corelib / kacho-proto / kacho-<svc>).
+      # Build every kacho-* :dev image. Parent-context Go services build with
+      # context = the workspace root (Dockerfile COPY kacho-corelib / kacho-proto /
+      # kacho-<svc>). api-gateway собирается single-repo: его Dockerfile (COPY . .)
+      # тянет proto-stubs доменов как versioned-модули из GitHub, поэтому context —
+      # сам репо, без sibling-COPY.
       - name: build service images
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           # KAC-177: nlb added — umbrella chart now includes kacho-nlb sub-chart (KAC-161).
-          for svc in vpc iam compute api-gateway nlb; do
+          for svc in vpc iam compute nlb; do
             echo "=== build kacho-$svc:dev ==="
             docker build -f "kacho-$svc/Dockerfile" -t "kacho-$svc:dev" .
           done
+          echo "=== build kacho-api-gateway:dev (single-repo) ==="
+          docker build -f kacho-api-gateway/Dockerfile -t kacho-api-gateway:dev kacho-api-gateway
           if [ -f kacho-ui/Dockerfile ]; then
             echo "=== build kacho-ui:dev ==="
             docker build -t kacho-ui:dev kacho-ui

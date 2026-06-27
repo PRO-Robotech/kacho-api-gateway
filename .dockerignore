@@ -1,0 +1,12 @@
+.git
+.github/
+.claude/
+bin/
+docs-site/
+node_modules/
+tests/newman/results/
+*.md
+LICENSE
+.golangci.yml
+.gitignore
+.dockerignore
