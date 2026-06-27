@@ -1,0 +1,36 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.name }}
+  namespace: kacho
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.ingress.proxyReadTimeout }}"
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+spec:
+  ingressClassName: nginx
+  {{- if .Values.tls.enabled }}
+  # TLS termination на ingress используя тот же cert, что и api-gateway pod.
+  # secretName совпадает с api-gateway-tls (создается вручную через kubectl).
+  # Без этой секции ingress-nginx использует default-fake-cert, не подходящий
+  # для внешних TLS-клиентов (требуют, чтобы клиент доверял подписи).
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.name }}
+                port:
+                  name: cmux
+{{- end }}

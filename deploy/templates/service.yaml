@@ -1,0 +1,20 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+  namespace: kacho
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - name: cmux
+      port: {{ .Values.port }}
+      targetPort: cmux
+    {{- if .Values.tls.enabled }}
+    - name: tls
+      port: {{ .Values.tlsPort }}
+      targetPort: tls
+    {{- end }}
