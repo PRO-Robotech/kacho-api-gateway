@@ -1,19 +1,20 @@
 // permission_catalog_embed.go — go:embed-driven catalog asset.
 //
-// Build-time bundled mirror of kacho-proto/gen/permission_catalog.json. Kept
-// in this repo (vs reading the sibling kacho-proto checkout at runtime) so
-// the api-gateway binary is self-contained and deployable as a single
-// container without volume mounts.
+// Вшитая (build-time) копия permission_catalog.json. Хранится в этом репо
+// (а не читается из соседних proto-деревьев в рантайме), чтобы бинарь
+// api-gateway был самодостаточен и деплоился одним контейнером без
+// volume-mount'ов.
 //
-// **Sync discipline (KAC-127 Phase 3, mirrors `make sync-migrations`)**:
+// Источник генерации — proto всех доменов Kachō. api-gateway импортирует
+// proto-stubs всех доменов, поэтому каталог собирается именно здесь
+// (cmd/protoc-gen-kacho-permissions + scripts/gen-permission-catalog.sh),
+// обходя service/method каждого домена-владельца (kacho-iam / kacho-vpc /
+// kacho-compute / kacho-geo / kacho-nlb) + общую инфраструктуру kacho-corelib.
 //
-//	cp ../kacho-proto/gen/permission_catalog.json \
-//	   internal/middleware/embed/permission_catalog.json
+// Регенерация (требует рабочую копию workspace с соседними репозиториями):
 //
-// Re-run after any change to (kacho.iam.authz.v1.*) options or the
-// `protoc-gen-kacho-permissions` plugin (kacho-proto Phase 3). CI verifies
-// drift via `make verify-permission-catalog` (computes sha256 over the
-// kacho-proto source and compares against the embedded copy).
+//	make permission-catalog        # регенерит в build/ + показывает diff
+//	make permission-catalog-apply  # принимает регенерацию как новый embed
 //
 // Override at runtime via env `KACHO_API_GATEWAY_PERMISSION_CATALOG_FILE` —
 // useful for staged rollouts (deploy new catalog to a ConfigMap, point env
