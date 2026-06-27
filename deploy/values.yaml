@@ -1,0 +1,187 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+name: api-gateway
+replicas: 1
+image: kacho-api-gateway:dev
+imagePullPolicy: IfNotPresent
+
+port: 8080
+tlsPort: 8443
+
+# Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
+# Публичные RPC nlb обслуживаются под /nlb/v1/*.
+backends:
+  vpc: vpc.kacho.svc.cluster.local:9090
+  vpcInternal: vpc.kacho.svc.cluster.local:9091
+  compute: compute.kacho.svc.cluster.local:9090
+  computeInternal: compute.kacho.svc.cluster.local:9091
+  # kacho-iam public + internal endpoints
+  iam: kacho-iam.kacho.svc.cluster.local:9090
+  iamInternal: kacho-iam-internal.kacho.svc.cluster.local:9091
+  # kacho-nlb public + internal endpoints
+  nlb: kacho-nlb.kacho.svc.cluster.local:9090
+  nlbInternal: kacho-nlb.kacho.svc.cluster.local:9091
+  # kacho-geo public + internal endpoints (Geography Region/Zone leaf service).
+  # The geo k8s Service is "kacho-geo" / "kacho-geo-internal" (mirrors kacho-iam /
+  # kacho-iam-internal). The bare "geo.kacho.svc.cluster.local" host does NOT resolve
+  # (NXDOMAIN) → grpc "no children to pick from" 503 on every /geo/v1/* request.
+  geo: kacho-geo.kacho.svc.cluster.local:9090
+  geoInternal: kacho-geo-internal.kacho.svc.cluster.local:9091
+
+# TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
+# Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.
+# Используется TLS-only клиентами.
+tls:
+  enabled: true
+  secretName: api-gateway-tls
+  certPath: /etc/api-gateway/tls/tls.crt
+  keyPath: /etc/api-gateway/tls/tls.key
+
+ingress:
+  enabled: true
+  host: api.kacho.local
+  proxyReadTimeout: "120"
+
+# Externally advertised endpoint that clients dial for every service.
+# Production: api.kacho.local:443 (or whatever externally resolvable host:port).
+# Dev (kind + port-forward): override to localhost:18443.
+advertisedEndpoint: api.kacho.local:443
+
+# OIDC — Zitadel auth-flow handlers /iam/v1/auth/{login,callback,me,logout}.
+# Server-side (token exchange + userinfo) ходит на `issuer` (cluster-internal),
+# browser-redirect — на `externalIssuer` (publicly reachable host).
+# Off-by-default. Включается в per-cluster overrides.
+oidc:
+  enabled: false
+  issuer: ""           # cluster-internal Zitadel URL (token exchange / userinfo)
+  externalIssuer: ""   # public-facing Zitadel URL (browser redirect)
+  clientId: ""
+  # ClientId через k8s Secret (заполняется zitadel-oidc-bootstrap Job из umbrella).
+  # Если задан — перебивает clientId. Optional=true → pod стартует даже если secret
+  # еще не создан (post-install Job его apply'ит).
+  # clientIdSecretRef:
+  #   name: kacho-iam-oidc-client
+  #   key: client_id
+  #   optional: true
+  clientIdSecretRef: {}
+  redirectUri: ""
+  clientSecret: ""
+
+# AuthN — auth-interceptor configuration.
+#   mode:
+#     - "dev"               : Bearer optional. Valid HS256 Bearer signed with
+#                             `devSecret` → real Principal; missing/invalid →
+#                             anonymous.
+#     - "production"        : Bearer required, Hydra JWKS RS256 validation.
+#     - "production-strict" : production + reject missing Bearer.
+#   devSecret: HS256 signing secret for dev-mode JWT validation. Empty → all
+#     Bearer tokens are ignored in dev-mode (every principal collapses to
+#     anonymous / system:bootstrap). MUST be set on the dev stand so per-user
+#     JWTs are distinguishable. Dev-only — production uses RS256 / Hydra JWKS,
+#     never this secret.
+#
+# Default {} → no KACHO_API_GATEWAY_AUTHN_* env emitted; the api-gateway Go
+# config default (mode=dev, empty devSecret) applies — identical to the
+# behaviour before this block existed, so prod overlays that omit `authn`
+# are unaffected. The dev overlay (values.dev.yaml) sets this explicitly.
+authn: {}
+
+# Hydra — OAuth2/OIDC token verification.
+# The auth path verifies Hydra-issued RS256 access tokens by fetching Hydra's
+# JWKS. config.go reads KACHO_HYDRA_JWKS_URL (explicit) and otherwise derives
+# `{KACHO_HYDRA_ISSUER}/.well-known/jwks.json` — whose default issuer
+# (`https://hydra.api.kacho.cloud`) is NOT reachable from inside the cluster
+# (in dev Hydra's self.issuer is `http://localhost:28080/...`). So the JWKS URL
+# MUST be set explicitly to the cluster-internal Hydra PUBLIC Service. Unset →
+# no env emitted; the Go config default applies (zero regression for overlays
+# that don't opt in). The dev/prod overlays set `jwksUrl` to the in-cluster
+# `kacho-umbrella-hydra-public:4444/.well-known/jwks.json`.
+#   jwksUrl:    explicit cluster-internal Hydra JWKS endpoint (reachable from
+#               the gateway pod). Drives KACHO_HYDRA_JWKS_URL.
+#   issuer:     expected `iss` claim + base for endpoint derivation. Drives
+#               KACHO_HYDRA_ISSUER. Optional; jwksUrl alone is enough for JWKS.
+hydra:
+  jwksUrl: ""
+  issuer: ""
+
+# AuthZ — per-RPC authorization middleware.
+#   enabled: when true, every authenticated request is gated by a
+#     `kacho.cloud.iam.v1.AuthorizeService.Check` fan-out. When false (the
+#     Go-config default) the middleware is wired but pass-through — only
+#     anonymous-mutating requests are blocked (by kacho-iam authzguard), so
+#     authenticated-but-unauthorized requests leak through.
+#   failOpen: when true, transient IAM-Check failures (Unavailable / timeout)
+#     ALLOW the request. Production edition MUST set false (fail-closed). The
+#     access-matrix newman suite also needs false so DENY decisions are not
+#     masked by IAM hiccups.
+#   iamAuthorizeUrl: explicit gRPC address of kacho-iam AuthorizeService
+#     (public port 9090). Empty → derived from the `iam` backend address
+#     (KACHO_API_GATEWAY_IAM_GRPC). AuthorizeService is the PUBLIC RPC — it is
+#     NOT routed through the internal :9091 listener (loop-prevention #6).
+#
+# Default {} → no KACHO_API_GATEWAY_AUTHZ_* env emitted; Go-config defaults
+# (enabled=false, failOpen=false) apply. The dev overlay enables it.
+authz: {}
+
+# ─── mTLS — per-edge backend-dial (cert-manager internal-CA) ─────────────────
+# api-gateway is a backend-dial CLIENT (it terminates EXTERNAL TLS separately via
+# `tls.*` above — that is unrelated). enable=false (default) → НИ client-cert
+# secret, НИ KACHO_API_GATEWAY_MTLS_* env → every backend dial insecure, текущее
+# dev (нулевая регрессия). umbrella прокидывает .mtls.enable + per-edge флаги.
+#
+# One shared "api-gateway" client identity across all edges: the cert-manager
+# `api-gateway-client-tls` secret. Per-edge ENABLE toggles each edge
+# independently. SERVER_NAME is INTENTIONALLY left unset → config.go
+# EdgeTLSClient derives it from each dial-host (`hostFromAddr`), so the iam/nlb
+# edges verify against BOTH their public (kacho-iam / kacho-nlb) AND internal
+# (kacho-iam-internal / kacho-nlb-internal) dial-hosts — both are in the peer
+# server-SAN. A single override would force one name and break the other.
+mtls:
+  enable: false
+  # ─── internal-CA leaf-cert issuance (this chart owns its Certificate) ────────
+  # client-only: api-gateway dials backends over mTLS; its external server TLS uses
+  # the separate `tls.*` secret above. URI-SAN saName MUST match the IAM module-SA
+  # seed: kacho-api-gateway → sva(md5("kacho-api-gateway")) (identity-only role).
+  issuer:
+    name: kacho-internal-ca
+    kind: ClusterIssuer   # ClusterIssuer (cluster-scoped), NOT namespaced Issuer
+  spiffe:
+    trustDomain: kacho.cloud
+    namespace: kacho
+    saName: kacho-api-gateway
+  leafDuration: 2160h
+  leafRenewBefore: 720h
+  clientSecretName: api-gateway-client-tls   # cert key = api-gateway
+  mountPath: /etc/api-gateway/mtls           # <mp>/{tls.crt,tls.key,ca.crt}
+  # hybrid: external TLS listener = VerifyClientCertIfGiven + internal CA as
+  # ClientCAs → cert-bearing client authenticates by cert SPIFFE identity, browser
+  # (no cert) falls back to JWT. Internal listeners stay strict mTLS. Default off.
+  hybridExternal: false
+  edges:
+    vpc: false        # gateway→vpc (+ vpcInternal)
+    compute: false    # gateway→compute (+ computeInternal)
+    iam: false        # gateway→iam (+ iamInternal); shared by authz/subject dials
+    nlb: false        # gateway→nlb (+ nlbInternal)
+    geo: false        # gateway→geo (+ geoInternal); SERVER_NAME unset → derived per
+                      # dial-host (kacho-geo / kacho-geo-internal), both in peer SAN
+
+# Arbitrary env vars escape-hatch (key: value).
+extraEnv: {}
+
+# Default replicas=1; HPA autoscales up to 10 on CPU 70%.
+# api-gateway is the request-side bottleneck (~3500 RPS/pod baseline)
+# under the in-cluster 10k load test.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

@@ -1,0 +1,63 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+name: ci
+
+# Fast push/PR feedback gate: compile, vet, format, lint, and the full
+# race-enabled unit/integration suite — the gateway's security heart
+# (JWT/DPoP/mTLS-bound/step-up/authz middleware) is proven on every change.
+# Single-repo: per-domain proto-stubs and kacho-corelib resolve as versioned
+# modules from GitHub (go.mod carries no `replace`), so no sibling checkout.
+
+on:
+  push:
+    branches: [main, "KAC-*", "fix/*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build · vet · gofmt · test -race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go mod download
+        run: go mod download
+
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on:"; echo "$unformatted"
+            exit 1
+          fi
+
+      - name: test -race
+        run: go test ./... -race -count=1 -timeout 600s
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.6
