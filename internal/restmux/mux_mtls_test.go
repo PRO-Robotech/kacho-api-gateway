@@ -42,7 +42,7 @@ import (
 	"github.com/PRO-Robotech/kacho-corelib/grpcclient"
 	"github.com/PRO-Robotech/kacho-corelib/grpcsrv"
 
-	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	vpcpb "github.com/PRO-Robotech/kacho-vpc/proto/gen/go/kacho/cloud/vpc/v1"
 )
 
 // stubNetworkService serves a deterministic List response so the REST round-trip

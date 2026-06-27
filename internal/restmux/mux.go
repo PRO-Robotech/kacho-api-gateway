@@ -87,7 +87,7 @@ import (
 	// KAC-124: rmpb/orgpb убраны — kacho-resource-manager заменён на kacho-iam
 	// (Organization/Cloud/Folder → Account/Project). Proto-пакеты
 	// resourcemanager.v1 / organizationmanager.v1 удалены целиком в kacho-proto.
-	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
+	vpcpb "github.com/PRO-Robotech/kacho-vpc/proto/gen/go/kacho/cloud/vpc/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"

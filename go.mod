@@ -1,10 +1,12 @@
 module github.com/PRO-Robotech/kacho-api-gateway
 
-go 1.25.7
+go 1.25.11
 
 replace github.com/PRO-Robotech/kacho-corelib => ../kacho-corelib
 
 replace github.com/PRO-Robotech/kacho-geo => ../kacho-geo
+
+replace github.com/PRO-Robotech/kacho-vpc => ../kacho-vpc
 
 replace github.com/PRO-Robotech/kacho-proto => ../kacho-proto
 
@@ -12,6 +14,7 @@ require (
 	github.com/PRO-Robotech/kacho-corelib v0.1.1-0.20260618025241-a8dbc86653dc
 	github.com/PRO-Robotech/kacho-geo v0.0.0
 	github.com/PRO-Robotech/kacho-proto v0.1.1-0.20260624203923-05d1904e3797
+	github.com/PRO-Robotech/kacho-vpc v0.0.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
@@ -19,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.55.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4
-	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
