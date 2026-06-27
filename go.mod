@@ -4,7 +4,7 @@ go 1.25.11
 
 require (
 	github.com/PRO-Robotech/kacho-compute v0.0.0-20260627095718-0f5901d563a9
-	github.com/PRO-Robotech/kacho-corelib v0.1.1-0.20260627132909-f6782af68bb7
+	github.com/PRO-Robotech/kacho-corelib v0.2.0
 	github.com/PRO-Robotech/kacho-geo v0.0.0-20260627135501-91749bab7263
 	github.com/PRO-Robotech/kacho-iam v1.0.2-0.20260627095713-09310cc50004
 	github.com/PRO-Robotech/kacho-nlb v0.0.0-20260627095723-7cf473f02a85
@@ -14,7 +14,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/net v0.55.0
+	golang.org/x/net v0.56.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
@@ -32,8 +32,8 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 )
