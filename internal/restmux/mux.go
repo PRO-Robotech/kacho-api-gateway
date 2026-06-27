@@ -77,7 +77,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
+	computepb "github.com/PRO-Robotech/kacho-compute/proto/gen/go/kacho/cloud/compute/v1"
 	// epic kacho-geo S5: geo.v1 — Region/Zone выделены в leaf-сервис kacho-geo.
 	geopb "github.com/PRO-Robotech/kacho-geo/proto/gen/go/kacho/cloud/geo/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
