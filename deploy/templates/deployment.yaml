@@ -1,0 +1,240 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: kacho
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      containers:
+        - name: {{ .Values.name }}
+          image: "{{ .Values.image }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/usr/local/bin/api-gateway"]
+          ports:
+            - name: cmux
+              containerPort: {{ .Values.port }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              containerPort: {{ .Values.tlsPort }}
+            {{- end }}
+          env:
+            - name: KACHO_API_GATEWAY_LISTEN_ADDR
+              value: ":{{ .Values.port }}"
+            # Resource-management backend — kacho-iam (отдельной RESOURCEMANAGER_GRPC переменной нет).
+            - name: KACHO_API_GATEWAY_VPC_GRPC
+              value: "{{ .Values.backends.vpc }}"
+            {{- if .Values.backends.vpcInternal }}
+            - name: KACHO_API_GATEWAY_VPC_INTERNAL_GRPC
+              value: "{{ .Values.backends.vpcInternal }}"
+            {{- end }}
+            {{- if .Values.backends.compute }}
+            - name: KACHO_API_GATEWAY_COMPUTE_GRPC
+              value: "{{ .Values.backends.compute }}"
+            {{- end }}
+            {{- if .Values.backends.computeInternal }}
+            - name: KACHO_API_GATEWAY_COMPUTE_INTERNAL_GRPC
+              value: "{{ .Values.backends.computeInternal }}"
+            {{- end }}
+            {{- if .Values.backends.iam }}
+            - name: KACHO_API_GATEWAY_IAM_GRPC
+              value: "{{ .Values.backends.iam }}"
+            {{- end }}
+            {{- if .Values.backends.iamInternal }}
+            - name: KACHO_API_GATEWAY_IAM_INTERNAL_GRPC
+              value: "{{ .Values.backends.iamInternal }}"
+            {{- end }}
+            {{- if .Values.backends.nlb }}
+            - name: KACHO_API_GATEWAY_NLB_GRPC
+              value: "{{ .Values.backends.nlb }}"
+            {{- end }}
+            {{- if .Values.backends.nlbInternal }}
+            - name: KACHO_API_GATEWAY_NLB_INTERNAL_GRPC
+              value: "{{ .Values.backends.nlbInternal }}"
+            {{- end }}
+            {{- if .Values.backends.geo }}
+            - name: KACHO_API_GATEWAY_GEO_GRPC
+              value: "{{ .Values.backends.geo }}"
+            {{- end }}
+            {{- if .Values.backends.geoInternal }}
+            - name: KACHO_API_GATEWAY_GEO_INTERNAL_GRPC
+              value: "{{ .Values.backends.geoInternal }}"
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
+              value: ":{{ .Values.tlsPort }}"
+            - name: KACHO_API_GATEWAY_TLS_CERT_FILE
+              value: "{{ .Values.tls.certPath }}"
+            - name: KACHO_API_GATEWAY_TLS_KEY_FILE
+              value: "{{ .Values.tls.keyPath }}"
+            {{- end }}
+            - name: KACHO_API_GATEWAY_ADVERTISED_ENDPOINT
+              value: "{{ .Values.advertisedEndpoint }}"
+            {{- if .Values.oidc.enabled }}
+            - name: KACHO_API_GATEWAY_OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: KACHO_API_GATEWAY_OIDC_EXTERNAL_ISSUER
+              value: {{ .Values.oidc.externalIssuer | quote }}
+            {{- if .Values.oidc.clientIdSecretRef }}
+            - name: KACHO_API_GATEWAY_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.clientIdSecretRef.name }}
+                  key: {{ .Values.oidc.clientIdSecretRef.key }}
+                  optional: {{ default true .Values.oidc.clientIdSecretRef.optional }}
+            {{- else }}
+            - name: KACHO_API_GATEWAY_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            {{- end }}
+            - name: KACHO_API_GATEWAY_OIDC_REDIRECT_URI
+              value: {{ .Values.oidc.redirectUri | quote }}
+            {{- if .Values.oidc.clientSecret }}
+            - name: KACHO_API_GATEWAY_OIDC_CLIENT_SECRET
+              value: {{ .Values.oidc.clientSecret | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.authn }}
+            - name: KACHO_API_GATEWAY_AUTHN_MODE
+              value: {{ .Values.authn.mode | default "dev" | quote }}
+            {{- if .Values.authn.devSecret }}
+            - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
+              value: {{ .Values.authn.devSecret | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.hydra }}
+            # Hydra JWKS for RS256 access-token verification.
+            # KACHO_HYDRA_JWKS_URL MUST be the cluster-internal Hydra PUBLIC
+            # Service (e.g. kacho-umbrella-hydra-public:4444/.well-known/jwks.json),
+            # reachable from the gateway pod. Without it config.ResolvedHydraJWKSURL()
+            # derives the public issuer host, which the pod cannot reach → Hydra
+            # login tokens never validate → WhoAmI/Account/Project → code 16.
+            {{- if .Values.hydra.jwksUrl }}
+            - name: KACHO_HYDRA_JWKS_URL
+              value: {{ .Values.hydra.jwksUrl | quote }}
+            {{- end }}
+            {{- if .Values.hydra.issuer }}
+            - name: KACHO_HYDRA_ISSUER
+              value: {{ .Values.hydra.issuer | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.authz }}
+            - name: KACHO_API_GATEWAY_AUTHZ_ENABLED
+              value: {{ .Values.authz.enabled | default false | quote }}
+            - name: KACHO_API_GATEWAY_AUTHZ_FAIL_OPEN
+              value: {{ .Values.authz.failOpen | default false | quote }}
+            {{- if .Values.authz.iamAuthorizeUrl }}
+            - name: KACHO_API_GATEWAY_IAM_AUTHORIZE_URL
+              value: {{ .Values.authz.iamAuthorizeUrl | quote }}
+            {{- end }}
+            {{- if .Values.authz.cacheTtlSeconds }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CACHE_TTL_SECONDS
+              value: {{ .Values.authz.cacheTtlSeconds | quote }}
+            {{- end }}
+            {{- if .Values.authz.checkTimeoutMs }}
+            - name: KACHO_API_GATEWAY_AUTHZ_CHECK_TIMEOUT_MS
+              value: {{ .Values.authz.checkTimeoutMs | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.mtls.enable }}
+            {{- $mp := .Values.mtls.mountPath }}
+            # Per-edge backend-dial mTLS. Shared "api-gateway" client
+            # identity (cert-manager api-gateway-client-tls). SERVER_NAME unset →
+            # config.go EdgeTLSClient derives it per dial-host (covers public +
+            # internal hosts, both in the peer server-SAN).
+            - name: KACHO_API_GATEWAY_MTLS_CLIENT_CERT_FILE
+              value: {{ printf "%s/tls.crt" $mp | quote }}
+            - name: KACHO_API_GATEWAY_MTLS_CLIENT_KEY_FILE
+              value: {{ printf "%s/tls.key" $mp | quote }}
+            - name: KACHO_API_GATEWAY_MTLS_CA_FILE
+              value: {{ printf "%s/ca.crt" $mp | quote }}
+            {{- if .Values.mtls.edges.vpc }}
+            - name: KACHO_API_GATEWAY_MTLS_VPC_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.compute }}
+            - name: KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.iam }}
+            - name: KACHO_API_GATEWAY_MTLS_IAM_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.nlb }}
+            - name: KACHO_API_GATEWAY_MTLS_NLB_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.geo }}
+            - name: KACHO_API_GATEWAY_MTLS_GEO_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.hybridExternal }}
+            # Hybrid external TLS listener uses VerifyClientCertIfGiven with
+            # the internal CA (MTLS_CA_FILE above) as ClientCAs — a client WITH a
+            # valid kacho client-cert authenticates by cert identity (SPIFFE SAN),
+            # a browser WITHOUT a cert falls back to JWT. Internal listeners stay
+            # strict (RequireAndVerifyClientCert).
+            - name: KACHO_API_GATEWAY_HYBRID_MTLS_EXTERNAL
+              value: "true"
+            {{- end }}
+            {{- end }}
+            {{- range $k, $v := .Values.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if or .Values.tls.enabled .Values.mtls.enable }}
+          volumeMounts:
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: /etc/api-gateway/tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.mtls.enable }}
+            # mTLS — backend-dial client-cert (cert-manager internal-CA).
+            - name: mtls-client
+              mountPath: {{ .Values.mtls.mountPath | quote }}
+              readOnly: true
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: cmux
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: cmux
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+      {{- if or .Values.tls.enabled .Values.mtls.enable }}
+      volumes:
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.secretName }}
+        {{- end }}
+        {{- if .Values.mtls.enable }}
+        # mTLS — backend-dial client-cert secret (cert-manager internal-CA).
+        - name: mtls-client
+          secret:
+            secretName: {{ .Values.mtls.clientSecretName | quote }}
+        {{- end }}
+      {{- end }}

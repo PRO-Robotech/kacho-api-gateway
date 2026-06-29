@@ -1,0 +1,23 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+# golangci-lint v2 configuration — the blocking `lint` CI job.
+#
+# Runs the standard, low-false-positive linter set (errcheck, govet, ineffassign,
+# staticcheck, unused). Two staticcheck "quickfix" style suggestions are
+# suppressed (QF1008 embedded-field selector, QF1011 inferrable-type omission) —
+# cosmetic opt-in nits, and QF1011 fights intentional compile-time type
+# assertions. errcheck is relaxed inside *_test.go where an unchecked
+# Close()/Cleanup return carries no production risk.
+version: "2"
+
+linters:
+  default: standard
+  exclusions:
+    rules:
+      - path: '_test\.go'
+        linters:
+          - errcheck
+      - linters:
+          - staticcheck
+        text: 'QF1008|QF1011'

@@ -1,0 +1,75 @@
+# Copyright (c) PRO-Robotech
+# SPDX-License-Identifier: BUSL-1.1
+
+name: security-scan
+
+# Blocking supply-chain / SAST gates for the api-gateway. Single-repo:
+# kacho-corelib and the per-domain proto-stubs resolve as versioned modules from
+# GitHub (go.mod has no `replace`), so no sibling checkout is needed. Every
+# scanner BLOCKS the job on a finding — none are advisory-only.
+
+on:
+  push:
+    branches: [main, "KAC-*", "fix/*"]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  gosec:
+    name: gosec (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          # -severity medium → block on medium-or-higher findings (no `|| true`).
+          # Justified false positives carry inline `#nosec <rule>` annotations.
+          "$(go env GOPATH)/bin/gosec" -severity medium -fmt sarif -out gosec.sarif ./...
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  govulncheck:
+    name: govulncheck (Go vuln DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          # Text mode exits non-zero on a reachable vulnerability → blocks the job.
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  trivy:
+    name: trivy (deps / config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
