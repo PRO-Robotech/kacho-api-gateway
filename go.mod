@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/PRO-Robotech/kacho-compute v1.0.2
-	github.com/PRO-Robotech/kacho-corelib v1.0.2
+	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260629221224-9ee70b8d274e
 	github.com/PRO-Robotech/kacho-geo v1.0.2
 	github.com/PRO-Robotech/kacho-iam v1.0.2
 	github.com/PRO-Robotech/kacho-nlb v1.0.3
@@ -37,3 +37,7 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 )
+
+replace github.com/PRO-Robotech/kacho-vpc => github.com/PRO-Robotech/kacho-vpc v0.0.0-20260630130935-c708a07015e8
+
+replace github.com/PRO-Robotech/kacho-nlb => github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260630131214-6c47bb3a3491
