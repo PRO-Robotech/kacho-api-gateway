@@ -13,12 +13,12 @@ import (
 )
 
 // TestPermissionCatalog_Anycast_PublicVerbBearing — AnycastAddressPool —
-// tenant-facing public ресурс vpc. Embedded-каталог обязан нести его RPC с
-// verb-bearing relations (v_get/v_list/v_update/v_delete; create — editor на
-// project-scope), иначе authz отдаст "catalog: no entry for method" (deny) и
-// публичные методы не пройдут через gateway. Ни один из них не <exempt> —
-// доступ всегда проверяется через FGA. Двойное "es" в `...poolses.list` —
-// артефакт генератора (как `regionses`/`zoneses`), часть контракта каталога.
+// tenant-facing public ресурс vpc. Object-self RPC (Get/Update/Delete/
+// AttachNetwork/DetachNetwork) несут verb-bearing relations на самом пуле;
+// Create — editor на parent project. List — scope-filtered <exempt> (как
+// NetworkService/List): единый per-RPC Check на project отклонил бы весь вызов
+// `no path` 403 ещё до handler-фильтра viewer ∪ v_list, поэтому gateway его
+// освобождает (authn остаётся — валидный JWT обязателен).
 func TestPermissionCatalog_Anycast_PublicVerbBearing(t *testing.T) {
 	c, err := middleware.LoadEmbeddedPermissionCatalog("")
 	require.NoError(t, err)
@@ -31,7 +31,6 @@ func TestPermissionCatalog_Anycast_PublicVerbBearing(t *testing.T) {
 		fromField  string
 	}{
 		{"kacho.cloud.vpc.v1.AnycastAddressPoolService/Get", "vpc.anycast_address_pools.get", "v_get", "vpc_anycast_address_pool", "anycast_address_pool_id"},
-		{"kacho.cloud.vpc.v1.AnycastAddressPoolService/List", "vpc.anycast_address_poolses.list", "v_list", "project", "project_id"},
 		{"kacho.cloud.vpc.v1.AnycastAddressPoolService/Create", "vpc.anycast_address_pools.create", "editor", "project", "project_id"},
 		{"kacho.cloud.vpc.v1.AnycastAddressPoolService/Update", "vpc.anycast_address_pools.update", "v_update", "vpc_anycast_address_pool", "anycast_address_pool_id"},
 		{"kacho.cloud.vpc.v1.AnycastAddressPoolService/Delete", "vpc.anycast_address_pools.delete", "v_delete", "vpc_anycast_address_pool", "anycast_address_pool_id"},
@@ -46,9 +45,18 @@ func TestPermissionCatalog_Anycast_PublicVerbBearing(t *testing.T) {
 			assert.Equal(t, w.relation, entry.RequiredRelation, "required_relation on %s", w.fqn)
 			assert.Equal(t, w.objectType, entry.ScopeExtractor.ObjectType, "scope object_type on %s", w.fqn)
 			assert.Equal(t, w.fromField, entry.ScopeExtractor.FromRequestField, "scope from_request_field on %s", w.fqn)
-			assert.False(t, entry.IsExempt(), "anycast RPC must NOT be <exempt> on %s", w.fqn)
+			assert.False(t, entry.IsExempt(), "anycast object-self RPC must NOT be <exempt> on %s", w.fqn)
 		})
 	}
+
+	// List — scope-filtered: handler возвращает viewer ∪ v_list-набор; gateway
+	// освобождает RPC от per-RPC Check (parity с NetworkService/List), иначе
+	// project-scope Check отклонил бы owner'а без отдельного v_list-tuple.
+	t.Run("List is scope-filtered <exempt>", func(t *testing.T) {
+		entry, ok := c.Lookup("kacho.cloud.vpc.v1.AnycastAddressPoolService/List")
+		require.True(t, ok, "List missing from embedded catalog")
+		assert.True(t, entry.IsExempt(), "anycast List must be <exempt> (scope-filtered)")
+	})
 }
 
 // TestRestRouter_Anycast_PathFQN — REST-таблица обязана резолвить публичные
