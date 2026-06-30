@@ -42,6 +42,14 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.vpc.v1.AddressService/Update":         {},
 	"/kacho.cloud.vpc.v1.AddressService/Delete":         {},
 	"/kacho.cloud.vpc.v1.AddressService/ListOperations": {},
+	// vpc.v1 — AnycastAddressPoolService (tenant-facing anycast address pool)
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/Get":           {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/List":          {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/Create":        {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/Update":        {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/Delete":        {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/AttachNetwork": {},
+	"/kacho.cloud.vpc.v1.AnycastAddressPoolService/DetachNetwork": {},
 	// vpc.v1 — RouteTableService
 	"/kacho.cloud.vpc.v1.RouteTableService/Get":            {},
 	"/kacho.cloud.vpc.v1.RouteTableService/List":           {},

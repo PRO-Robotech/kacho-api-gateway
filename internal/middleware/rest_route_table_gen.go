@@ -335,6 +335,15 @@ var generatedRestRoutes = []restRoute{
 	{Method: "GET", Template: "/vpc/v1/addresses/{address_id}/operations", FQN: "kacho.cloud.vpc.v1.AddressService/ListOperations"},
 	{Method: "GET", Template: "/vpc/v1/addresses:bySubnet", FQN: "kacho.cloud.vpc.v1.AddressService/ListBySubnet"},
 	{Method: "GET", Template: "/vpc/v1/addresses:byValue", FQN: "kacho.cloud.vpc.v1.AddressService/GetByValue"},
+	// vpc.v1 AnycastAddressPool — tenant-facing public CRUD + attach/detach.
+	// Hand-added here until the route extractor reruns.
+	{Method: "GET", Template: "/vpc/v1/anycastAddressPools", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/List"},
+	{Method: "POST", Template: "/vpc/v1/anycastAddressPools", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/Create"},
+	{Method: "DELETE", Template: "/vpc/v1/anycastAddressPools/{anycast_address_pool_id}", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/Delete"},
+	{Method: "GET", Template: "/vpc/v1/anycastAddressPools/{anycast_address_pool_id}", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/Get"},
+	{Method: "PATCH", Template: "/vpc/v1/anycastAddressPools/{anycast_address_pool_id}", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/Update"},
+	{Method: "POST", Template: "/vpc/v1/anycastAddressPools/{anycast_address_pool_id}:attachNetwork", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/AttachNetwork"},
+	{Method: "POST", Template: "/vpc/v1/anycastAddressPools/{anycast_address_pool_id}:detachNetwork", FQN: "kacho.cloud.vpc.v1.AnycastAddressPoolService/DetachNetwork"},
 	{Method: "GET", Template: "/vpc/v1/gateways", FQN: "kacho.cloud.vpc.v1.GatewayService/List"},
 	{Method: "POST", Template: "/vpc/v1/gateways", FQN: "kacho.cloud.vpc.v1.GatewayService/Create"},
 	{Method: "DELETE", Template: "/vpc/v1/gateways/{gateway_id}", FQN: "kacho.cloud.vpc.v1.GatewayService/Delete"},

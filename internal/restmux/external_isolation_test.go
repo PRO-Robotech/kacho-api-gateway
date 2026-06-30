@@ -109,6 +109,7 @@ func TestExternalListener_PublicPathsStillServed(t *testing.T) {
 	}
 	publicPaths := []struct{ method, path string }{
 		{"GET", "/vpc/v1/networks"},
+		{"GET", "/vpc/v1/anycastAddressPools"},
 		{"GET", "/iam/v1/projects/prj-1"},
 		{"GET", "/compute/v1/instances"},
 		{"GET", "/nlb/v1/networkLoadBalancers"},

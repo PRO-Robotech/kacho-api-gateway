@@ -93,6 +93,25 @@ func TestIsInternalPath(t *testing.T) {
 			path: "/vpc/v1/addresses/addr-1",
 			want: false,
 		},
+		// AnycastAddressPool — tenant-facing public ресурс. Имя похоже на admin
+		// addressPools, но это другой сегмент: addressPools-правило матчит только
+		// точный "addressPools" / "addressPools/" / "addressPools:", поэтому
+		// anycastAddressPools остается на public mux.
+		{
+			name: "anycastAddressPools list (public)",
+			path: "/vpc/v1/anycastAddressPools",
+			want: false,
+		},
+		{
+			name: "anycastAddressPools by id (public)",
+			path: "/vpc/v1/anycastAddressPools/anp-1",
+			want: false,
+		},
+		{
+			name: "anycastAddressPools attachNetwork (public)",
+			path: "/vpc/v1/anycastAddressPools/anp-1:attachNetwork",
+			want: false,
+		},
 
 		// --- public surfaces (must NOT go to internal) ---
 		{

@@ -2162,6 +2162,76 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/AttachNetwork",
+    "permission": "vpc.anycast_address_pools.attachNetwork",
+    "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "vpc_anycast_address_pool",
+      "from_request_field": "anycast_address_pool_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/Create",
+    "permission": "vpc.anycast_address_pools.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/Delete",
+    "permission": "vpc.anycast_address_pools.delete",
+    "required_relation": "v_delete",
+    "scope_extractor": {
+      "object_type": "vpc_anycast_address_pool",
+      "from_request_field": "anycast_address_pool_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/DetachNetwork",
+    "permission": "vpc.anycast_address_pools.detachNetwork",
+    "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "vpc_anycast_address_pool",
+      "from_request_field": "anycast_address_pool_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/Get",
+    "permission": "vpc.anycast_address_pools.get",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "vpc_anycast_address_pool",
+      "from_request_field": "anycast_address_pool_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/List",
+    "permission": "vpc.anycast_address_poolses.list",
+    "required_relation": "v_list",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.AnycastAddressPoolService/Update",
+    "permission": "vpc.anycast_address_pools.update",
+    "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "vpc_anycast_address_pool",
+      "from_request_field": "anycast_address_pool_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.vpc.v1.GatewayService/Create",
     "permission": "vpc.gatewaies.create",
     "required_relation": "editor",

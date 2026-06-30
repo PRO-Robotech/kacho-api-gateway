@@ -40,7 +40,7 @@
 // # Активные сервисы
 //
 //   - iam.v1: Account, Project, User, ServiceAccount, Group, Role, AccessBinding
-//   - vpc.v1: Network, Subnet, Address, RouteTable, SecurityGroup, Gateway, NetworkInterface
+//   - vpc.v1: Network, Subnet, Address, AnycastAddressPool, RouteTable, SecurityGroup, Gateway, NetworkInterface
 //   - vpc.v1 admin (kacho-only): AddressPool, InternalNetwork — обслуживаются
 //     internal-портом vpc backend (9091).
 //   - compute.v1: Disk, Image, Snapshot, Instance, DiskType
@@ -342,6 +342,13 @@ func NewMux(
 		}
 		if err := vpcpb.RegisterNetworkInterfaceServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
 			return nil, fmt.Errorf("register NetworkInterfaceService: %w", err)
+		}
+		// AnycastAddressPool — tenant-facing ресурс vpc (public, /vpc/v1/anycastAddressPools).
+		// Регистрируется на public mux так же, как Subnet/Address; isInternalPath
+		// его не перехватывает (правило addressPools матчит только точный сегмент
+		// "addressPools", не "anycastAddressPools").
+		if err := vpcpb.RegisterAnycastAddressPoolServiceHandlerFromEndpoint(ctx, mux, vpcAddr, optsFor("vpc")); err != nil {
+			return nil, fmt.Errorf("register AnycastAddressPoolService: %w", err)
 		}
 
 		// --- vpc admin (AddressPool) — kacho-only, internal-port (9091) ---
