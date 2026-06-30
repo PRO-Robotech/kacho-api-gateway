@@ -1843,13 +1843,12 @@
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/List",
-    "permission": "loadbalancer.listeners.list",
-    "required_relation": "v_list",
+    "permission": "<exempt>",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "project_id"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.ListenerService/ListOperations",
@@ -1933,13 +1932,12 @@
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/List",
-    "permission": "loadbalancer.networkLoadBalancers.list",
-    "required_relation": "v_list",
+    "permission": "<exempt>",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "project_id"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/ListOperations",
@@ -2033,13 +2031,12 @@
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/List",
-    "permission": "loadbalancer.targetGroups.list",
-    "required_relation": "v_list",
+    "permission": "<exempt>",
+    "required_relation": "",
     "scope_extractor": {
-      "object_type": "project",
-      "from_request_field": "project_id"
-    },
-    "required_acr_min": "2"
+      "object_type": "",
+      "from_request_field": ""
+    }
   },
   {
     "fqn": "kacho.cloud.loadbalancer.v1.TargetGroupService/ListOperations",
