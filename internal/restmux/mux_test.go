@@ -113,6 +113,28 @@ func TestIsInternalPath(t *testing.T) {
 			want: false,
 		},
 
+		// --- (4) gRPC-style unbound-method REST paths of Internal*-сервисов ---
+		// InternalLoadBalancerAnnounceService (announce-state) — REST форма
+		// `/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/<Method>`.
+		// HasInternalSuffix распознает `Internal<Xxx>Service` → internal mux.
+		{
+			name: "announce GetAnnounceState (internal)",
+			path: "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState",
+			want: true,
+		},
+		{
+			name: "announce ReportAnnounceState (internal)",
+			path: "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState",
+			want: true,
+		},
+		// Публичный gRPC-style сервис (без Internal-префикса) НЕ должен попасть на
+		// internal mux — guard, что правило (4) ловит только Internal*-сервисы.
+		{
+			name: "public grpc-style service stays public",
+			path: "/kacho.cloud.loadbalancer.v1.NetworkLoadBalancerService/Get",
+			want: false,
+		},
+
 		// --- public surfaces (must NOT go to internal) ---
 		{
 			name: "instance list (public)",

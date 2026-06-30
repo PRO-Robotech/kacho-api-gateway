@@ -47,6 +47,12 @@ var internalRESTPaths = []struct{ method, path string }{
 	// :internal verb-suffix (InternalNetworkService.GetNetwork REST path) — the
 	// real internal projection route. isInternalPath must match this too.
 	{"GET", "/vpc/v1/networks/net-1:internal"},
+	// InternalLoadBalancerAnnounceService — gRPC-style unbound-method REST paths
+	// (announce-state). MUST be 404 on the external listener (Internal*, ban #6)
+	// and reachable on the internal listener. isInternalPath classifies these via
+	// allowlist.HasInternalSuffix.
+	{"POST", "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState"},
+	{"POST", "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState"},
 }
 
 // TestExternalListener_RejectsInternalPaths_404 — an Internal* REST path

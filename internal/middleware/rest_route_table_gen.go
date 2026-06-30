@@ -313,6 +313,14 @@ var generatedRestRoutes = []restRoute{
 	{Method: "POST", Template: "/nlb/v1/targetGroups/{target_group_id}:move", FQN: "kacho.cloud.loadbalancer.v1.TargetGroupService/Move"},
 	{Method: "POST", Template: "/nlb/v1/targetGroups/{target_group_id}:addTargets", FQN: "kacho.cloud.loadbalancer.v1.TargetGroupService/AddTargets"},
 	{Method: "POST", Template: "/nlb/v1/targetGroups/{target_group_id}:removeTargets", FQN: "kacho.cloud.loadbalancer.v1.TargetGroupService/RemoveTargets"},
+	// InternalLoadBalancerAnnounceService — announce-state, cluster-internal only
+	// (запрет #6). grpc-gateway отдает gRPC-style unbound-method REST-маршруты
+	// (нет `google.api.http`-template). Hand-added here until the route extractor
+	// reruns. Резолв path->FQN нужен, чтобы authz-middleware сопоставил запрос с
+	// записью каталога; иначе grpcMethodForPath дал бы искаженный FQN и каталог не
+	// нашелся бы. isInternalPath держит эти пути на internal listener.
+	{Method: "POST", Template: "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState", FQN: "kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState"},
+	{Method: "POST", Template: "/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState", FQN: "kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState"},
 	{Method: "GET", Template: "/opa/v1/bundle.tar.gz", FQN: "kacho.cloud.iam.v1.OpaBundleService/GetBundle"},
 	{Method: "GET", Template: "/opa/v1/bundle.tar.gz.sig", FQN: "kacho.cloud.iam.v1.OpaBundleService/GetBundleSignature"},
 	{Method: "GET", Template: "/opa/v1/bundle/revision", FQN: "kacho.cloud.iam.v1.OpaBundleService/GetRevision"},

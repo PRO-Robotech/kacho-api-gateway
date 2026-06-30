@@ -55,6 +55,10 @@
 //   - loadbalancer.v1 (kacho-nlb): NetworkLoadBalancerService, ListenerService,
 //     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
 //     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
+//   - loadbalancer.v1 admin (kacho-only): InternalLoadBalancerAnnounceService —
+//     announce-state (GetAnnounceState/ReportAnnounceState) на internal-порту nlb backend
+//     (loadbalancerInternal, 9091); cluster-internal only (запрет #6). REST-маршруты —
+//     gRPC-style unbound-method форма.
 //   - iam.v1: Account, Project, User (read+delete only), ServiceAccount, Group, Role, AccessBinding —
 //     все RPC public под /iam/v1/*.
 //   - iam.v1 admin (kacho-only): InternalUserService.Get — для admin tooling; зарегистрирован
@@ -86,6 +90,7 @@ import (
 	lbpb "github.com/PRO-Robotech/kacho-nlb/proto/gen/go/kacho/cloud/loadbalancer/v1"
 	vpcpb "github.com/PRO-Robotech/kacho-vpc/proto/gen/go/kacho/cloud/vpc/v1"
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
@@ -140,7 +145,16 @@ func buildPrincipalMetadata(r *http.Request) metadata.MD {
 //     (InternalNetworkService.GetNetwork) и любые будущие `*/internal` / `*:internal`.
 //  2. `/vpc/v1/addressPools` → internal.
 //  3. `/vpc/v1/networks/{id}/addressPoolBinding` → internal.
-//  4. Все остальное → public.
+//  4. gRPC-style unbound-method REST-путь Internal*-сервиса
+//     (`/kacho.cloud.<domain>.v1.Internal<Xxx>Service/<Method>`) → internal.
+//     grpc-gateway генерирует такие маршруты (generate_unbound_methods) для
+//     Internal-RPC без `google.api.http`-template: они несут полностью
+//     квалифицированное gRPC-имя сервиса первым сегментом пути. Пример —
+//     InternalLoadBalancerAnnounceService (announce-state, инфра-данные
+//     placement/underlay). Классифицируем по сегменту сервиса через тот же
+//     allowlist.HasInternalSuffix, что и gRPC-роутер — единый источник истины,
+//     чтобы REST-проекция Internal*-сервиса не утекла на external (запрет #6).
+//  5. Все остальное → public.
 func isInternalPath(path string) bool {
 	// (1) any `/internal` segment.
 	// strings.Contains покрывает оба варианта:
@@ -172,6 +186,17 @@ func isInternalPath(path string) bool {
 		return true
 	}
 
+	// (4) gRPC-style unbound-method REST-путь Internal*-сервиса. Путь уже имеет
+	// форму gRPC-FQN (`/<pkg>.<Service>/<Method>`), поэтому переиспользуем
+	// allowlist.HasInternalSuffix напрямую — он распознает `Internal<Xxx>Service`
+	// в сегменте сервиса. REST-resource-пути (`/vpc/...`, `/iam/...`) сюда не
+	// попадают: их первый сегмент не содержит точки, и HasInternalSuffix вернет
+	// false. Так external-listener получает 404 на announce-RPC (запрет #6),
+	// а cluster-internal — обслуживается.
+	if allowlist.HasInternalSuffix(path) {
+		return true
+	}
+
 	return false
 }
 
@@ -190,9 +215,9 @@ func isInternalPath(path string) bool {
 //	"compute"              → compute.kacho.svc.cluster.local:9090
 //	"computeInternal"      → compute.kacho.svc.cluster.local:9091 (admin internal-порт)
 //	"loadbalancer"         → kacho-nlb.kacho.svc.cluster.local:9090
-//	"loadbalancerInternal" → kacho-nlb.kacho.svc.cluster.local:9091 (зарезервирован
-//	                        под admin/internal REST, если в будущем добавятся http-аннотации;
-//	                        сейчас InternalResourceLifecycleService — streaming gRPC-direct only)
+//	"loadbalancerInternal" → kacho-nlb.kacho.svc.cluster.local:9091 (admin/internal REST:
+//	                        InternalLoadBalancerAnnounceService announce-state; плюс
+//	                        InternalResourceLifecycleService — streaming gRPC-direct only)
 //	"geo"                  → kacho-geo.kacho.svc.cluster.local:9090 (Region/Zone read)
 //	"geoInternal"          → kacho-geo-internal.kacho.svc.cluster.local:9091 (admin Region/Zone CRUD)
 //
@@ -551,6 +576,19 @@ func NewMux(
 		if lbInternalAddr != "" {
 			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, optsFor("loadbalancerInternal")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer InternalResourceLifecycleService: %w", err)
+			}
+			// InternalLoadBalancerAnnounceService.GetAnnounceState / ReportAnnounceState —
+			// обмен announce-state между control-plane и data-plane announcer'ом
+			// (инфра-данные placement/underlay). У RPC есть HTTP-аннотации
+			// (generate_unbound_methods), поэтому grpc-gateway отдает REST-маршруты
+			// gRPC-style формы `/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/<Method>`.
+			// Маршрутизируется ТОЛЬКО на cluster-internal listener: isInternalPath
+			// классифицирует эти пути как internal (allowlist.HasInternalSuffix), а
+			// dispatcher отдает 404 на external (запрет #6). На gRPC-поверхности
+			// внешний proxy блокирует Internal*-сервис тем же HasInternalSuffix.
+			// authz-Check энфорсится backend'ом kacho-nlb на :9091.
+			if err := lbpb.RegisterInternalLoadBalancerAnnounceServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, optsFor("loadbalancerInternal")); err != nil {
+				return nil, fmt.Errorf("register loadbalancer InternalLoadBalancerAnnounceService: %w", err)
 			}
 		}
 

@@ -194,6 +194,11 @@ func TestGateway_D8_LoadbalancerActive(t *testing.T) {
 		// streaming gRPC-direct only — никаких HTTP-аннотаций, REST не регистрируется,
 		// внешний gRPC-proxy блокирует через HasInternalSuffix (Internal не на external).
 		"/kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
+		// InternalLoadBalancerAnnounceService — announce-state (инфра-данные
+		// placement/underlay). REST только на cluster-internal listener; в allowlist
+		// НЕ попадает (HasInternalSuffix блокирует на external; запрет #6).
+		"/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState",
+		"/kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState",
 	}
 	for _, m := range internalMethods {
 		m := m

@@ -1785,6 +1785,24 @@
     "required_acr_min": "2"
   },
   {
+    "fqn": "kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/ReportAnnounceState",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalResourceLifecycleService/Subscribe",
     "permission": "\u003cexempt\u003e",
     "required_relation": "",

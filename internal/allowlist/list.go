@@ -253,6 +253,10 @@ var AllowedMethods = map[string]struct{}{
 	// loadbalancer.v1 — InternalResourceLifecycleService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only;
 	// streaming Subscribe не имеет HTTP-аннотаций, REST не регистрируется.
+	// loadbalancer.v1 — InternalLoadBalancerAnnounceService.* (GetAnnounceState /
+	// ReportAnnounceState) — НЕ в allowlist (HasInternalSuffix блокирует
+	// автоматически; запрет #6). announce-state — инфра-данные placement/underlay;
+	// REST-проекция только на cluster-internal listener (см. restmux/mux.go).
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},
