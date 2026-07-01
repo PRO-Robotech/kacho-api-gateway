@@ -12,6 +12,10 @@ github.com/PRO-Robotech/kacho-geo v1.0.2 h1:GCC1dQlUklDC9a0E4zphWIePSacL+UXU8eHm
 github.com/PRO-Robotech/kacho-geo v1.0.2/go.mod h1:Ut4u8rocrx2HMm91dkvp2tJwLmxI709OKifvXl752w4=
 github.com/PRO-Robotech/kacho-iam v1.0.2 h1:m5hTGvtHDhPYxZcMRVg2iE4DGiT5GxPMt2ctqylHZW4=
 github.com/PRO-Robotech/kacho-iam v1.0.2/go.mod h1:ymkWHTbc84MB73kDuZAPdW6vLhC/QUmLuc/7G8cg82c=
+github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260701153440-44c22a2c78e2 h1:8yXTSFzFR9U2/uipyVc5y/97MI58UXBTOTsoYJtC7ik=
+github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260701153440-44c22a2c78e2/go.mod h1:DABwmDybaJrjF0nn9VSS9K+7xLJw/mYrrqq9YCE1wGo=
+github.com/PRO-Robotech/kacho-vpc v0.0.0-20260701103117-5311138318c9 h1:TjW7D5fwXekNjB1xLijvv+9ph2A6EbSPkEdUs+ZUtnc=
+github.com/PRO-Robotech/kacho-vpc v0.0.0-20260701103117-5311138318c9/go.mod h1:MHVzYyf1vy19zAC3K+8RVxq69jCLW2NU1PSUGHvGDCw=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

@@ -38,6 +38,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 )
 
-replace github.com/PRO-Robotech/kacho-vpc => ../kacho-vpc
+replace github.com/PRO-Robotech/kacho-vpc => github.com/PRO-Robotech/kacho-vpc v0.0.0-20260701103117-5311138318c9
 
-replace github.com/PRO-Robotech/kacho-nlb => ../kacho-nlb
+replace github.com/PRO-Robotech/kacho-nlb => github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260701153440-44c22a2c78e2
