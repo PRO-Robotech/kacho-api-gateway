@@ -15,6 +15,7 @@
 //	                           PrefixOperationCompute == PrefixInstance, см. kacho-corelib/ids)
 //	"iop" → iam               (ВСЕ операции iam-домена: Account/Project/User/SA/Group/Role/AccessBinding)
 //	"nlb" → loadbalancer      (ВСЕ операции kacho-nlb: NetworkLoadBalancer/Listener/TargetGroup)
+//	"rop" → registry          (ВСЕ операции kacho-registry: Registry/DeleteTag)
 //
 // Префикс заведомо стабильный: ровно 3 символа, lowercase crockford-base32-friendly.
 // Тело id (17 символов) — непрозрачно для proxy.
@@ -49,6 +50,8 @@ var prefixToBackend = map[string]string{
 	"iop": "iam", // все операции iam (Account/Project/User/SA/Group/Role/AccessBinding — общий op-prefix)
 	// loadbalancer domain
 	"nlb": "loadbalancer", // все операции kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup — общий op-prefix)
+	// registry domain
+	"rop": "registry", // все операции kacho-registry (Registry/DeleteTag — PrefixOperationReg в kacho-corelib/ids)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, все еще

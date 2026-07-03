@@ -8,10 +8,12 @@ import "strings"
 // AllowedMethods — публичные RPC-пути, маршрутизируемые через api-gateway.
 // Методы *InternalService.* НИКОГДА не включаются (запрет #6): их REST-проекция
 // доступна только на cluster-internal listener (см. restmux/mux.go).
-// Активны: iam, vpc, compute, geo, loadbalancer, operation. loadbalancer
-// (kacho-nlb) — NetworkLoadBalancer / Listener / TargetGroup публичные методы
-// добавлены ниже. InternalResourceLifecycleService (streaming, gRPC-direct only)
-// — НЕ в allowlist; блокируется HasInternalSuffix.
+// Активны: iam, vpc, compute, geo, loadbalancer, registry, operation.
+// loadbalancer (kacho-nlb) — NetworkLoadBalancer / Listener / TargetGroup
+// публичные методы добавлены ниже. registry (kacho-registry) — RegistryService
+// control-plane. InternalResourceLifecycleService (streaming, gRPC-direct only)
+// и InternalRegistryService (GC/stats admin, :9091) — НЕ в allowlist;
+// блокируются HasInternalSuffix.
 var AllowedMethods = map[string]struct{}{
 	// vpc.v1 — NetworkService
 	"/kacho.cloud.vpc.v1.NetworkService/Get":                {},
@@ -245,6 +247,22 @@ var AllowedMethods = map[string]struct{}{
 	// loadbalancer.v1 — InternalResourceLifecycleService.* — НЕ в allowlist
 	// (HasInternalSuffix блокирует автоматически; запрет #6). gRPC-direct only;
 	// streaming Subscribe не имеет HTTP-аннотаций, REST не регистрируется.
+
+	// registry.v1 — RegistryService (kacho-registry, control-plane реестра)
+	// Read — sync; мутации (Create/Update/Delete/DeleteTag) — async Operation.
+	// List/ListRepositories/ListTags авторизуются listauthz внутри сервиса
+	// (proto <exempt>), но в allowlist они присутствуют как публичные gRPC-пути.
+	// InternalRegistryService.* (GC/stats admin, :9091) — НЕ в allowlist
+	// (HasInternalSuffix блокирует автоматически; ban #6). Data-plane OCI v2 —
+	// отдельная поверхность, не через api-gateway.
+	"/kacho.cloud.registry.v1.RegistryService/Get":              {},
+	"/kacho.cloud.registry.v1.RegistryService/List":             {},
+	"/kacho.cloud.registry.v1.RegistryService/Create":           {},
+	"/kacho.cloud.registry.v1.RegistryService/Update":           {},
+	"/kacho.cloud.registry.v1.RegistryService/Delete":           {},
+	"/kacho.cloud.registry.v1.RegistryService/ListRepositories": {},
+	"/kacho.cloud.registry.v1.RegistryService/ListTags":         {},
+	"/kacho.cloud.registry.v1.RegistryService/DeleteTag":        {},
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},

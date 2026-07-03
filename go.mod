@@ -8,6 +8,7 @@ require (
 	github.com/PRO-Robotech/kacho-geo v1.0.2
 	github.com/PRO-Robotech/kacho-iam v1.0.2
 	github.com/PRO-Robotech/kacho-nlb v1.0.3
+	github.com/PRO-Robotech/kacho-registry v0.0.0
 	github.com/PRO-Robotech/kacho-vpc v1.0.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -41,3 +42,8 @@ require (
 replace github.com/PRO-Robotech/kacho-vpc => github.com/PRO-Robotech/kacho-vpc v0.0.0-20260701103117-5311138318c9
 
 replace github.com/PRO-Robotech/kacho-nlb => github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260701153440-44c22a2c78e2
+
+// kacho-registry еще не опубликован в GitHub (v0.0.0) — на период локальной
+// polyrepo-разработки резолвится из соседнего дерева. go.work дает тот же
+// override при GOWORK=on; при GOWORK=off работает этот replace.
+replace github.com/PRO-Robotech/kacho-registry => ../kacho-registry

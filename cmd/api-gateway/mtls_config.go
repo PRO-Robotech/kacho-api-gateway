@@ -106,6 +106,7 @@ func dialBackends(cfg config.Config) (proxy.Backends, func(), error) {
 // "loadbalancer"+"loadbalancerInternal" → "nlb" (the nlb service is keyed
 // "loadbalancer" in BackendAddrs to match its proto package).
 // "geo"+"geoInternal" → "geo".
+// "registry"+"registryInternal" → "registry".
 func backendEdge(backendKey string) string {
 	switch backendKey {
 	case "vpc", "vpcInternal":
@@ -118,6 +119,8 @@ func backendEdge(backendKey string) string {
 		return "nlb"
 	case "geo", "geoInternal":
 		return "geo"
+	case "registry", "registryInternal":
+		return "registry"
 	default:
 		// Unknown keys (e.g. "operation" self-loopback) have no cross-pod edge.
 		// They are never passed here in the production wiring; returning "" makes
