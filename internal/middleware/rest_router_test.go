@@ -4,7 +4,10 @@
 // rest_router_test.go — REST<->gRPC route resolution.
 package middleware
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRestRouter_Resolve_KnownRoutes(t *testing.T) {
 	r := NewRestRouter()
@@ -118,6 +121,63 @@ func TestRestRouter_PathTemplates(t *testing.T) {
 	tmpls := r.PathTemplates()
 	if got := tmpls["kacho.cloud.iam.v1.AccountService/Get"]; got != "/iam/v1/accounts/{account_id}" {
 		t.Errorf("PathTemplates[AccountService/Get] = %q, want /iam/v1/accounts/{account_id}", got)
+	}
+}
+
+// TestRestRouter_Resolve_RegeneratedCoverage — guard against the route-table
+// drifting behind the proto tree. When a domain adds a REST-exposed RPC but the
+// route table is not regenerated, the path fails to resolve → the authz gate
+// returns "catalog: no entry for method" (403) even though the method is
+// legitimate. These routes existed only in proto until the table was
+// regenerated from `google.api.http`; asserting them here fails loudly if a
+// future edit hand-maintains the table and re-introduces the lag.
+func TestRestRouter_Resolve_RegeneratedCoverage(t *testing.T) {
+	r := NewRestRouter()
+	cases := []struct {
+		method, path, wantFQN string
+	}{
+		// Compute InstanceGroup — whole service (own proto sub-package
+		// `kacho.cloud.compute.v1.instancegroup`) was absent from the table.
+		{"POST", "/compute/v1/instanceGroups", "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Create"},
+		{"POST", "/compute/v1/instanceGroups/igr0000000000000001:start", "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Start"},
+		{"POST", "/compute/v1/instanceGroups/igr0000000000000001:rollingRestart", "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/RollingRestart"},
+		// VPC RouteTable mutation verbs (kebab-case suffix-actions).
+		{"POST", "/vpc/v1/routeTables/rtb0000000000000001:add-routes", "kacho.cloud.vpc.v1.RouteTableService/AddRoutes"},
+		{"POST", "/vpc/v1/routeTables/rtb0000000000000001:remove-routes", "kacho.cloud.vpc.v1.RouteTableService/RemoveRoutes"},
+		{"POST", "/vpc/v1/routeTables/rtb0000000000000001:update-route", "kacho.cloud.vpc.v1.RouteTableService/UpdateRoute"},
+		// VPC InternalNetworkService read (internal-only `:internal` action).
+		{"GET", "/vpc/v1/networks/enp0000000000000001:internal", "kacho.cloud.vpc.v1.InternalNetworkService/GetNetwork"},
+		// IAM SAKeyService — service-account key subpaths under the SA item.
+		{"POST", "/iam/v1/serviceAccounts/sva0000000000000001/keys", "kacho.cloud.iam.v1.SAKeyService/Issue"},
+		{"GET", "/iam/v1/serviceAccounts/sva0000000000000001/keys", "kacho.cloud.iam.v1.SAKeyService/List"},
+		{"DELETE", "/iam/v1/serviceAccounts/sva0000000000000001/keys/key0000000000000001", "kacho.cloud.iam.v1.SAKeyService/Revoke"},
+		// IAM AccessBindingService scope-polymorphic reads (GET suffix-actions).
+		{"GET", "/iam/v1/accessBindings:listByScope", "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},
+		{"GET", "/iam/v1/accessBindings:listBySubject", "kacho.cloud.iam.v1.AccessBindingService/ListBySubject"},
+		// Registry — first REST-exposed registry resource.
+		{"POST", "/registry/v1/registries", "kacho.cloud.registry.v1.RegistryService/Create"},
+		{"DELETE", "/registry/v1/registries/reg0000000000000001/repositories/app/tags/v1", "kacho.cloud.registry.v1.RegistryService/DeleteTag"},
+	}
+	for _, c := range cases {
+		fqn, ok := r.Resolve(c.method, c.path)
+		if !ok {
+			t.Errorf("Resolve(%s %s): no match, want %s — route table stale (regenerate scripts/gen-rest-route-table.sh)", c.method, c.path, c.wantFQN)
+			continue
+		}
+		if fqn != c.wantFQN {
+			t.Errorf("Resolve(%s %s) = %s, want %s", c.method, c.path, fqn, c.wantFQN)
+		}
+	}
+
+	// Services deleted from proto must not leave dangling routes. If the table
+	// is regenerated from the current tree, no route may resolve to them.
+	for _, rt := range generatedRestRoutes {
+		switch {
+		case strings.HasPrefix(rt.FQN, "kacho.cloud.iam.v1.TrustPolicyService/"),
+			strings.HasPrefix(rt.FQN, "kacho.cloud.iam.v1.OpaBundleService/"),
+			strings.HasPrefix(rt.FQN, "kacho.cloud.iam.v1.FederationExchangeService/"):
+			t.Errorf("route table still contains %q — service removed from proto, stale entry", rt.FQN)
+		}
 	}
 }
 
