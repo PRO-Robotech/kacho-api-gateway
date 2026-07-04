@@ -490,6 +490,13 @@ func NewMux(
 			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
 			}
+			// UserTokenService (персональные API-токены пользователя). Public под
+			// /iam/v1/users/{user_id}/tokens. Зеркалит SAKeyService: Issue/Revoke —
+			// async Operation, List — sync. Без этой регистрации grpc-gateway не
+			// имеет REST-route → POST .../tokens → 404.
+			if err := iampb.RegisterUserTokenServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
+				return nil, fmt.Errorf("register iam UserTokenService: %w", err)
+			}
 			// AuthorizeService — tenant FGA check (POST /iam/v1/authorize:check).
 			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AuthorizeService: %w", err)

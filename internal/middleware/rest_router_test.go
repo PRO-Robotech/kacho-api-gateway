@@ -151,6 +151,11 @@ func TestRestRouter_Resolve_RegeneratedCoverage(t *testing.T) {
 		{"POST", "/iam/v1/serviceAccounts/sva0000000000000001/keys", "kacho.cloud.iam.v1.SAKeyService/Issue"},
 		{"GET", "/iam/v1/serviceAccounts/sva0000000000000001/keys", "kacho.cloud.iam.v1.SAKeyService/List"},
 		{"DELETE", "/iam/v1/serviceAccounts/sva0000000000000001/keys/key0000000000000001", "kacho.cloud.iam.v1.SAKeyService/Revoke"},
+		// IAM UserTokenService — personal API-token subpaths under the user item
+		// (mirrors SAKeyService, parent-scoped on iam_user).
+		{"POST", "/iam/v1/users/usr0000000000000001/tokens", "kacho.cloud.iam.v1.UserTokenService/Issue"},
+		{"GET", "/iam/v1/users/usr0000000000000001/tokens", "kacho.cloud.iam.v1.UserTokenService/List"},
+		{"DELETE", "/iam/v1/users/usr0000000000000001/tokens/uoc0000000000000001", "kacho.cloud.iam.v1.UserTokenService/Revoke"},
 		// IAM AccessBindingService scope-polymorphic reads (GET suffix-actions).
 		{"GET", "/iam/v1/accessBindings:listByScope", "kacho.cloud.iam.v1.AccessBindingService/ListByScope"},
 		{"GET", "/iam/v1/accessBindings:listBySubject", "kacho.cloud.iam.v1.AccessBindingService/ListBySubject"},
