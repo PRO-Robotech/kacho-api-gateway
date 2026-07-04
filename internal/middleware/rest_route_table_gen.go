@@ -305,6 +305,7 @@ var generatedRestRoutes = []restRoute{
 	{Method: "DELETE", Template: "/registry/v1/registries/{registry_id}", FQN: "kacho.cloud.registry.v1.RegistryService/Delete"},
 	{Method: "GET", Template: "/registry/v1/registries/{registry_id}", FQN: "kacho.cloud.registry.v1.RegistryService/Get"},
 	{Method: "PATCH", Template: "/registry/v1/registries/{registry_id}", FQN: "kacho.cloud.registry.v1.RegistryService/Update"},
+	{Method: "GET", Template: "/registry/v1/registries/{registry_id}/operations", FQN: "kacho.cloud.registry.v1.RegistryService/ListOperations"},
 	{Method: "GET", Template: "/registry/v1/registries/{registry_id}/repositories", FQN: "kacho.cloud.registry.v1.RegistryService/ListRepositories"},
 	{Method: "GET", Template: "/registry/v1/registries/{registry_id}/repositories/{repository}/tags", FQN: "kacho.cloud.registry.v1.RegistryService/ListTags"},
 	{Method: "DELETE", Template: "/registry/v1/registries/{registry_id}/repositories/{repository}/tags/{tag}", FQN: "kacho.cloud.registry.v1.RegistryService/DeleteTag"},

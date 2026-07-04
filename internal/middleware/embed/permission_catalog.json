@@ -2082,6 +2082,92 @@
     }
   },
   {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/Create",
+    "permission": "registry.registries.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/Delete",
+    "permission": "registry.registries.delete",
+    "required_relation": "v_delete",
+    "scope_extractor": {
+      "object_type": "registry_registry",
+      "from_request_field": "registry_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/DeleteTag",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/Get",
+    "permission": "registry.registries.get",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "registry_registry",
+      "from_request_field": "registry_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/List",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/ListOperations",
+    "permission": "registry.registries.listOperations",
+    "required_relation": "v_list",
+    "scope_extractor": {
+      "object_type": "registry_registry",
+      "from_request_field": "registry_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/ListRepositories",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/ListTags",
+    "permission": "\u003cexempt\u003e",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
+    "fqn": "kacho.cloud.registry.v1.RegistryService/Update",
+    "permission": "registry.registries.update",
+    "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "registry_registry",
+      "from_request_field": "registry_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
     "fqn": "kacho.cloud.vpc.v1.AddressService/Create",
     "permission": "vpc.addresses.create",
     "required_relation": "editor",

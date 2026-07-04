@@ -263,6 +263,7 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.registry.v1.RegistryService/ListRepositories": {},
 	"/kacho.cloud.registry.v1.RegistryService/ListTags":         {},
 	"/kacho.cloud.registry.v1.RegistryService/DeleteTag":        {},
+	"/kacho.cloud.registry.v1.RegistryService/ListOperations":   {},
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},
