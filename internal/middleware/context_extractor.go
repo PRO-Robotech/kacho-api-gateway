@@ -59,16 +59,45 @@ type ContextExtractor struct {
 	// (typical k8s ingress topology); operators can flip to false when
 	// running api-gateway directly on the wire.
 	trustedXForwardedFor bool
+
+	// trustedProxyCount is the number of trusted reverse-proxy hops in front of
+	// the gateway. X-Forwarded-For is read from the RIGHT — the client IP is the
+	// entry the OUTERMOST trusted proxy recorded (parts[len-trustedProxyCount]).
+	// A client can only forge entries to the LEFT of that trusted block, which we
+	// never select, so a spoofed leftmost XFF can no longer drive `client_ip`.
+	// 0 disables forwarded-header trust entirely (TCP peer is authoritative).
+	// Default 1 (single k8s ingress).
+	trustedProxyCount int
+}
+
+// ExtractorOption configures a ContextExtractor at construction.
+type ExtractorOption func(*ContextExtractor)
+
+// WithTrustedProxyHops sets the number of trusted reverse-proxy hops in front of
+// the gateway (see ContextExtractor.trustedProxyCount). 0 disables
+// forwarded-header trust; the TCP peer becomes authoritative.
+func WithTrustedProxyHops(n int) ExtractorOption {
+	return func(e *ContextExtractor) {
+		if n < 0 {
+			n = 0
+		}
+		e.trustedProxyCount = n
+	}
 }
 
 // NewContextExtractor constructs an extractor. now=nil falls back to
 // time.Now; trustedXForwardedFor toggles X-Forwarded-For honour (see field
-// comment).
-func NewContextExtractor(now func() time.Time, trustedXForwardedFor bool) *ContextExtractor {
+// comment). The number of trusted proxy hops defaults to 1 and can be overridden
+// with WithTrustedProxyHops.
+func NewContextExtractor(now func() time.Time, trustedXForwardedFor bool, opts ...ExtractorOption) *ContextExtractor {
 	if now == nil {
 		now = time.Now
 	}
-	return &ContextExtractor{now: now, trustedXForwardedFor: trustedXForwardedFor}
+	e := &ContextExtractor{now: now, trustedXForwardedFor: trustedXForwardedFor, trustedProxyCount: 1}
+	for _, o := range opts {
+		o(e)
+	}
+	return e
 }
 
 // BuildHTTP composes the context map for an HTTP request path.
@@ -166,26 +195,12 @@ func (e *ContextExtractor) fillFromToken(out map[string]any, t *VerifiedToken) {
 	}
 }
 
-// resolveClientIP returns the canonical client IP literal for an HTTP request,
-// honouring X-Forwarded-For / X-Real-IP only when trustedXForwardedFor is set.
-// Empty string when unresolvable.
+// resolveClientIP returns the canonical client IP literal for an HTTP request.
+// Forwarded headers are consulted only via clientIPFromForwardHeaders (trusted,
+// hop-indexed); otherwise the authoritative TCP peer (RemoteAddr) is used.
 func (e *ContextExtractor) resolveClientIP(r *http.Request) string {
-	if e.trustedXForwardedFor {
-		if v := r.Header.Get("X-Real-IP"); v != "" {
-			if ip := strings.TrimSpace(v); validIP(ip) {
-				return canonicaliseIP(ip)
-			}
-		}
-		if v := r.Header.Get("X-Forwarded-For"); v != "" {
-			// XFF is comma-separated; the leftmost entry is the original
-			// client (per the proxy convention all reverse-proxies follow).
-			parts := strings.Split(v, ",")
-			if len(parts) > 0 {
-				if ip := strings.TrimSpace(parts[0]); validIP(ip) {
-					return canonicaliseIP(ip)
-				}
-			}
-		}
+	if ip := e.clientIPFromForwardHeaders(r.Header.Get("X-Real-IP"), r.Header.Get("X-Forwarded-For")); ip != "" {
+		return ip
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -199,13 +214,8 @@ func (e *ContextExtractor) resolveClientIP(r *http.Request) string {
 
 // resolveIPFromPeer is the gRPC peer.Addr equivalent of resolveClientIP.
 func (e *ContextExtractor) resolveIPFromPeer(peerAddr net.Addr, headerFwd string) string {
-	if e.trustedXForwardedFor && headerFwd != "" {
-		parts := strings.Split(headerFwd, ",")
-		if len(parts) > 0 {
-			if ip := strings.TrimSpace(parts[0]); validIP(ip) {
-				return canonicaliseIP(ip)
-			}
-		}
+	if ip := e.clientIPFromForwardHeaders("", headerFwd); ip != "" {
+		return ip
 	}
 	if peerAddr == nil {
 		return ""
@@ -216,6 +226,35 @@ func (e *ContextExtractor) resolveIPFromPeer(peerAddr net.Addr, headerFwd string
 	}
 	if validIP(host) {
 		return canonicaliseIP(host)
+	}
+	return ""
+}
+
+// clientIPFromForwardHeaders returns the client IP asserted by trusted reverse
+// proxies, or "" when forwarded headers must not be trusted (so the caller falls
+// back to the TCP peer). Only honoured when trustedXForwardedFor is set AND at
+// least one trusted proxy hop is configured.
+//
+// X-Forwarded-For is parsed from the RIGHT: with N trusted hops the client IP is
+// parts[len-N] — the entry the outermost trusted proxy recorded. A client can
+// only prepend forged entries to the LEFT of that block (never selected), so a
+// spoofed leftmost XFF can no longer drive `client_ip` / `source_ip_in_range`.
+// X-Real-IP (a single value a trusted proxy computed) is honoured only as a
+// fallback and only when a trusted proxy is present.
+func (e *ContextExtractor) clientIPFromForwardHeaders(xRealIP, xff string) string {
+	if !e.trustedXForwardedFor || e.trustedProxyCount <= 0 {
+		return ""
+	}
+	if xff != "" {
+		parts := strings.Split(xff, ",")
+		if idx := len(parts) - e.trustedProxyCount; idx >= 0 && idx < len(parts) {
+			if ip := strings.TrimSpace(parts[idx]); validIP(ip) {
+				return canonicaliseIP(ip)
+			}
+		}
+	}
+	if v := strings.TrimSpace(xRealIP); v != "" && validIP(v) {
+		return canonicaliseIP(v)
 	}
 	return ""
 }

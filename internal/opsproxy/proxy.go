@@ -159,7 +159,7 @@ func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Get(propagateMetadata(ctx), req)
+	op, err := client.Get(principalmeta.OutgoingFromIncoming(ctx), req)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Cancel(propagateMetadata(ctx), req)
+	op, err := client.Cancel(principalmeta.OutgoingFromIncoming(ctx), req)
 	if err != nil {
 		return nil, err
 	}
@@ -185,22 +185,6 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 		return nil, err
 	}
 	return op, nil
-}
-
-// propagateMetadata конвертирует incoming gRPC metadata в outgoing для
-// последующего вызова backend. Если incoming metadata отсутствует — возвращает
-// ctx как есть (не оборачиваем пустым MD, чтобы downstream interceptor'ы
-// видели «нет metadata» а не «есть пустая metadata»).
-//
-// Тот же pattern что в server.go (Resolver) и shimproxy.go — все cross-process
-// gRPC hops в gateway обязаны это делать, иначе principal/request-id headers
-// теряются.
-func propagateMetadata(ctx context.Context) context.Context {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ctx
-	}
-	return metadata.NewOutgoingContext(ctx, md.Copy())
 }
 
 // checkOperationOwnership проверяет что principal в ctx совпадает с
