@@ -560,164 +560,203 @@ func extractBearer(ctx context.Context) string {
 // Authorization Bearer.
 func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Strip incoming X-Kacho-Principal-* headers до auth-flow. Client может
-		// передать `X-Kacho-Principal-Type: user` и обойти auth — это полное
-		// privilege escalation. Заголовки устанавливаются ТОЛЬКО auth-middleware
-		// после resolved Bearer/Kratos. Также чистим
-		// `Grpc-Metadata-X-Kacho-Principal-*` (grpc-gateway canonical convention)
-		// и нижне-case варианты.
-		for k := range r.Header {
-			if isClientForgeableIdentityHeader(strings.ToLower(k)) {
-				r.Header.Del(k)
-			}
-		}
+		// Strip client-forgeable identity headers before any auth path runs, then
+		// try each strategy in fail-closed order. The `injected` flag from the
+		// Kratos path suppresses the JWT paths (a resolved session wins). The
+		// Hydra and dev-JWT paths are terminal when they apply: they either write
+		// a 401 or serve `next` themselves and report handled=true.
+		a.stripForgeableIdentityHeaders(r)
 
-		// Kratos session-based auth (cookie ory_kratos_session).
-		// Резолвится ДО JWT-path, чтобы SPA-пользователи (без Bearer) получали
-		// principal. Если whoami возвращает active session — выставляем headers
-		// и пропускаем JWT-блок. Иначе — fallback на JWT.
-		injected := false
-		if a.kratos != nil {
-			cookieHdr := r.Header.Get("Cookie")
-			if strings.Contains(cookieHdr, "ory_kratos_session") {
-				res := a.kratos.Whoami(r.Context(), cookieHdr)
-				if res.Active && res.IdentityID != "" {
-					var subj Subject
-					var err error
-					// Если lookuper поддерживает lazy-upsert (Kratos new-user
-					// path) — используем его; иначе обычный lookup.
-					if kl, ok := a.subjectLookup.(KratosSubjectLookuper); ok {
-						subj, err = kl.LookupOrUpsertFromKratos(r.Context(), res.IdentityID, res.Email, res.DisplayName)
-					} else {
-						subj, err = a.subjectLookup.LookupByExternalID(r.Context(), res.IdentityID)
-					}
-					if err != nil {
-						a.logger.Debug("auth.HTTP: Kratos SubjectLookup failed",
-							"identity_id", res.IdentityID, "err", err.Error())
-					} else {
-						r.Header.Set("X-Kacho-Principal-Type", subj.Type)
-						r.Header.Set("X-Kacho-Principal-Id", subj.ID)
-						r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
-						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
-						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
-						r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
-						a.logger.Info("auth.HTTP: Principal injected (Kratos)",
-							"type", subj.Type, "id", subj.ID, "email", res.Email)
-						injected = true
-					}
-				}
-			}
-		}
+		injected := a.tryKratosSession(r)
+		a.rewriteCookieToBearer(r)
 
-		// Cookie → Bearer rewrite.
-		if r.Header.Get("Authorization") == "" {
-			if c, err := r.Cookie("kacho_session"); err == nil && c.Value != "" {
-				r.Header.Set("Authorization", "Bearer "+c.Value)
-			}
-		}
-
-		// REST→backend Principal propagation (JWT path).
-		// gRPC server interceptor работает только для grpc-proxy path, не для grpc-gateway
-		// REST. Здесь делаем JWT-parse + SubjectLookup + ставим headers
-		// `X-Kacho-Principal-*`. Дальше restmux.NewMux WithMetadata callback явно
-		// читает их из http.Request и кладет в outgoing gRPC metadata
-		// `x-kacho-principal-*`, которые backend читает через
-		// corelib/grpcsrv.UnaryPrincipalExtract. Также пишем legacy-form
-		// `Grpc-Metadata-X-Kacho-Principal-*` для совместимости с default
-		// grpc-gateway convention (если WithMetadata не работает — fallback path).
-		// Hydra-issued RS256/ES256/EdDSA access JWT over REST — validate
-		// via the JWKS verifier (parity with the gRPC interceptor path) and
-		// derive the principal from the verified `kacho_principal_*` claims
-		// (top-level or ext_claims). A present-but-bad token or an unreachable
-		// JWKS endpoint → 401 fail-closed, NEVER passed through anonymous.
-		if auth := r.Header.Get("Authorization"); !injected && a.verifier != nil {
-			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok && isAsymmetricJWT(tok) {
-				vt, verr := a.verifier.Verify(r.Context(), tok)
-				if verr != nil {
-					a.logger.Warn("auth.HTTP: Hydra JWT validate failed (JWKS)", "err", verr.Error())
-					writeHTTPUnauthorized(w, "token validation failed")
-					return
-				}
-				if pType, pID, display, perr := principalFromVerifiedToken(vt); perr == nil {
-					setPrincipalHeaders(r, pType, pID, display)
-					a.logger.Info("auth.HTTP: Principal injected (Hydra JWT)", "type", pType, "id", pID)
-					next.ServeHTTP(w, r)
-					return
-				}
-				// Claims absent → fall back to SubjectLookuper on the verified sub.
-				if vt.Subject == "" {
-					a.logger.Warn("auth.HTTP: Hydra JWT has empty sub and no kacho_principal_* claims")
-					writeHTTPUnauthorized(w, "token missing subject")
-					return
-				}
-				if subj, lerr := a.subjectLookup.LookupByExternalID(r.Context(), vt.Subject); lerr != nil {
-					a.logger.Debug("auth.HTTP: SubjectLookup failed (Hydra JWT fallback)", "external_id", vt.Subject, "err", lerr.Error())
-				} else {
-					setPrincipalHeaders(r, subj.Type, subj.ID, subj.DisplayName)
-					a.logger.Info("auth.HTTP: Principal injected (Hydra JWT fallback)", "type", subj.Type, "id", subj.ID)
-				}
-				next.ServeHTTP(w, r)
+		if !injected {
+			if a.tryHydraJWT(w, r, next) {
 				return
 			}
-		}
-
-		if auth := r.Header.Get("Authorization"); !injected && auth != "" && len(a.devSecret) > 0 {
-			if tok, ok := strings.CutPrefix(auth, "Bearer "); ok {
-				claims, jwtErr := a.validateJWT(tok)
-				if jwtErr != nil {
-					// A Bearer header that is present but malformed / expired /
-					// signature-invalid is a failed authN attempt → reject with
-					// 401 BEFORE authz, never pass it through as anonymous (which
-					// surfaces as 403).
-					a.logger.Warn("auth.HTTP: JWT validate failed", "err", jwtErr.Error())
-					writeHTTPUnauthorized(w, "token validation failed")
-					return
-				}
-				subjectID, _ := claims["sub"].(string)
-				if subjectID == "" {
-					a.logger.Warn("auth.HTTP: JWT has empty sub")
-					writeHTTPUnauthorized(w, "token missing subject")
-					return
-				}
-				// Service Account / API-token principals.
-				// A client_credentials / API token carries
-				// `kacho_principal_type=service_account` + `kacho_sa_id`; `sub`
-				// is the SA id, not a User external_id, so the User lookup below
-				// would miss and leave the request principal-less → the authz
-				// layer then denies it as unauthenticated. Resolve the SA
-				// principal directly from the typed claims (parity with the
-				// gRPC intercept path).
-				if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
-					saID, _ := claims["kacho_sa_id"].(string)
-					if saID == "" {
-						saID = subjectID
-					}
-					r.Header.Set("X-Kacho-Principal-Type", "service_account")
-					r.Header.Set("X-Kacho-Principal-Id", saID)
-					r.Header.Set("X-Kacho-Principal-Display-Name", saID)
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", "service_account")
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", saID)
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", saID)
-					a.logger.Info("auth.HTTP: SA principal injected", "id", saID)
-					next.ServeHTTP(w, r)
-					return
-				}
-				subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
-				if lookupErr != nil {
-					a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
-				} else {
-					// Plain headers — WithMetadata callback in restmux форвардит.
-					r.Header.Set("X-Kacho-Principal-Type", subj.Type)
-					r.Header.Set("X-Kacho-Principal-Id", subj.ID)
-					r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
-					// Legacy form — grpc-gateway default convention fallback.
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
-					r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
-					a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
-				}
+			if a.tryDevSecretJWT(w, r, next) {
+				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// stripForgeableIdentityHeaders removes incoming X-Kacho-Principal-* (and the
+// grpc-gateway `Grpc-Metadata-` / lower-case variants) so a client cannot forge
+// `X-Kacho-Principal-Type: user` and bypass auth (full privilege escalation).
+// These headers are set ONLY by the auth middleware after a resolved
+// Bearer/Kratos credential.
+func (a *AuthInterceptor) stripForgeableIdentityHeaders(r *http.Request) {
+	for k := range r.Header {
+		if isClientForgeableIdentityHeader(strings.ToLower(k)) {
+			r.Header.Del(k)
+		}
+	}
+}
+
+// tryKratosSession resolves a Kratos session cookie (ory_kratos_session) to a
+// principal BEFORE the JWT paths so SPA users without a Bearer get a principal.
+// Returns true when a principal was injected (which suppresses the JWT paths).
+func (a *AuthInterceptor) tryKratosSession(r *http.Request) bool {
+	if a.kratos == nil {
+		return false
+	}
+	cookieHdr := r.Header.Get("Cookie")
+	if !strings.Contains(cookieHdr, "ory_kratos_session") {
+		return false
+	}
+	res := a.kratos.Whoami(r.Context(), cookieHdr)
+	if !res.Active || res.IdentityID == "" {
+		return false
+	}
+	var subj Subject
+	var err error
+	// Если lookuper поддерживает lazy-upsert (Kratos new-user path) — используем
+	// его; иначе обычный lookup.
+	if kl, ok := a.subjectLookup.(KratosSubjectLookuper); ok {
+		subj, err = kl.LookupOrUpsertFromKratos(r.Context(), res.IdentityID, res.Email, res.DisplayName)
+	} else {
+		subj, err = a.subjectLookup.LookupByExternalID(r.Context(), res.IdentityID)
+	}
+	if err != nil {
+		a.logger.Debug("auth.HTTP: Kratos SubjectLookup failed",
+			"identity_id", res.IdentityID, "err", err.Error())
+		return false
+	}
+	r.Header.Set("X-Kacho-Principal-Type", subj.Type)
+	r.Header.Set("X-Kacho-Principal-Id", subj.ID)
+	r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
+	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
+	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+	a.logger.Info("auth.HTTP: Principal injected (Kratos)",
+		"type", subj.Type, "id", subj.ID, "email", res.Email)
+	return true
+}
+
+// rewriteCookieToBearer rewrites the UI `kacho_session` cookie into an
+// Authorization: Bearer header when no Authorization header is present.
+func (a *AuthInterceptor) rewriteCookieToBearer(r *http.Request) {
+	if r.Header.Get("Authorization") != "" {
+		return
+	}
+	if c, err := r.Cookie("kacho_session"); err == nil && c.Value != "" {
+		r.Header.Set("Authorization", "Bearer "+c.Value)
+	}
+}
+
+// tryHydraJWT validates a Hydra-issued asymmetric (RS256/ES256/EdDSA) access JWT
+// over REST via the JWKS verifier (parity with the gRPC interceptor path) and
+// derives the principal from the verified `kacho_principal_*` claims (top-level
+// or ext_claims), falling back to SubjectLookuper on the verified sub. A
+// present-but-bad token or unreachable JWKS → 401 fail-closed, never anonymous.
+// Returns true when this path was terminal (401 written, or principal resolved
+// and `next` served) — i.e. the caller must return. Returns false when the path
+// does not apply (no verifier / not an asymmetric Bearer) so the next strategy
+// runs.
+func (a *AuthInterceptor) tryHydraJWT(w http.ResponseWriter, r *http.Request, next http.Handler) bool {
+	if a.verifier == nil {
+		return false
+	}
+	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || !isAsymmetricJWT(tok) {
+		return false
+	}
+	vt, verr := a.verifier.Verify(r.Context(), tok)
+	if verr != nil {
+		a.logger.Warn("auth.HTTP: Hydra JWT validate failed (JWKS)", "err", verr.Error())
+		writeHTTPUnauthorized(w, "token validation failed")
+		return true
+	}
+	if pType, pID, display, perr := principalFromVerifiedToken(vt); perr == nil {
+		setPrincipalHeaders(r, pType, pID, display)
+		a.logger.Info("auth.HTTP: Principal injected (Hydra JWT)", "type", pType, "id", pID)
+		next.ServeHTTP(w, r)
+		return true
+	}
+	// Claims absent → fall back to SubjectLookuper on the verified sub.
+	if vt.Subject == "" {
+		a.logger.Warn("auth.HTTP: Hydra JWT has empty sub and no kacho_principal_* claims")
+		writeHTTPUnauthorized(w, "token missing subject")
+		return true
+	}
+	if subj, lerr := a.subjectLookup.LookupByExternalID(r.Context(), vt.Subject); lerr != nil {
+		a.logger.Debug("auth.HTTP: SubjectLookup failed (Hydra JWT fallback)", "external_id", vt.Subject, "err", lerr.Error())
+	} else {
+		setPrincipalHeaders(r, subj.Type, subj.ID, subj.DisplayName)
+		a.logger.Info("auth.HTTP: Principal injected (Hydra JWT fallback)", "type", subj.Type, "id", subj.ID)
+	}
+	next.ServeHTTP(w, r)
+	return true
+}
+
+// tryDevSecretJWT validates a symmetric dev-secret Bearer JWT and injects the
+// principal (service-account or User-lookup). A present-but-invalid token → 401
+// fail-closed. Returns true only when the path was terminal (401, or an SA
+// principal was injected and `next` served). For the ordinary User-lookup case
+// it sets the headers and returns false so the caller serves `next` once at the
+// end (preserving the original fall-through).
+func (a *AuthInterceptor) tryDevSecretJWT(w http.ResponseWriter, r *http.Request, next http.Handler) bool {
+	if r.Header.Get("Authorization") == "" || len(a.devSecret) == 0 {
+		return false
+	}
+	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return false
+	}
+	claims, jwtErr := a.validateJWT(tok)
+	if jwtErr != nil {
+		// A Bearer header that is present but malformed / expired /
+		// signature-invalid is a failed authN attempt → reject with
+		// 401 BEFORE authz, never pass it through as anonymous (which
+		// surfaces as 403).
+		a.logger.Warn("auth.HTTP: JWT validate failed", "err", jwtErr.Error())
+		writeHTTPUnauthorized(w, "token validation failed")
+		return true
+	}
+	subjectID, _ := claims["sub"].(string)
+	if subjectID == "" {
+		a.logger.Warn("auth.HTTP: JWT has empty sub")
+		writeHTTPUnauthorized(w, "token missing subject")
+		return true
+	}
+	// Service Account / API-token principals.
+	// A client_credentials / API token carries
+	// `kacho_principal_type=service_account` + `kacho_sa_id`; `sub`
+	// is the SA id, not a User external_id, so the User lookup below
+	// would miss and leave the request principal-less → the authz
+	// layer then denies it as unauthenticated. Resolve the SA
+	// principal directly from the typed claims (parity with the
+	// gRPC intercept path).
+	if pt, _ := claims["kacho_principal_type"].(string); pt == "service_account" {
+		saID, _ := claims["kacho_sa_id"].(string)
+		if saID == "" {
+			saID = subjectID
+		}
+		r.Header.Set("X-Kacho-Principal-Type", "service_account")
+		r.Header.Set("X-Kacho-Principal-Id", saID)
+		r.Header.Set("X-Kacho-Principal-Display-Name", saID)
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", "service_account")
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", saID)
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", saID)
+		a.logger.Info("auth.HTTP: SA principal injected", "id", saID)
+		next.ServeHTTP(w, r)
+		return true
+	}
+	subj, lookupErr := a.subjectLookup.LookupByExternalID(r.Context(), subjectID)
+	if lookupErr != nil {
+		a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
+	} else {
+		// Plain headers — WithMetadata callback in restmux форвардит.
+		r.Header.Set("X-Kacho-Principal-Type", subj.Type)
+		r.Header.Set("X-Kacho-Principal-Id", subj.ID)
+		r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+		// Legacy form — grpc-gateway default convention fallback.
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
+		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+		a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
+	}
+	return false
 }
