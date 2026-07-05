@@ -81,16 +81,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	computepb "github.com/PRO-Robotech/kacho-compute/proto/gen/go/kacho/cloud/compute/v1"
+	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	// geo.v1 — Region/Zone leaf-сервис kacho-geo.
-	geopb "github.com/PRO-Robotech/kacho-geo/proto/gen/go/kacho/cloud/geo/v1"
-	iampb "github.com/PRO-Robotech/kacho-iam/proto/gen/go/kacho/cloud/iam/v1"
+	geopb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/geo/v1"
+	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
-	operationpb "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/cloud/operation"
-	lbpb "github.com/PRO-Robotech/kacho-nlb/proto/gen/go/kacho/cloud/loadbalancer/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
 	// kacho-registry (registry.v1) — public RPC под /registry/v1/*.
-	registrypb "github.com/PRO-Robotech/kacho-registry/proto/gen/go/kacho/cloud/registry/v1"
-	vpcpb "github.com/PRO-Robotech/kacho-vpc/proto/gen/go/kacho/cloud/vpc/v1"
+	registrypb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/registry/v1"
+	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"

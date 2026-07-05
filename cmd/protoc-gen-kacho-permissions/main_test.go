@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	authzv1 "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/iam/authz/v1"
+	authzv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/iam/authz/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )

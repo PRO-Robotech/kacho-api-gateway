@@ -37,7 +37,7 @@ import (
 	"sort"
 	"strings"
 
-	authzv1 "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/iam/authz/v1"
+	authzv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/iam/authz/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"

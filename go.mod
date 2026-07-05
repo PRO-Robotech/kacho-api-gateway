@@ -38,12 +38,3 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 )
-
-replace github.com/PRO-Robotech/kacho-vpc => github.com/PRO-Robotech/kacho-vpc v0.0.0-20260701103117-5311138318c9
-
-replace github.com/PRO-Robotech/kacho-nlb => github.com/PRO-Robotech/kacho-nlb v1.0.4-0.20260701153440-44c22a2c78e2
-
-// kacho-registry еще не опубликован в GitHub (v0.0.0) — на период локальной
-// polyrepo-разработки резолвится из соседнего дерева. go.work дает тот же
-// override при GOWORK=on; при GOWORK=off работает этот replace.
-replace github.com/PRO-Robotech/kacho-registry => ../kacho-registry
