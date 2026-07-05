@@ -18,6 +18,8 @@ package middleware
 import (
 	"bytes"
 	"container/list"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"sync"
@@ -324,11 +326,42 @@ func replayIdempotent(w http.ResponseWriter, e idempotencyEntry) {
 }
 
 // idempotencyCacheKey строит fingerprint запроса. NUL-разделитель исключает
-// коллизии склейки между сегментами.
+// коллизии склейки между сегментами. В ключ входит sha256 тела запроса: повтор
+// того же Idempotency-Key с ДРУГИМ payload'ом становится cache-miss (выполняется
+// downstream), а не молчаливым replay'ем первого ответа (masked lost-update,
+// CWE-694). Тело читается capped и восстанавливается для downstream.
 func idempotencyCacheKey(r *http.Request, idemKey string) string {
 	principal := r.Header.Get(principalmeta.HeaderPrincipalID)
-	return principal + "\x00" + r.Method + "\x00" + r.URL.Path + "\x00" + idemKey
+	return principal + "\x00" + r.Method + "\x00" + r.URL.Path + "\x00" + idemKey +
+		"\x00" + hashRequestBody(r)
 }
+
+// hashRequestBody возвращает hex(sha256) первых idempotencyMaxBodyBytes тела
+// запроса и ВОССТАНАВЛИВАЕТ r.Body так, чтобы downstream прочитал полное тело.
+// Cap совпадает с cap кэшируемого ответа: control-plane тела маленькие, а
+// ограничение убирает amplification при огромном payload'е. Разные тела,
+// совпадающие в пределах cap, коллизируют по хэшу — приемлемо (та же семантика,
+// что и для размера кэшируемого ответа).
+func hashRequestBody(r *http.Request) string {
+	if r.Body == nil || r.Body == http.NoBody {
+		return ""
+	}
+	orig := r.Body
+	head, _ := io.ReadAll(io.LimitReader(orig, idempotencyMaxBodyBytes))
+	// Восстановить поток: буфер прочитанной головы + возможный непрочитанный хвост.
+	r.Body = &restoredBody{Reader: io.MultiReader(bytes.NewReader(head), orig), closer: orig}
+	sum := sha256.Sum256(head)
+	return hex.EncodeToString(sum[:])
+}
+
+// restoredBody — io.ReadCloser: читает из восстановленного MultiReader, но Close
+// делегирует оригинальному телу (закрытие исходного соединения/reader'а).
+type restoredBody struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (b *restoredBody) Close() error { return b.closer.Close() }
 
 // isMutating — true если HTTP метод изменяет state.
 func isMutating(method string) bool {
@@ -362,9 +395,4 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	}
 	r.body.Write(b)
 	return r.ResponseWriter.Write(b)
-}
-
-// Read удовлетворяет io.Reader на случай вызова Read на recorder'е. Nil-safe.
-func (r *responseRecorder) Read(p []byte) (int, error) {
-	return 0, io.EOF
 }

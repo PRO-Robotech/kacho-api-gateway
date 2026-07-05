@@ -166,3 +166,34 @@ deliberate, reviewed shape, not a defect.
 
 Rubric reference: architecture.md (composition root); CWE-1121. Contract impact:
 none — no behavior/wire/API/DB change.
+
+## 5. `X-Forwarded-For` trusted by default (`client_ip` for FGA conditions)
+
+**Rule (secure-by-default / CWE-348).** An audit noted that honouring
+`X-Forwarded-For` / `X-Real-IP` by default (`KACHO_API_GATEWAY_AUTHZ_TRUSTED_XFF`
+default `true`, `…_TRUSTED_PROXY_COUNT` default `1`) is a "less-trusted source"
+if the gateway is ever reachable without a trusted L7 hop inserting the rightmost
+XFF entry — a client could then forge `client_ip` and satisfy CIDR-scoped FGA
+conditions (`source_ip_in_range`).
+
+**Gateway state.** The parser reads the forwarded chain **from the right** with
+`TRUSTED_PROXY_COUNT` hops, so a client-forged *leftmost* XFF cannot drive
+`client_ip` in the intended ingress topology (an L7 LB appends the real peer as
+the rightmost entry). The residual risk is only a topology change that removes
+the trusted proxy (direct-to-Service / port-forward).
+
+**Why the default stays `true` (not flipped here).** The deployed shape
+(`kacho-deploy`) always fronts the gateway with an ingress that appends XFF;
+FGA conditions such as `source_ip_in_range(client_ip, …)` depend on that derived
+`client_ip`. Flipping the Go default to `false` would silently make `client_ip`
+the TCP peer (the ingress pod IP) for the standard deploy, breaking those
+conditions, unless the deploy chart is simultaneously changed to set
+`…_TRUSTED_XFF=true` — a coordinated cross-repo change (`kacho-deploy`) outside
+this repo's blast radius. The knob is first-class and documented on the config
+field: operators running the gateway **directly on the wire** MUST set
+`KACHO_API_GATEWAY_AUTHZ_TRUSTED_XFF=false` (or `…_TRUSTED_PROXY_COUNT=0`) so the
+TCP peer is authoritative. Tightening the default to fail-closed is tracked for
+the release that lands the matching `kacho-deploy` overlay change.
+
+Rubric reference: CWE-348 / CWE-290; security.md. Contract impact: none — no
+wire/API/DB change; behavior governed by existing env knobs.

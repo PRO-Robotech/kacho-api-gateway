@@ -31,6 +31,13 @@ jobs:
       - name: go mod download
         run: go mod download
 
+      # helm is required so deploy/render_*_test.go actually render the chart in
+      # CI instead of t.Skip'ing (an inert regression gate otherwise). Combined
+      # with the CI-env fail-not-skip guard in helmTemplate(), a missing helm in
+      # CI hard-fails rather than silently skipping the render guards.
+      - name: setup helm
+        uses: azure/setup-helm@v4
+
       - name: build
         run: go build ./...
 

@@ -74,20 +74,41 @@ func TestUnknownEnvFailsClosed(t *testing.T) {
 	}
 }
 
-// "test" env joins dev/local/"" as dev-class — tolerates relaxed config.
+// "test" env joins dev/local as dev-class — tolerates relaxed config.
 func TestTestEnvAllowsRelaxed(t *testing.T) {
 	if err := validateProductionAuthzConfig("test", AuthzMiddlewareConfig{Enabled: false, FailOpen: true, AuthNMode: "dev"}); err != nil {
 		t.Fatalf("test env must allow relaxed config, got: %v", err)
 	}
 }
 
-// dev/local env tolerates relaxed config (WARN-only path).
+// Empty/unset KACHO_APP_ENV MUST be treated as production-class (fail-closed):
+// a deploy that forgets to set the env label must still hard-fail when authz is
+// disabled / anonymous authN, instead of silently booting with a full bypass at
+// the edge (security.md: any deploy = production-mode, anonymous fail-closed).
+func TestEmptyEnvFailsClosed(t *testing.T) {
+	err := validateProductionAuthzConfig("", AuthzMiddlewareConfig{Enabled: false, FailOpen: false, AuthNMode: "dev"})
+	if err == nil {
+		t.Fatalf("empty env with disabled authz must fail closed, got nil")
+	}
+	if !strings.Contains(err.Error(), "authz.enabled=false") {
+		t.Fatalf("expected 'authz.enabled=false' in error, got: %v", err)
+	}
+}
+
+// Empty env with a correct (secure) posture still boots — only a RELAXED posture
+// under an unset env is fatal, not the empty env by itself.
+func TestEmptyEnvAcceptsSecureConfig(t *testing.T) {
+	if err := validateProductionAuthzConfig("", AuthzMiddlewareConfig{Enabled: true, FailOpen: false, AuthNMode: "production-strict"}); err != nil {
+		t.Fatalf("empty env with secure posture must boot, got: %v", err)
+	}
+}
+
+// dev/local env tolerates relaxed config (WARN-only path). Empty env is NO LONGER
+// dev-class (see TestEmptyEnvFailsClosed) — only the explicit dev/local/test
+// labels opt out of the fail-closed guard.
 func TestW1_3_09b_DevAllowsRelaxedConfig(t *testing.T) {
 	if err := validateProductionAuthzConfig("dev", AuthzMiddlewareConfig{Enabled: false, FailOpen: true}); err != nil {
 		t.Fatalf("dev must allow relaxed config, got: %v", err)
-	}
-	if err := validateProductionAuthzConfig("", AuthzMiddlewareConfig{Enabled: false, FailOpen: true}); err != nil {
-		t.Fatalf("empty env must allow relaxed config, got: %v", err)
 	}
 	if err := validateProductionAuthzConfig("local", AuthzMiddlewareConfig{Enabled: false, FailOpen: true}); err != nil {
 		t.Fatalf("local must allow relaxed config, got: %v", err)

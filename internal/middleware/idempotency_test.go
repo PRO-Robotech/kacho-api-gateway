@@ -5,12 +5,73 @@ package middleware
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
+
+// driveBody sends a POST with a request body through the idempotency middleware
+// and reports the response plus downstream-visible body.
+func driveBody(h http.Handler, principal, path, key, body string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	if key != "" {
+		r.Header.Set("Idempotency-Key", key)
+	}
+	if principal != "" {
+		r.Header.Set("X-Kacho-Principal-Id", principal)
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	return rr
+}
+
+// TestIdempotency_DifferentBodySameKeyNotReplayed proves that reusing an
+// Idempotency-Key with a materially different request payload is a cache MISS
+// (the second write executes downstream) rather than silently replaying the
+// first response — a masked lost-update otherwise (CWE-694). Also proves the
+// downstream still sees the full request body after the key-fingerprint read.
+func TestIdempotency_DifferentBodySameKeyNotReplayed(t *testing.T) {
+	store := NewIdempotencyStore(time.Minute)
+	var calls int
+	var lastSeen string
+	h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		b, _ := io.ReadAll(r.Body)
+		lastSeen = string(b)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("echo:" + lastSeen))
+	}))
+
+	// First body → downstream executes, response cached.
+	rr1 := driveBody(h, "u", "/compute/v1/instances", "K", "bodyA")
+	if calls != 1 || lastSeen != "bodyA" || rr1.Body.String() != "echo:bodyA" {
+		t.Fatalf("first: calls=%d seen=%q resp=%q", calls, lastSeen, rr1.Body.String())
+	}
+	// SAME key, DIFFERENT body → must be a miss (downstream runs again, sees bodyB),
+	// not a replay of bodyA's cached response.
+	rr2 := driveBody(h, "u", "/compute/v1/instances", "K", "bodyB")
+	if calls != 2 {
+		t.Fatalf("different body under reused key was replayed: calls=%d want 2", calls)
+	}
+	if lastSeen != "bodyB" || rr2.Body.String() != "echo:bodyB" {
+		t.Fatalf("second: seen=%q resp=%q (downstream must see bodyB in full)", lastSeen, rr2.Body.String())
+	}
+	if rr2.Header().Get("X-Idempotent-Replayed") == "true" {
+		t.Fatalf("different-body request must not be marked as a replay")
+	}
+	// SAME key, SAME body as the first → genuine replay of the cached response.
+	rr3 := driveBody(h, "u", "/compute/v1/instances", "K", "bodyA")
+	if calls != 2 {
+		t.Fatalf("identical body+key must replay, not re-execute: calls=%d want 2", calls)
+	}
+	if rr3.Body.String() != "echo:bodyA" || rr3.Header().Get("X-Idempotent-Replayed") != "true" {
+		t.Fatalf("replay: resp=%q replayed=%q", rr3.Body.String(), rr3.Header().Get("X-Idempotent-Replayed"))
+	}
+}
 
 // drive sends a POST through the idempotency middleware with the given
 // principal id, request path and Idempotency-Key, and reports the response plus

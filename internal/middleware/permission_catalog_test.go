@@ -205,19 +205,31 @@ func TestPermissionCatalog_LookupKnownEntries_FromEmbed(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, want := range []struct {
-		fqn    string
-		perm   string
-		scopeF string
+		fqn     string
+		perm    string
+		scopeF  string
+		scopeOT string
 	}{
-		{"kacho.cloud.iam.v1.AuthorizeService/Check", "iam.authorize.check", "subject"},
-		{"kacho.cloud.iam.v1.AuthorizeService/BatchCheck", "iam.authorize.batchCheck", "scope_id"},
-		{"kacho.cloud.iam.v1.ConditionsService/Create", "iam.conditions.create", "folder_id"},
+		// AuthorizeService/Check is cluster-scoped (`cluster:*`) in the merged
+		// proto — the caller-privileged authorize surface is gated on the cluster
+		// singleton, NOT the request `subject` (which is the query target, not the
+		// scope of the reader). Regressing this to project/subject re-derives the
+		// FGA check from tenant-controlled input.
+		{"kacho.cloud.iam.v1.AuthorizeService/Check", "iam.authorize.check", "*", "cluster"},
+		{"kacho.cloud.iam.v1.AuthorizeService/BatchCheck", "iam.authorize.batchCheck", "scope_id", "project"},
+		{"kacho.cloud.iam.v1.ConditionsService/Create", "iam.conditions.create", "folder_id", "project"},
+		// Condition-item RPCs scope on the condition object itself (`iam_condition:<id>`).
+		{"kacho.cloud.iam.v1.ConditionsService/Get", "iam.conditions.get", "condition_id", "iam_condition"},
+		{"kacho.cloud.iam.v1.ConditionsService/Update", "iam.conditions.update", "condition_id", "iam_condition"},
+		{"kacho.cloud.iam.v1.ConditionsService/Delete", "iam.conditions.delete", "condition_id", "iam_condition"},
+		{"kacho.cloud.iam.v1.ConditionsService/Evaluate", "iam.conditions.evaluate", "condition_id", "iam_condition"},
 	} {
 		t.Run(want.fqn, func(t *testing.T) {
 			entry, ok := c.Lookup(want.fqn)
 			require.True(t, ok, "fqn missing from embedded catalog: %s", want.fqn)
 			assert.Equal(t, want.perm, entry.Permission)
 			assert.Equal(t, want.scopeF, entry.ScopeExtractor.FromRequestField)
+			assert.Equal(t, want.scopeOT, entry.ScopeExtractor.ObjectType)
 		})
 	}
 }

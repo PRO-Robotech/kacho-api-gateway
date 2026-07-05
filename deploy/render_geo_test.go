@@ -13,17 +13,24 @@
 package deploy_test
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 )
 
-// helmTemplate renders deploy/ with the given --set overrides. Skips the test
-// when the helm binary is not on PATH (keeps `go test ./...` green on dev
-// machines without helm; CI has helm).
+// helmTemplate renders deploy/ with the given --set overrides. On a dev machine
+// without helm the render-guard is skipped (keeps `go test ./...` green), but in
+// CI (env CI set — GitHub Actions sets it) a missing helm binary is a hard
+// FAILURE, not a skip: the render guards must never silently become inert on the
+// job that gates merge. The CI job installs helm (azure/setup-helm), so this
+// path only fires if that step is dropped.
 func helmTemplate(t *testing.T, sets ...string) string {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
+		if os.Getenv("CI") != "" {
+			t.Fatalf("helm binary not on PATH in CI — render-guard must run, not skip (add azure/setup-helm to the job)")
+		}
 		t.Skip("helm binary not on PATH — skipping deploy render-guard")
 	}
 	args := []string{"template", "."}
