@@ -192,6 +192,16 @@ func main() {
 		}
 		stepUp := middleware.NewStepUpGate(time.Now)
 
+		// Step-up (ACR) gate keys on the per-RPC `required_acr_min` from the
+		// permission catalog, resolved from the REST (method, path) via the
+		// generated route table. Loaded here (independently of the authz
+		// middleware, which may be disabled) so a high-assurance RPC actually
+		// forces re-authentication when the presented token's ACR is too low.
+		stepUpCatalog, scErr := middleware.LoadEmbeddedPermissionCatalog(cfg.AuthZPermissionCatalogFile)
+		if scErr != nil {
+			log.Fatalf("step-up permission catalog: %v", scErr)
+		}
+
 		var introspection *middleware.IntrospectionCache
 		if cfg.ResolvedHydraIntrospectionURL() != "" {
 			ic, ierr := middleware.NewIntrospectionCache(middleware.IntrospectionCacheConfig{
@@ -211,6 +221,8 @@ func main() {
 			MTLS:                  middleware.NewMTLSBoundValidator(),
 			StepUp:                stepUp,
 			Introspection:         introspection,
+			PermissionLookup:      middleware.NewCatalogPermissionLookup(stepUpCatalog),
+			RestRouter:            middleware.NewRestRouter(),
 			Logger:                logger,
 			APIDomain:             cfg.APIDomain,
 			RequireForAllRequests: cfg.AuthNMode == string(middleware.AuthModeProductionStrict),
@@ -224,6 +236,7 @@ func main() {
 			"issuer", cfg.ResolvedHydraIssuer(),
 			"audience", cfg.ExpectedAudience(),
 			"introspection_enabled", introspection != nil,
+			"stepup_catalog_entries", stepUpCatalog.Size(),
 		)
 	} else {
 		logger.Info("dpop-mw disabled (set KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP=true to enable)")
