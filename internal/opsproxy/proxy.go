@@ -34,24 +34,44 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/PRO-Robotech/kacho-corelib/ids"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 )
 
-// prefixToBackend — карта 3-символьного префикса в имя backend-домена.
-// Префикс `nlb` (PrefixOperationNLB == PrefixLoadBalancer в kacho-corelib/ids)
-// маршрутизирует в loadbalancer backend (kacho-nlb).
+// Operation-id prefixes without an exported kacho-corelib constant reachable
+// from the gateway. Pinned here as named constants (not bare map literals) and
+// guarded by TestPrefixToBackend_* so a divergence is a test failure, giving the
+// routing table a single named source of truth per prefix:
+//
+//   - prefixOperationVPCSubnet ("e9b"): vpc's secondary op-prefix
+//     (Subnet/Address). It exists only as a validate-package literal in
+//     kacho-vpc — no exported ids.* constant yet.
+//   - prefixOperationIAM ("iop"): mirrors kacho-iam domain.PrefixOperationIAM;
+//     the gateway must not import kacho-iam internal packages, so it is pinned
+//     here.
+const (
+	prefixOperationVPCSubnet = "e9b"
+	prefixOperationIAM       = "iop"
+)
+
+// prefixToBackend — карта 3-символьного Operation-id префикса в имя
+// backend-домена. Ключи биндятся на exported kacho-corelib константы
+// (ids.PrefixOperation*) там, где они есть — единый источник истины: изменение
+// префикса в corelib автоматически меняет здесь ключ (а TestPrefixToBackend_*
+// ловит расхождение состава). Префиксы без corelib-константы (e9b/iop) — именные
+// локальные консты выше.
 var prefixToBackend = map[string]string{
 	// vpc domain
-	"enp": "vpc", // Network / RouteTable / SecurityGroup / vpc op-root
-	"e9b": "vpc", // Subnet / Address
+	ids.PrefixOperationVPC:   "vpc", // enp: Network / RouteTable / SecurityGroup / vpc op-root
+	prefixOperationVPCSubnet: "vpc", // e9b: Subnet / Address
 	// compute domain
-	"epd": "compute", // все операции compute (Instance/Disk/Image/Snapshot — общий op-prefix)
+	ids.PrefixOperationCompute: "compute", // epd: все операции compute (Instance/Disk/Image/Snapshot — общий op-prefix)
 	// iam domain
-	"iop": "iam", // все операции iam (Account/Project/User/SA/Group/Role/AccessBinding — общий op-prefix)
+	prefixOperationIAM: "iam", // iop: все операции iam (Account/Project/User/SA/Group/Role/AccessBinding — общий op-prefix)
 	// loadbalancer domain
-	"nlb": "loadbalancer", // все операции kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup — общий op-prefix)
+	ids.PrefixOperationNLB: "loadbalancer", // nlb: все операции kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup — общий op-prefix)
 	// registry domain
-	"rop": "registry", // все операции kacho-registry (Registry/DeleteTag — PrefixOperationReg в kacho-corelib/ids)
+	ids.PrefixOperationReg: "registry", // rop: все операции kacho-registry (Registry/DeleteTag)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, все еще
