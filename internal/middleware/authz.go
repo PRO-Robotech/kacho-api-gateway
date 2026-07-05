@@ -547,29 +547,62 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		m.metrics.ObserveLatencyMs(float64(m.now().Sub(start).Microseconds()) / 1000.0)
 	}()
 
-	// 1. Allowlist short-circuit.
+	// The decision pipeline is a sequence of phases, each of which may return a
+	// terminal decision (handled=true) or defer to the next. Ordering is
+	// security-critical and preserved exactly; see each phase's doc.
+
+	// 1. Public-allowlist short-circuit.
+	if dec, handled := m.phaseAllowlist(dr); handled {
+		return dec
+	}
+	// 1b. Internal-listener-origin exempt gate.
+	if dec, handled := m.phaseInternalOriginExempt(dr); handled {
+		return dec
+	}
+	// 2. Per-route file override (allow/deny).
+	if dec, handled := m.phaseOverride(dr); handled {
+		return dec
+	}
+	// 3. Catalog lookup (exempt-allow / exempt-unauth / catalog-miss deny).
+	entry, dec, handled := m.phaseCatalog(ctx, dr)
+	if handled {
+		return dec
+	}
+	// 4. Subject extraction (unauthenticated → 401).
+	verified, subj, dec, handled := m.phaseSubject(ctx, dr, entry)
+	if handled {
+		return dec
+	}
+	// 5. Resource-scope resolution (+ 5b malformed-id short-circuit).
+	resourceID, resourceType, descriptor, dec, handled := m.phaseResource(dr, entry, subj)
+	if handled {
+		return dec
+	}
+	// 6–8. Context build, decision-cache read, IAM Check.
+	return m.phaseCheck(ctx, dr, entry, verified, subj, resourceID, resourceType, descriptor)
+}
+
+// phaseAllowlist admits FQNs on the public allowlist (login, health, recovery)
+// without any subject/catalog check.
+func (m *AuthzMiddleware) phaseAllowlist(dr decisionRequest) (decision, bool) {
 	if _, ok := m.allow[dr.FQN]; ok {
 		m.metrics.RecordAllow()
-		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}
+		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}, true
 	}
+	return decision{}, false
+}
 
-	// 1b. Internal-listener-origin gate. An Internal* RPC reaching this
-	// middleware is the cluster-internal REST flow (gRPC Internal* is blocked at
-	// the proxy routing). Internal callers (api-gateway self-call, kacho-iam drainer,
-	// port-forward admin) carry no external user JWT, so the catalog's
-	// `<exempt>` authN-enforcing path would 401 them. Admit them — but ONLY when
-	// BOTH hold:
-	//   (a) the request arrived on the cluster-internal listener (NOT the
-	//       advertised external TLS listener — listenerorigin), AND
-	//   (b) the Internal* RPC's catalog entry is `<exempt>` (RPCs that
-	//       intentionally skip authN+authz).
-	// Gated Internal* RPCs (those carrying a real `required_relation`, e.g.
-	// InternalClusterService) are deliberately NOT bypassed: they still run the
-	// full subject-extraction + FGA Check below, even on the internal listener
-	// (the cluster-admin gate must hold for an ordinary authenticated user).
-	// An external caller of any Internal* RPC is not admitted here and falls
-	// through to the normal catalog/authN path (deny / 401); the REST dispatcher
-	// independently 404s these on the external listener.
+// phaseInternalOriginExempt admits an `<exempt>` Internal* RPC ONLY when it
+// arrived on the cluster-internal listener (not the advertised external TLS
+// listener). Internal callers (api-gateway self-call, kacho-iam drainer,
+// port-forward admin) carry no external user JWT, so the catalog's authN-
+// enforcing exempt path would otherwise 401 them. Gated Internal* RPCs (a real
+// `required_relation`, e.g. InternalClusterService) are NOT bypassed — they run
+// the full subject-extraction + FGA Check below even on the internal listener.
+// An external caller of any Internal* RPC is not admitted here and falls through
+// to the normal catalog/authN path (deny / 401); the REST dispatcher
+// independently 404s these on the external listener.
+func (m *AuthzMiddleware) phaseInternalOriginExempt(dr decisionRequest) (decision, bool) {
 	if allowlist.HasInternalSuffix("/"+dr.FQN) && !m.isExternalRequest(dr) {
 		if entry, found := m.cfg.Catalog.Lookup(dr.FQN); found && entry.IsExempt() {
 			m.metrics.RecordAllow()
@@ -577,31 +610,43 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				outcome:    outcomeAllow,
 				descriptor: permissionDeniedDescriptor{FQN: dr.FQN, Action: entry.Permission},
 				entry:      entry,
-			}
+			}, true
 		}
 	}
+	return decision{}, false
+}
 
-	// 2. Per-route override (file-based).
-	if m.cfg.Overrides != nil {
-		if dec, ok := m.cfg.Overrides.Lookup(dr.FQN); ok {
-			switch dec {
-			case OverrideAllow:
-				m.metrics.RecordAllow()
-				m.cfg.Logger.Info("authz override allow", "fqn", dr.FQN)
-				return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}
-			case OverrideDeny:
-				m.metrics.RecordDeny()
-				m.cfg.Logger.Info("authz override deny", "fqn", dr.FQN)
-				return decision{
-					outcome:    outcomeDeny,
-					reasons:    []string{"override: explicit deny"},
-					descriptor: permissionDeniedDescriptor{FQN: dr.FQN},
-				}
-			}
-		}
+// phaseOverride applies a file-based per-route override (explicit allow/deny).
+func (m *AuthzMiddleware) phaseOverride(dr decisionRequest) (decision, bool) {
+	if m.cfg.Overrides == nil {
+		return decision{}, false
 	}
+	dec, ok := m.cfg.Overrides.Lookup(dr.FQN)
+	if !ok {
+		return decision{}, false
+	}
+	switch dec {
+	case OverrideAllow:
+		m.metrics.RecordAllow()
+		m.cfg.Logger.Info("authz override allow", "fqn", dr.FQN)
+		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}, true
+	case OverrideDeny:
+		m.metrics.RecordDeny()
+		m.cfg.Logger.Info("authz override deny", "fqn", dr.FQN)
+		return decision{
+			outcome:    outcomeDeny,
+			reasons:    []string{"override: explicit deny"},
+			descriptor: permissionDeniedDescriptor{FQN: dr.FQN},
+		}, true
+	}
+	return decision{}, false
+}
 
-	// 3. Catalog lookup.
+// phaseCatalog looks up the catalog entry. It returns handled=true for the two
+// terminal catalog outcomes: an `<exempt>` entry (allow, or 401 when
+// unauthenticated) and a catalog miss (deny). Otherwise it returns the resolved
+// entry with handled=false so the pipeline continues to subject extraction.
+func (m *AuthzMiddleware) phaseCatalog(ctx context.Context, dr decisionRequest) (CatalogEntry, decision, bool) {
 	entry, found := m.cfg.Catalog.Lookup(dr.FQN)
 	if found && entry.IsExempt() {
 		// `<exempt>` skips the FGA authz check, NOT authentication.
@@ -617,7 +662,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			// "deny" response would mislead callers into thinking they are
 			// authenticated but forbidden.
 			m.metrics.RecordDeny()
-			return decision{
+			return entry, decision{
 				outcome: outcomeUnauthenticated,
 				reasons: []string{"subject: unauthenticated request"},
 				descriptor: permissionDeniedDescriptor{
@@ -625,14 +670,14 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 					Action: entry.Permission,
 				},
 				entry: entry,
-			}
+			}, true
 		}
 		m.metrics.RecordAllow()
-		return decision{
+		return entry, decision{
 			outcome:    outcomeAllow,
 			descriptor: permissionDeniedDescriptor{FQN: dr.FQN, Action: entry.Permission},
 			entry:      entry,
-		}
+		}, true
 	}
 	if !found {
 		// Production policy: deny when catalog has no entry — every RPC must
@@ -659,16 +704,21 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		m.cfg.Logger.Warn("authz catalog miss, denying",
 			"fqn", dr.FQN,
 			"authenticated", isAuthed)
-		return decision{
+		return entry, decision{
 			outcome: outcomeDeny,
 			reasons: []string{missReason},
 			descriptor: permissionDeniedDescriptor{
 				FQN: dr.FQN,
 			},
-		}
+		}, true
 	}
+	return entry, decision{}, false
+}
 
-	// 4. Subject extraction.
+// phaseSubject extracts the authenticated subject. A missing/invalid credential
+// terminates with Unauthenticated(16)/401. On success it returns the verified
+// token and resolved subject for the downstream phases.
+func (m *AuthzMiddleware) phaseSubject(ctx context.Context, dr decisionRequest, entry CatalogEntry) (*VerifiedToken, ResolvedSubject, decision, bool) {
 	verified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
 	subj, ok := m.cfg.Subjects.Extract(verified)
 	if !ok {
@@ -677,7 +727,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		// gRPC convention: UNAUTHENTICATED means "the caller is not identified";
 		// PERMISSION_DENIED means "identified caller has no access to the resource".
 		m.metrics.RecordDeny()
-		return decision{
+		return verified, subj, decision{
 			outcome: outcomeUnauthenticated,
 			reasons: []string{"subject: unauthenticated request"},
 			descriptor: permissionDeniedDescriptor{
@@ -685,10 +735,16 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				Action: entry.Permission,
 			},
 			entry: entry,
-		}
+		}, true
 	}
+	return verified, subj, decision{}, false
+}
 
-	// 5. Resource extraction.
+// phaseResource resolves the FGA resource scope (type + id) and applies the
+// malformed-id short-circuit (5b). It returns handled=true only for the
+// malformed-id case (InvalidArgument/400); otherwise it returns the resolved
+// scope + descriptor for the Check phase.
+func (m *AuthzMiddleware) phaseResource(dr decisionRequest, entry CatalogEntry, subj ResolvedSubject) (ResourceID, string, permissionDeniedDescriptor, decision, bool) {
 	var resourceID ResourceID
 	if dr.HTTPReq != nil {
 		resourceID, _ = m.cfg.Resources.ExtractFromHTTP(dr.HTTPReq, dr.FQN, entry)
@@ -767,16 +823,31 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				"action", entry.Permission,
 				"resource", descriptor.ResourceType+":"+descriptor.ResourceID,
 			)
-			return decision{
+			return resourceID, resourceType, descriptor, decision{
 				outcome:      outcomeInvalidArgument,
 				reasons:      []string{"resource id is malformed"},
 				descriptor:   descriptor,
 				entry:        entry,
 				invalidArgID: resourceID.String(),
-			}
+			}, true
 		}
 	}
+	return resourceID, resourceType, descriptor, decision{}, false
+}
 
+// phaseCheck builds the Conditions context, consults the decision cache
+// (write-after-invalidate epoch-guarded) and, on a miss, runs the IAM FGA Check.
+// It is the terminal phase — it always returns a decision.
+func (m *AuthzMiddleware) phaseCheck(
+	ctx context.Context,
+	dr decisionRequest,
+	entry CatalogEntry,
+	verified *VerifiedToken,
+	subj ResolvedSubject,
+	resourceID ResourceID,
+	resourceType string,
+	descriptor permissionDeniedDescriptor,
+) decision {
 	// 6. Context build.
 	var contextMap map[string]any
 	if dr.HTTPReq != nil {
