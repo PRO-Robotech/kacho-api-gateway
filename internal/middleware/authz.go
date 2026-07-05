@@ -796,6 +796,11 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	// 7. Decision cache lookup.
 	traceID := traceFromContext(ctx, dr.HTTPReq, dr.GRPCMeta)
 	cacheKey := buildCacheKey(subj.FGA, entry.Permission, resourceType, resourceID.String(), contextMap)
+	// Snapshot the invalidation generation BEFORE reading the cache. Any
+	// Invalidate/InvalidateSubject that races the upcoming Check will move the
+	// generation, and the put below is dropped so a grant revoked mid-Check is
+	// never re-cached (write-after-invalidate guard; CWE-362 + CWE-613).
+	cacheGen := m.cache.generation()
 	if cached, ok := m.cache.get(cacheKey); ok {
 		m.metrics.RecordCacheHit()
 		if cached.allowed {
@@ -828,7 +833,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			st, _ := status.FromError(err)
 			m.metrics.RecordDeny()
 			reasons := []string{st.Message()}
-			m.cache.put(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons})
+			m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons}, cacheGen)
 			return denyDecision(dr.FQN, entry, descriptor, reasons)
 		}
 		m.metrics.RecordError()
@@ -843,7 +848,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	}
 
 	if result.Allowed {
-		m.cache.put(cacheKey, decisionCacheEntry{allowed: true})
+		m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: true}, cacheGen)
 		m.metrics.RecordAllow()
 		m.cfg.Logger.Info("authz allow",
 			"fqn", dr.FQN,
@@ -860,7 +865,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	if len(reasons) == 0 {
 		reasons = []string{"no path"}
 	}
-	m.cache.put(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons})
+	m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons}, cacheGen)
 	m.metrics.RecordDeny()
 	m.cfg.Logger.Info("authz deny",
 		"fqn", dr.FQN,
@@ -1109,6 +1114,13 @@ type decisionCache struct {
 	maxSize int
 	ttl     time.Duration
 	now     func() time.Time
+	// gen — monotonically-increasing generation, bumped on every
+	// Invalidate/InvalidateSubject. A request captures gen at get()-miss time
+	// and its subsequent putIfGen() is dropped when gen has moved — closing the
+	// write-after-invalidate race where a Check computed against a pre-revocation
+	// grant would otherwise re-populate a just-flushed allow=true entry and
+	// survive for the whole TTL (CWE-362 + CWE-613; project-rule #10).
+	gen uint64
 }
 
 type cacheNode struct {
@@ -1150,6 +1162,35 @@ func (c *decisionCache) get(key string) (decisionCacheEntry, bool) {
 func (c *decisionCache) put(key string, v decisionCacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.putLocked(key, v)
+}
+
+// generation returns the current invalidation generation. Callers snapshot this
+// at get()-miss time and hand it back to putIfGen so a write racing an
+// intervening Invalidate/InvalidateSubject is dropped rather than re-populating
+// a just-flushed entry.
+func (c *decisionCache) generation() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gen
+}
+
+// putIfGen stores v only when the cache generation still equals the snapshot the
+// caller captured at get()-miss time. If an Invalidate/InvalidateSubject ran in
+// between, the generation moved and the (potentially stale, pre-revocation)
+// write is discarded. Recomputing the entry on the next request is always safe;
+// re-caching a revoked grant is not.
+func (c *decisionCache) putIfGen(key string, v decisionCacheEntry, gen uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.gen != gen {
+		return
+	}
+	c.putLocked(key, v)
+}
+
+// putLocked is the shared insert path. Caller holds c.mu.
+func (c *decisionCache) putLocked(key string, v decisionCacheEntry) {
 	if existing, ok := c.entries[key]; ok {
 		existing.value = v
 		existing.expiresAt = c.now().Add(c.ttl)
@@ -1179,6 +1220,7 @@ func (c *decisionCache) Invalidate() {
 	c.entries = make(map[string]*cacheNode, c.maxSize)
 	c.head = nil
 	c.tail = nil
+	c.gen++
 }
 
 // InvalidateSubject removes cache entries for the given FGA subject prefix
@@ -1191,6 +1233,10 @@ func (c *decisionCache) InvalidateSubject(subject string) int {
 	prefix := subject + "|"
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Bump the generation even when zero entries match: an in-flight Check for
+	// this subject may have snapshotted the pre-revocation generation and be
+	// about to putIfGen() a stale allow — the generation move drops that write.
+	c.gen++
 	removed := 0
 	for key, n := range c.entries {
 		if strings.HasPrefix(key, prefix) {
