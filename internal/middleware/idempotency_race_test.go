@@ -72,3 +72,67 @@ func TestIdempotency_ConcurrentSameKey_SingleDownstream(t *testing.T) {
 		}
 	}
 }
+
+// TestIdempotency_LeaderPanic_FollowersWakeAndReservationReleased proves the
+// single-flight liveness contract: when the leader's downstream panics, the
+// deferred abortLeader releases the in-flight reservation and wakes every
+// follower (they fall through to execute downstream themselves) — no follower
+// blocks forever, and the reservation map is cleared so a subsequent same-key
+// request proceeds. A regression that drops the deferred abort would deadlock
+// all followers; this test (with a timeout) catches it.
+func TestIdempotency_LeaderPanic_FollowersWakeAndReservationReleased(t *testing.T) {
+	store := NewIdempotencyStore(time.Minute)
+
+	var panicMode atomic.Bool
+	panicMode.Store(true)
+	release := make(chan struct{})
+	h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if panicMode.Load() {
+			<-release // hold the leader until all followers are parked on the flight
+			panic("downstream boom")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+
+	const n = 16
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// The leader (and any follower that falls through) re-panics; each
+			// goroutine recovers its own, mimicking net/http's per-request recover.
+			defer func() { _ = recover() }()
+			r := httptest.NewRequest(http.MethodPost, "/compute/v1/instances", nil)
+			r.Header.Set("Idempotency-Key", "panic-key")
+			r.Header.Set("X-Kacho-Principal-Id", "user-A")
+			h.ServeHTTP(httptest.NewRecorder(), r)
+		}()
+	}
+
+	// Let all followers park on the leader's flight, then release the leader to panic.
+	time.Sleep(30 * time.Millisecond)
+	close(release)
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("followers blocked forever after leader panic (abortLeader liveness broken)")
+	}
+
+	// Reservation released: a fresh same-key request must execute downstream and
+	// succeed (not block, not replay a dead flight).
+	panicMode.Store(false)
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/compute/v1/instances", nil)
+	r.Header.Set("Idempotency-Key", "panic-key")
+	r.Header.Set("X-Kacho-Principal-Id", "user-A")
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("post-panic same-key request got %d, want 200 (reservation leaked)", rr.Code)
+	}
+}

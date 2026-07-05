@@ -94,6 +94,28 @@ func TestCache_EpochGuard_DropsStaleWrite(t *testing.T) {
 	}
 }
 
+func TestCache_PutIfGenWithTTL_DropsStaleWrite(t *testing.T) {
+	c := New[string, int](10, time.Minute, nil)
+	gen := c.Generation()
+	if _, ok := c.Get("k"); ok {
+		t.Fatal("cold miss expected")
+	}
+	c.InvalidateWhere(func(string) bool { return false }) // bumps gen, removes nothing
+	c.PutIfGenWithTTL("k", 1, time.Minute, gen)
+	if _, ok := c.Get("k"); ok {
+		t.Fatal("stale PutIfGenWithTTL after invalidation must be dropped")
+	}
+}
+
+func TestCache_PutIfGenWithTTL_KeepsFreshWrite(t *testing.T) {
+	c := New[string, int](10, time.Minute, nil)
+	gen := c.Generation()
+	c.PutIfGenWithTTL("k", 7, time.Minute, gen)
+	if v, ok := c.Get("k"); !ok || v != 7 {
+		t.Fatalf("fresh PutIfGenWithTTL must persist: %d,%v", v, ok)
+	}
+}
+
 func TestCache_EpochGuard_KeepsFreshWrite(t *testing.T) {
 	c := New[string, int](10, time.Minute, nil)
 	gen := c.Generation()

@@ -148,8 +148,8 @@ func (p *OpsProxy) resolveBackend(id string) (operationpb.OperationServiceClient
 // Get проксирует OperationService.Get к нужному backend по prefix id.
 // После получения операции проверяет право доступа вызывающего principal'а:
 // только создавший операцию (principal_type + principal_id из Operation) может
-// ее читать. Исключение — system-bootstrap (внутренние воркеры) и
-// service-account (cross-service polling).
+// ее читать. Исключение — внутренний system/bootstrap caller (воркеры,
+// cross-service реконсайл), которому разрешено читать любую операцию.
 // Incoming metadata (x-kacho-principal-* set by restmux WithMetadata) должна
 // доходить до backend через outgoing-ctx — иначе backend видит анонимный
 // principal и его per-RPC authz возвращает NotFound/PermissionDenied. Pattern
@@ -190,27 +190,27 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 // checkOperationOwnership проверяет что principal в ctx совпадает с
 // principal_type/principal_id, записанными в Operation при создании.
 //
-// Логика:
-//   - Если op не содержит principal_id (legacy операции) — пропускаем
-//     проверку (graceful degradation для старых записей в БД).
+// Логика (fail-closed на публичной поверхности):
+//   - Если op не содержит principal_id (legacy операции без записанного owner'а)
+//     — пропускаем проверку (graceful degradation для старых записей в БД).
 //   - Если principal в ctx не извлекается (анонимный) — PermissionDenied.
 //     (Каталог уже требует аутентификацию для OperationService через <exempt>,
 //     поэтому этот case теоретически не должен дойти сюда, но мы fail-closed.)
-//   - system/bootstrap — пропускаем (внутренние воркеры и тесты, не tenant).
-//   - Остальные: principal_id из ctx должен совпадать с op.PrincipalId.
-//     principal_type — для доп. верификации (user/service_account).
+//   - Внутренний system/bootstrap caller (воркер) — пропускаем: он может читать
+//     любую операцию (cross-service polling / реконсайл).
+//   - Операция, owner которой — system/bootstrap (backend без mounted
+//     UnaryPrincipalExtract записывает SystemPrincipal()={type:"system",
+//     id:"bootstrap"} для КАЖДОЙ Operation, т.к. corelib operations.Repo.Create
+//     fall-back'ается на SystemPrincipal при отсутствии ctx-Principal): реальный
+//     tenant-owner не известен, поэтому она НЕ world-readable — только внутренний
+//     system-caller (обработан выше) может её прочитать. Tenant-caller →
+//     PermissionDenied (defense-in-depth против cross-tenant BOLA — CWE-639).
+//   - Tenant owner: и principal_id, И principal_type из ctx должны совпадать с
+//     записанными в Operation (type-match защищает от коллизии id между
+//     principal-типами, напр. user vs service_account — CWE-863).
 func checkOperationOwnership(ctx context.Context, op *operationpb.Operation) error {
 	if op == nil || op.GetPrincipalId() == "" {
 		// Операция без записанного owner'а (legacy) — пропускаем.
-		return nil
-	}
-	// Backend без mounted UnaryPrincipalExtract записывает
-	// SystemPrincipal()={type:"system", id:"bootstrap"} как owner для каждой
-	// Operation, потому что corelib operations.Repo.Create fall-back'ается на
-	// SystemPrincipal при отсутствии ctx-Principal. Эти записи — legacy в том же
-	// смысле что и principal_id="" — реальный owner не известен, нельзя
-	// ограничивать чтение конкретным user'ом. Treat as legacy → pass.
-	if op.GetPrincipalType() == "system" && op.GetPrincipalId() == "bootstrap" {
 		return nil
 	}
 	callerID, callerType := principalFromContext(ctx)
@@ -222,7 +222,12 @@ func checkOperationOwnership(ctx context.Context, op *operationpb.Operation) err
 	if callerType == "system" && callerID == "bootstrap" {
 		return nil
 	}
-	if callerID != op.GetPrincipalId() {
+	// Операция с system/bootstrap owner'ом читаема только внутренним
+	// system-caller'ом (обработан выше) — tenant'у fail-closed.
+	if op.GetPrincipalType() == "system" && op.GetPrincipalId() == "bootstrap" {
+		return status.Error(codes.PermissionDenied, "permission denied")
+	}
+	if callerID != op.GetPrincipalId() || callerType != op.GetPrincipalType() {
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
 	return nil

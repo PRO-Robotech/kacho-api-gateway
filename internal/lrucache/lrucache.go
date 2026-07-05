@@ -176,6 +176,24 @@ func (c *Cache[K, V]) PutIfGen(key K, value V, gen uint64) {
 	c.putLocked(key, value, c.ttl)
 }
 
+// PutIfGenWithTTL stores value under key with a caller-supplied TTL, but only
+// when the generation still equals the caller's snapshot (see PutIfGen). It is
+// the TTL-bounded variant used by callers whose per-entry expiry is clamped by
+// an external deadline (e.g. an OAuth token `exp`) AND who must honour the
+// write-after-invalidate epoch guard. A non-positive ttl falls back to the
+// cache default.
+func (c *Cache[K, V]) PutIfGenWithTTL(key K, value V, ttl time.Duration, gen uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.gen != gen {
+		return
+	}
+	if ttl <= 0 {
+		ttl = c.ttl
+	}
+	c.putLocked(key, value, ttl)
+}
+
 func (c *Cache[K, V]) putLocked(key K, value V, ttl time.Duration) {
 	if el, ok := c.items[key]; ok {
 		e := el.Value.(*entry[K, V])

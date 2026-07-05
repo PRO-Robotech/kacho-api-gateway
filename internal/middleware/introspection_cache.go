@@ -133,6 +133,15 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 		return r, nil
 	}
 
+	// Snapshot the invalidation generation BEFORE the (slow) Hydra fetch. A
+	// force-logout revocation that calls Invalidate(jti) while this introspection
+	// is in flight bumps the generation, and the generation-checked store below
+	// is dropped — so a positive result computed against pre-revocation state can
+	// never re-populate the just-flushed jti and survive for the full TTL
+	// (write-after-invalidate guard; CWE-362 + CWE-613). Mirrors the sibling
+	// decision cache (authz_cache.go putIfGen).
+	gen := c.cache.Generation()
+
 	// 2. Fetch from Hydra.
 	res, err := c.fetchHydra(ctx, rawToken)
 	if err != nil {
@@ -158,7 +167,7 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 			ttl = untilExp
 		}
 	}
-	c.cache.PutWithTTL(jti, res, ttl)
+	c.cache.PutIfGenWithTTL(jti, res, ttl, gen)
 
 	if !res.Active {
 		return res, ErrTokenInactive
@@ -166,9 +175,16 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 	return res, nil
 }
 
-// Invalidate removes the cached entry for jti. Called by session_revocations
-// LISTEN/NOTIFY handler to honor force-logout immediately (≤ 1s SLA).
-func (c *IntrospectionCache) Invalidate(jti string) { c.cache.InvalidateKey(jti) }
+// Invalidate removes the cached entry for jti AND bumps the invalidation
+// generation. Called by the session_revocations LISTEN/NOTIFY handler to honor
+// force-logout immediately (≤ 1s SLA). The generation bump is what closes the
+// write-after-invalidate race: even when no entry is currently cached for jti
+// (revocation arrives while an introspection is still in flight), an in-flight
+// positive result for jti is dropped by the PutIfGenWithTTL guard in Introspect.
+// InvalidateWhere bumps the generation even when zero entries match.
+func (c *IntrospectionCache) Invalidate(jti string) {
+	c.cache.InvalidateWhere(func(k string) bool { return k == jti })
+}
 
 // Len returns current cache size; used by tests / observability.
 func (c *IntrospectionCache) Len() int { return c.cache.Len() }

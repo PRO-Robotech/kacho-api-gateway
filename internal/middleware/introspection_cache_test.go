@@ -142,6 +142,50 @@ func TestIntrospection_Invalidate(t *testing.T) {
 	assert.Equal(t, int32(2), hits.Load())
 }
 
+// TestIntrospection_WriteAfterInvalidate_Dropped — deterministic proof of the
+// write-after-invalidate epoch guard. A force-logout revocation that lands WHILE
+// an introspection is in flight (Get()-miss → Hydra fetch → store) must not be
+// defeated by the positive result re-populating the just-invalidated jti. The
+// Hydra handler calls Invalidate(jti) mid-flight (simulating the LISTEN/NOTIFY
+// arriving between the miss and the store); the positive result must be DROPPED,
+// so the next request re-hits Hydra rather than serving a revoked token from
+// cache for the full TTL (CWE-362 / CWE-613).
+func TestIntrospection_WriteAfterInvalidate_Dropped(t *testing.T) {
+	var c *middleware.IntrospectionCache
+	hits := &atomic.Int32{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		// Revocation lands mid-introspection: invalidate before the caller stores
+		// the (now stale) positive result.
+		c.Invalidate("jti")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"active": true,
+			"sub":    "usr_alice",
+			"exp":    time.Now().Add(15 * time.Minute).Unix(),
+		})
+	}))
+	defer srv.Close()
+
+	var err error
+	c, err = middleware.NewIntrospectionCache(middleware.IntrospectionCacheConfig{
+		HydraIntrospectionURL: srv.URL,
+		TTL:                   1 * time.Hour,
+	})
+	require.NoError(t, err)
+
+	// First call: miss → fetch (handler invalidates mid-flight) → positive write
+	// must be dropped by the epoch guard.
+	res, err := c.Introspect(context.Background(), "jti", "raw")
+	require.NoError(t, err)
+	assert.True(t, res.Active)
+	assert.Equal(t, 0, c.Len(), "positive result stored after a mid-flight Invalidate — epoch guard missing")
+
+	// Second call must re-hit Hydra (proves nothing survived in cache).
+	_, err = c.Introspect(context.Background(), "jti", "raw")
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), hits.Load(), "second call served from cache — revoked token cached for TTL")
+}
+
 func TestIntrospection_HydraError_Bubbles(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
