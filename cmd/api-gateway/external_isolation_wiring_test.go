@@ -22,49 +22,79 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/restmux"
 )
 
-// TestExternalIsolationWiring_EndToEnd verifies the FULL listener topology used
-// in main(): an external TLS listener wrapped by listenerorigin.ExternalListener,
-// fronted by cmux, served by a shared *http.Server whose ConnContext is
-// listenerorigin.ExternalConnContext. It proves the external-origin marker
-// survives the tls.Conn + cmux.MuxConn wrapping chain and reaches the handler —
-// without which the REST dispatcher's external-404 gate is dead code.
+// internalRESTProbePath is a real Internal* REST path (AddressPool admin,
+// isInternalPath → internal sub-mux). It MUST 404 on any external listener and
+// be reachable (non-404 — a downstream gRPC error against the unreachable
+// backend) only on the dedicated internal admin listener.
+const internalRESTProbePath = "/vpc/v1/addressPools"
+
+// wiringMuxAddrs — full backend address map so all Internal* routes register.
+// 127.0.0.1:1 is intentionally unreachable: a route that IS found yields a
+// downstream gRPC error, never a route-level 404 — so 404 unambiguously means
+// "rejected by the internal-path gate".
+func wiringMuxAddrs() map[string]string {
+	return map[string]string{
+		"vpc": "127.0.0.1:1", "vpcInternal": "127.0.0.1:1",
+		"compute": "127.0.0.1:1", "computeInternal": "127.0.0.1:1",
+		"iam": "127.0.0.1:1", "iamInternal": "127.0.0.1:1",
+		"loadbalancer": "127.0.0.1:1", "loadbalancerInternal": "127.0.0.1:1",
+	}
+}
+
+// TestExternalIsolationWiring_EndToEnd wires the FULL production listener
+// topology used in main() and drives the REAL restmux dispatcher over it, to
+// prove — fail-closed — that an Internal* REST path 404s on the ingress-facing
+// listener regardless of TLS, while remaining reachable on the dedicated
+// cluster-internal admin listener.
 //
-// Two listeners share ONE http.Server (as in production):
-//   - plaintext (internal origin)  → handler sees IsExternal=false
-//   - TLS+ExternalListener (edge)  → handler sees IsExternal=true
+// One shared *http.Server (ConnContext = listenerorigin.InternalConnContext)
+// fronts THREE listeners, exactly as main() does after the r3 inversion:
+//
+//   - plaintext cmux listener        (Service `cmux` :8080 — what the ingress
+//     targets)                         → UNwrapped → external → Internal* 404
+//   - external TLS + cmux listener   (:8443)  → UNwrapped → external → Internal* 404
+//   - InternalListener-wrapped plain (:8081 admin)  → internal → Internal* served
+//
+// The plaintext-listener assertion is the regression guard for the HIGH finding:
+// under the old model the ingress-facing plaintext listener was treated as
+// internal and served Internal* REST to the edge.
 func TestExternalIsolationWiring_EndToEnd(t *testing.T) {
-	// The shared handler echoes the resolved listener origin.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if listenerorigin.IsExternal(r.Context()) {
-			w.WriteHeader(http.StatusForbidden) // stand-in for "external → would 404 Internal*"
-			_, _ = io.WriteString(w, "external")
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "internal")
-	})
+	dispatcher, err := restmux.NewMux(context.Background(), wiringMuxAddrs(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewMux: %v", err)
+	}
 
 	httpSrv := &http.Server{
-		Handler:     handler,
+		Handler:     dispatcher,
 		ReadTimeout: 5 * time.Second,
-		ConnContext: listenerorigin.ExternalConnContext,
+		// The single production ConnContext: marks ONLY InternalListener conns.
+		ConnContext: listenerorigin.InternalConnContext,
 	}
 	_ = http2.ConfigureServer(httpSrv, &http2.Server{})
 
-	// --- internal plaintext listener + cmux + httpSrv ---
-	intLn, err := net.Listen("tcp", "127.0.0.1:0")
+	// --- ingress-facing plaintext cmux listener (external, the fail-closed default) ---
+	plainLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("internal listen: %v", err)
+		t.Fatalf("plain listen: %v", err)
 	}
-	defer intLn.Close()
-	intCmux := cmux.New(intLn)
-	intHTTPL := intCmux.Match(cmux.Any())
-	go func() { _ = httpSrv.Serve(intHTTPL) }()
-	go func() { _ = intCmux.Serve() }()
+	defer plainLn.Close()
+	plainCmux := cmux.New(plainLn)
+	plainHTTPL := plainCmux.Match(cmux.Any())
+	go func() { _ = httpSrv.Serve(plainHTTPL) }()
+	go func() { _ = plainCmux.Serve() }()
 
-	// --- external TLS listener wrapped + cmux + same httpSrv ---
+	// --- dedicated internal admin listener (InternalListener-wrapped → internal) ---
+	adminLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("admin listen: %v", err)
+	}
+	defer adminLn.Close()
+	go func() { _ = httpSrv.Serve(listenerorigin.InternalListener(adminLn)) }()
+
+	// --- external TLS + cmux listener (UNwrapped → external) ---
 	cert := selfSignedCert(t)
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -76,44 +106,55 @@ func TestExternalIsolationWiring_EndToEnd(t *testing.T) {
 		t.Fatalf("tls listen: %v", err)
 	}
 	defer rawTLS.Close()
-	extCmux := cmux.New(rawTLS)
-	extHTTPL := extCmux.Match(cmux.Any())
-	// Wrap the HTTP sub-listener so ConnContext sees externalConn as the OUTERMOST
-	// type — robust against cmux/tls conn wrapping (matches main.go wiring).
-	go func() { _ = httpSrv.Serve(listenerorigin.ExternalListener(extHTTPL)) }()
-	go func() { _ = extCmux.Serve() }()
+	tlsCmux := cmux.New(rawTLS)
+	tlsHTTPL := tlsCmux.Match(cmux.Any())
+	go func() { _ = httpSrv.Serve(tlsHTTPL) }()
+	go func() { _ = tlsCmux.Serve() }()
 
-	// Poll both listeners until they actually serve, instead of a fixed sleep —
-	// a loaded CI runner can leave the serve goroutines unscheduled past 100ms,
-	// racing the assertions below.
 	tlsClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test self-signed
 		},
 		Timeout: 2 * time.Second,
 	}
-	waitHTTPReady(t, http.DefaultClient, "http://"+intLn.Addr().String()+"/probe")
-	waitHTTPReady(t, tlsClient, "https://"+rawTLS.Addr().String()+"/probe")
+	plainClient := &http.Client{Timeout: 2 * time.Second}
 
-	// Internal call → IsExternal=false → 200 "internal".
-	t.Run("internal listener → origin internal", func(t *testing.T) {
-		body, code := doGet(t, "http://"+intLn.Addr().String()+"/probe", nil)
-		if code != http.StatusOK || body != "internal" {
-			t.Fatalf("internal listener: got code=%d body=%q, want 200 internal", code, body)
+	waitHTTPReady(t, plainClient, "http://"+plainLn.Addr().String()+"/healthz")
+	waitHTTPReady(t, plainClient, "http://"+adminLn.Addr().String()+"/healthz")
+	waitHTTPReady(t, tlsClient, "https://"+rawTLS.Addr().String()+"/healthz")
+
+	// CRITICAL (HIGH finding): Internal* REST 404s on the ingress-facing
+	// plaintext listener — the exact listener the shipped ingress targets.
+	t.Run("plaintext ingress-facing listener → Internal* 404", func(t *testing.T) {
+		_, code := doGetClient(t, plainClient, "http://"+plainLn.Addr().String()+internalRESTProbePath)
+		if code != http.StatusNotFound {
+			t.Fatalf("Internal* %s on ingress-facing plaintext listener: got %d, want 404 (CRITICAL: Internal* exposed at the edge)", internalRESTProbePath, code)
 		}
 	})
 
-	// External TLS call → IsExternal=true → 403 "external" (marker survived tls+cmux).
-	t.Run("external TLS listener → origin external", func(t *testing.T) {
-		client := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test self-signed
-			},
-			Timeout: 5 * time.Second,
+	// Internal* REST 404s on the external TLS listener too.
+	t.Run("external TLS listener → Internal* 404", func(t *testing.T) {
+		_, code := doGetClient(t, tlsClient, "https://"+rawTLS.Addr().String()+internalRESTProbePath)
+		if code != http.StatusNotFound {
+			t.Fatalf("Internal* %s on external TLS listener: got %d, want 404", internalRESTProbePath, code)
 		}
-		body, code := doGetClient(t, client, "https://"+rawTLS.Addr().String()+"/probe")
-		if code != http.StatusForbidden || body != "external" {
-			t.Fatalf("external listener: got code=%d body=%q, want 403 external (origin marker lost through tls/cmux)", code, body)
+	})
+
+	// Internal* REST reachable on the dedicated internal admin listener: the
+	// route IS found (marker survives InternalListener), the unreachable backend
+	// yields a downstream error — NOT a route-level 404.
+	t.Run("internal admin listener → Internal* served", func(t *testing.T) {
+		_, code := doGetClient(t, plainClient, "http://"+adminLn.Addr().String()+internalRESTProbePath)
+		if code == http.StatusNotFound {
+			t.Fatalf("Internal* %s on internal admin listener: got 404 — route rejected, admin/UI/port-forward broken", internalRESTProbePath)
+		}
+	})
+
+	// Public REST stays served on the ingress-facing plaintext listener.
+	t.Run("plaintext ingress-facing listener → public served", func(t *testing.T) {
+		_, code := doGetClient(t, plainClient, "http://"+plainLn.Addr().String()+"/vpc/v1/networks")
+		if code == http.StatusNotFound {
+			t.Fatalf("public /vpc/v1/networks on ingress-facing listener: got 404 — public route wrongly rejected")
 		}
 	})
 
@@ -121,8 +162,7 @@ func TestExternalIsolationWiring_EndToEnd(t *testing.T) {
 }
 
 // waitHTTPReady polls url with the given client until it gets any HTTP response
-// (the serve goroutine + cmux are up) or a deadline elapses. This replaces a
-// fixed startup sleep with an actual readiness gate.
+// (the serve goroutine + cmux are up) or a deadline elapses.
 func waitHTTPReady(t *testing.T, c *http.Client, url string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -137,11 +177,6 @@ func waitHTTPReady(t *testing.T, c *http.Client, url string) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-}
-
-func doGet(t *testing.T, url string, _ http.RoundTripper) (string, int) {
-	t.Helper()
-	return doGetClient(t, &http.Client{Timeout: 5 * time.Second}, url)
 }
 
 func doGetClient(t *testing.T, c *http.Client, url string) (string, int) {

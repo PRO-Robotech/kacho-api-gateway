@@ -62,8 +62,9 @@ func TestExternalListener_RejectsInternalPaths_404(t *testing.T) {
 		tc := tc
 		t.Run("EXT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			// Simulate arrival on the external listener.
-			req = req.WithContext(listenerorigin.WithExternal(req.Context()))
+			// External is the fail-closed DEFAULT: a request with no
+			// internal-origin marker (e.g. the ingress-facing plaintext cmux
+			// listener, or the external TLS listener) is treated as external.
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotFound {
@@ -89,7 +90,9 @@ func TestInternalListener_ServesInternalPaths(t *testing.T) {
 		tc := tc
 		t.Run("INT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			// No external marker → internal origin (the default).
+			// Explicit internal-origin marker → dedicated cluster-internal admin
+			// REST listener (the ONLY listener that serves Internal* paths).
+			req = req.WithContext(listenerorigin.WithInternal(req.Context()))
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code == http.StatusNotFound {
@@ -117,7 +120,7 @@ func TestExternalListener_PublicPathsStillServed(t *testing.T) {
 		tc := tc
 		t.Run("EXT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			req = req.WithContext(listenerorigin.WithExternal(req.Context()))
+			// External is the fail-closed default (no internal-origin marker).
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code == http.StatusNotFound {

@@ -59,8 +59,8 @@ func TestRegistry_PublicRoutesRegistered(t *testing.T) {
 		tc := tc
 		t.Run("EXT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			// Simulate arrival on the external listener — public routes stay served.
-			req = req.WithContext(listenerorigin.WithExternal(req.Context()))
+			// External is the fail-closed default (no internal-origin marker) —
+			// public routes stay served.
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code == http.StatusNotFound {
@@ -91,7 +91,9 @@ func TestRegistry_InternalService_InternalListenerServes(t *testing.T) {
 		tc := tc
 		t.Run("INT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			// No external marker → internal origin (the default).
+			// Explicit internal-origin marker → dedicated cluster-internal admin
+			// REST listener (UI/admin/port-forward).
+			req = req.WithContext(listenerorigin.WithInternal(req.Context()))
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code == http.StatusNotFound {
@@ -121,7 +123,7 @@ func TestRegistry_InternalService_ExternalListenerRejected(t *testing.T) {
 		tc := tc
 		t.Run("EXT "+tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			req = req.WithContext(listenerorigin.WithExternal(req.Context()))
+			// External is the fail-closed default (no internal-origin marker).
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotFound {

@@ -87,7 +87,7 @@ func TestInternalExempt_ExternalOrigin_Unauthenticated(t *testing.T) {
 	h := mw.HTTP(next)
 
 	r := httptest.NewRequest(http.MethodPost, "/iam/v1/internal/iam:check", nil)
-	r = r.WithContext(listenerorigin.WithExternal(r.Context()))
+	// External is the fail-closed default (no internal-origin marker).
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
@@ -114,7 +114,8 @@ func TestInternalExempt_InternalOrigin_Allowed(t *testing.T) {
 	h := mw.HTTP(next)
 
 	r := httptest.NewRequest(http.MethodPost, "/iam/v1/internal/iam:check", nil)
-	// No external marker → internal origin.
+	// Explicit internal-origin marker → dedicated cluster-internal admin listener.
+	r = r.WithContext(listenerorigin.WithInternal(r.Context()))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
@@ -148,7 +149,8 @@ func TestInternalGated_InternalOrigin_StillChecked(t *testing.T) {
 	r.Header.Set("X-Kacho-Principal-Id", "usr_ordinary")
 	r.Header.Set("X-Kacho-Principal-Type", "user")
 	r.Header.Set("X-Kacho-Token-Acr", "2")
-	// No external marker → internal origin.
+	// Explicit internal-origin marker → dedicated cluster-internal admin listener.
+	r = r.WithContext(listenerorigin.WithInternal(r.Context()))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
