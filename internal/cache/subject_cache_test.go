@@ -29,11 +29,24 @@ func TestSubjectCache_Miss(t *testing.T) {
 }
 
 func TestSubjectCache_TTL_Expiry(t *testing.T) {
-	c := cache.NewSubjectCache(10, 50*time.Millisecond)
+	// Deterministic: step an injected clock past the TTL instead of sleeping.
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	advance := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+
+	c := cache.NewSubjectCache(10, 50*time.Millisecond, cache.WithClock(clock))
 	c.Set("zit-1", middleware.Subject{ID: "usr-1"})
-	time.Sleep(80 * time.Millisecond)
+
+	// Just before TTL → still present.
+	advance(49 * time.Millisecond)
 	_, ok := c.Get("zit-1")
-	assert.False(t, ok)
+	assert.True(t, ok, "entry must survive within TTL")
+
+	// Past TTL → evicted on read.
+	advance(2 * time.Millisecond)
+	_, ok = c.Get("zit-1")
+	assert.False(t, ok, "entry must expire past TTL")
 }
 
 func TestSubjectCache_LRU_Eviction(t *testing.T) {

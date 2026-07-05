@@ -155,7 +155,10 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 	// next call so Hydra's fresh `active=false` is reflected immediately.
 	ttl := c.ttl
 	if res.ExpiryAt > 0 {
-		untilExp := time.Until(time.Unix(res.ExpiryAt, 0))
+		// Route the exp clamp through the injectable clock (c.now), not the real
+		// wall clock, so the TTL derivation is deterministic under test and
+		// consistent with the get()/put() expiry checks that already use c.now().
+		untilExp := time.Unix(res.ExpiryAt, 0).Sub(c.now())
 		if untilExp <= 0 {
 			res.Active = false
 			return res, ErrTokenInactive

@@ -28,20 +28,38 @@ type subjectEntry struct {
 	expiresAt time.Time
 }
 
-func NewSubjectCache(maxSize int, ttl time.Duration) *SubjectCache {
+// SubjectCacheOption tunes an optional constructor parameter.
+type SubjectCacheOption func(*SubjectCache)
+
+// WithClock injects the time source (tests step a mock clock past the TTL
+// instead of sleeping on the wall clock). Production callers omit it and get
+// time.Now.
+func WithClock(now func() time.Time) SubjectCacheOption {
+	return func(c *SubjectCache) {
+		if now != nil {
+			c.now = now
+		}
+	}
+}
+
+func NewSubjectCache(maxSize int, ttl time.Duration, opts ...SubjectCacheOption) *SubjectCache {
 	if maxSize <= 0 {
 		maxSize = 10_000
 	}
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	return &SubjectCache{
+	c := &SubjectCache{
 		maxSize: maxSize,
 		ttl:     ttl,
 		items:   make(map[string]*list.Element, maxSize),
 		order:   list.New(),
 		now:     time.Now,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 func (c *SubjectCache) Get(key string) (middleware.Subject, bool) {
