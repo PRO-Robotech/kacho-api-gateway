@@ -1,21 +1,23 @@
 // Copyright (c) PRO-Robotech
 // SPDX-License-Identifier: BUSL-1.1
 
-// authz_instancegroup_failclosed_test.go — explicit runtime closure of the
-// proto-authz gap for compute InstanceGroupService.
+// authz_instancegroup_failclosed_test.go — runtime proof that compute
+// InstanceGroupService is now a first-class, permission-gated citizen of the
+// authz catalog.
 //
-// InstanceGroupService lives in its own proto sub-package
-// (kacho.cloud.compute.v1.instancegroup) and its RPCs are NOT annotated with
-// authz options, so the generated permission catalog carries NO entry for any
-// of them. The REST route table DOES resolve every InstanceGroups path to its
-// FQN, so an authenticated request reaches the authz decision. Without proto
-// edits (frozen wire contract) we lock the fail-closed behaviour at runtime:
-// every InstanceGroupService route must be denied, must NOT be on the public
-// allowlist, and must never reach the IAM Check (catalog-miss default-deny).
+// Historical note (inverted premise): InstanceGroupService lives in its own
+// proto sub-package (kacho.cloud.compute.v1.instancegroup) and USED to ship
+// WITHOUT authz options, so the generated permission catalog carried no entry
+// for any of its RPCs. Back then this file locked the fail-closed catalog-miss
+// deny (every route denied BEFORE the IAM Check ever ran).
 //
-// If someone later adds these RPCs to the public allowlist, or a wildcard
-// catalog entry accidentally cascades them open, THIS test fails — that is the
-// point.
+// The kacho-proto contract bump added the four `kacho.iam.authz.v1.*`
+// annotations to all 23 InstanceGroupService RPCs, so the embedded catalog now
+// carries a real, permission-gated entry for each. The behaviour therefore
+// INVERTS: routes are no longer denied by a catalog miss — they are gated by
+// normal authz. A caller lacking the permission is denied THROUGH the IAM
+// Check (403, Check consulted), and a caller that the Check authorizes passes
+// (200). This test asserts that new, correct behaviour.
 package middleware
 
 import (
@@ -31,15 +33,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// igFailClosedChecker — records whether IAM Check was ever consulted. For a
-// fail-closed catalog-miss it must stay at zero.
-type igFailClosedChecker struct{ calls int }
+// igChecker — a configurable authz decision oracle that records how many times
+// the IAM Check was consulted. `allow` selects the terminal decision.
+type igChecker struct {
+	allow bool
+	calls int
+}
 
-func (c *igFailClosedChecker) Check(_ context.Context, _ AuthzCheckInput) (AuthzCheckResult, error) {
+func (c *igChecker) Check(_ context.Context, _ AuthzCheckInput) (AuthzCheckResult, error) {
 	c.calls++
-	// If we ever get here, pretend the subject is allowed — this makes the test
-	// STRICT: the only thing preventing access is the catalog-miss default-deny.
-	return AuthzCheckResult{Allowed: true}, nil
+	return AuthzCheckResult{Allowed: c.allow, DenyReasons: []string{"no path"}}, nil
 }
 
 func silentTestLogger() *slog.Logger {
@@ -59,8 +62,10 @@ func instanceGroupRoutes() []restRoute {
 }
 
 // concretePath substitutes every {placeholder} in a route template with a
-// syntactically valid dummy resource id so the request reaches the authz layer
-// (not a routing 404).
+// syntactically valid, well-formed resource id so the request reaches the authz
+// Check (not a routing 404 and not the malformed-id short-circuit). The id uses
+// a REGISTERED compute-family prefix (`b1g`) — an unregistered prefix would trip
+// corevalidate.ResourceID and short-circuit to 400 before the Check phase.
 func concretePath(template string) string {
 	parts := strings.Split(template, "/")
 	for i, seg := range parts {
@@ -70,42 +75,14 @@ func concretePath(template string) string {
 			if idx := strings.Index(seg, ":"); idx >= 0 {
 				verb = seg[idx:]
 			}
-			parts[i] = "igr0000000000000001" + verb
+			parts[i] = "b1g000000000000001" + verb
 		}
 	}
 	return strings.Join(parts, "/")
 }
 
-func TestAuthz_InstanceGroupService_FailClosed(t *testing.T) {
-	routes := instanceGroupRoutes()
-	require.NotEmpty(t, routes,
-		"expected InstanceGroupService routes in the generated route table")
-
-	// 1. None of them may be on the public allowlist (that would bypass authz).
-	allow := map[string]struct{}{}
-	for _, fqn := range DefaultPublicAllowlist() {
-		allow[fqn] = struct{}{}
-	}
-	for _, rt := range routes {
-		if _, ok := allow[rt.FQN]; ok {
-			t.Fatalf("InstanceGroupService FQN %q is on the public allowlist — must be gated, not public", rt.FQN)
-		}
-	}
-
-	// 2. Real embedded catalog carries no InstanceGroupService entry.
-	catalog, err := LoadEmbeddedPermissionCatalog("")
-	require.NoError(t, err)
-	for _, rt := range routes {
-		if _, found := catalog.Lookup(rt.FQN); found {
-			t.Fatalf("InstanceGroupService FQN %q unexpectedly present in catalog — "+
-				"update this test with its gating expectation", rt.FQN)
-		}
-	}
-
-	// 3. Drive the authz HTTP middleware (real catalog + real router) with an
-	//    AUTHENTICATED principal whose Check would allow. Every InstanceGroups
-	//    route must be denied (403) and Check must never be consulted.
-	checker := &igFailClosedChecker{}
+func newIGAuthzMiddleware(t *testing.T, catalog *PermissionCatalog, checker AuthorizeChecker) *AuthzMiddleware {
+	t.Helper()
 	mw, err := NewAuthzMiddleware(AuthzMiddlewareConfig{
 		Enabled:         true,
 		Catalog:         catalog,
@@ -120,6 +97,76 @@ func TestAuthz_InstanceGroupService_FailClosed(t *testing.T) {
 		RestRouter:      NewRestRouter(),
 	})
 	require.NoError(t, err)
+	return mw
+}
+
+// authenticate stamps an authenticated principal (acr 2) on the HTTP request so
+// it reaches the authz decision instead of being rejected at authentication.
+func authenticate(r *http.Request) {
+	r.Header.Set("X-Kacho-Principal-Id", "usr_instancegroup")
+	r.Header.Set("X-Kacho-Principal-Type", "user")
+	r.Header.Set("X-Kacho-Token-Acr", "2")
+}
+
+// TestAuthz_InstanceGroupService_CatalogGated asserts the static catalog shape:
+// every InstanceGroupService route now HAS a permission-gated catalog entry
+// (the inversion of the old catalog-miss premise) and none is public.
+func TestAuthz_InstanceGroupService_CatalogGated(t *testing.T) {
+	routes := instanceGroupRoutes()
+	require.NotEmpty(t, routes,
+		"expected InstanceGroupService routes in the generated route table")
+
+	allow := map[string]struct{}{}
+	for _, fqn := range DefaultPublicAllowlist() {
+		allow[fqn] = struct{}{}
+	}
+
+	catalog, err := LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	for _, rt := range routes {
+		rt := rt
+		t.Run(rt.FQN, func(t *testing.T) {
+			// 1. Present in the catalog (was: MUST be absent).
+			entry, found := catalog.Lookup(rt.FQN)
+			require.True(t, found,
+				"InstanceGroupService FQN %q must now carry a catalog entry (contract bump added authz options)", rt.FQN)
+
+			// 2. Real permission gate — not exempt, fully annotated.
+			require.False(t, entry.IsExempt(),
+				"InstanceGroupService FQN %q must be permission-gated, not <exempt>", rt.FQN)
+			require.True(t, strings.HasPrefix(entry.Permission, "compute.instanceGroups."),
+				"unexpected permission %q on %q", entry.Permission, rt.FQN)
+			require.NotEmpty(t, entry.RequiredRelation,
+				"InstanceGroupService FQN %q must declare a required_relation", rt.FQN)
+			require.NotEmpty(t, entry.ScopeExtractor.ObjectType,
+				"InstanceGroupService FQN %q must declare a scope object_type", rt.FQN)
+			require.NotEmpty(t, entry.ScopeExtractor.FromRequestField,
+				"InstanceGroupService FQN %q must declare a scope from_request_field", rt.FQN)
+
+			// 3. Never on the public allowlist (that would bypass authz).
+			_, isPublic := allow[rt.FQN]
+			require.False(t, isPublic,
+				"InstanceGroupService FQN %q must be gated, not on the public allowlist", rt.FQN)
+		})
+	}
+}
+
+// TestAuthz_InstanceGroupService_DeniedThroughCheck drives every
+// InstanceGroupService route with an authenticated principal whose IAM Check
+// DENIES. The new correct behaviour: the request is denied (403) BECAUSE the
+// Check said no — the Check MUST be consulted (calls > 0). Under the old
+// catalog-miss premise the Check was never reached (calls == 0); that is
+// exactly the regression this inversion guards against.
+func TestAuthz_InstanceGroupService_DeniedThroughCheck(t *testing.T) {
+	routes := instanceGroupRoutes()
+	require.NotEmpty(t, routes)
+
+	catalog, err := LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	checker := &igChecker{allow: false}
+	mw := newIGAuthzMiddleware(t, catalog, checker)
 
 	handlerReached := false
 	guarded := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -130,24 +177,69 @@ func TestAuthz_InstanceGroupService_FailClosed(t *testing.T) {
 	for _, rt := range routes {
 		path := concretePath(rt.Template)
 		r := httptest.NewRequest(rt.Method, path, nil)
-		// Authenticated principal (HTTP path reads these headers).
-		r.Header.Set("X-Kacho-Principal-Id", "usr_failclosed")
-		r.Header.Set("X-Kacho-Principal-Type", "user")
-		r.Header.Set("X-Kacho-Token-Acr", "2")
+		authenticate(r)
 		rr := httptest.NewRecorder()
 		guarded.ServeHTTP(rr, r)
 
 		if rr.Code == http.StatusOK {
-			t.Fatalf("%s %s (%s) returned 200 — InstanceGroupService must be fail-closed", rt.Method, path, rt.FQN)
+			t.Fatalf("%s %s (%s) returned 200 — a caller lacking the permission must be denied", rt.Method, path, rt.FQN)
 		}
-		if rr.Code != http.StatusForbidden {
-			t.Fatalf("%s %s (%s) returned %d, want 403 Forbidden (catalog-miss deny)", rt.Method, path, rt.FQN, rr.Code)
+		// A denied read `Get` (v_get + concrete scope) hides existence and
+		// renders as 404; every other route renders the deny as 403. Both are
+		// Check-driven denials — what matters is that access is refused and the
+		// Check was consulted (asserted below).
+		if rr.Code != http.StatusForbidden && rr.Code != http.StatusNotFound {
+			t.Fatalf("%s %s (%s) returned %d, want 403 Forbidden or 404 Not Found (denied through the IAM Check)", rt.Method, path, rt.FQN, rr.Code)
 		}
 	}
 	if handlerReached {
-		t.Fatal("downstream handler was reached — an InstanceGroupService request slipped past authz")
+		t.Fatal("downstream handler was reached — a denied InstanceGroupService request slipped past authz")
 	}
-	if checker.calls != 0 {
-		t.Fatalf("IAM Check consulted %d times — fail-closed must deny before Check on a catalog miss", checker.calls)
+	// The crux of the inversion: every route reached and consulted the IAM
+	// Check (each RPC carries a distinct permission → distinct cache key → its
+	// own Check). A catalog miss would have short-circuited with calls == 0.
+	if checker.calls != len(routes) {
+		t.Fatalf("IAM Check consulted %d times, want %d — denials must flow through normal authz, not a catalog miss",
+			checker.calls, len(routes))
+	}
+}
+
+// TestAuthz_InstanceGroupService_AllowedThroughCheck is the positive half: when
+// the IAM Check AUTHORIZES the caller, every InstanceGroupService route passes
+// (200) and reaches the downstream handler — proving the gate is a real
+// permission gate that OPENS on authorization (no loss of functionality), not a
+// blanket deny.
+func TestAuthz_InstanceGroupService_AllowedThroughCheck(t *testing.T) {
+	routes := instanceGroupRoutes()
+	require.NotEmpty(t, routes)
+
+	catalog, err := LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	checker := &igChecker{allow: true}
+	mw := newIGAuthzMiddleware(t, catalog, checker)
+
+	reached := 0
+	guarded := mw.HTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for _, rt := range routes {
+		path := concretePath(rt.Template)
+		r := httptest.NewRequest(rt.Method, path, nil)
+		authenticate(r)
+		rr := httptest.NewRecorder()
+		guarded.ServeHTTP(rr, r)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s %s (%s) returned %d, want 200 — an authorized caller must pass the gate", rt.Method, path, rt.FQN, rr.Code)
+		}
+	}
+	if reached != len(routes) {
+		t.Fatalf("downstream handler reached %d times, want %d — authorized InstanceGroupService requests must pass through", reached, len(routes))
+	}
+	if checker.calls != len(routes) {
+		t.Fatalf("IAM Check consulted %d times, want %d — every gated route must consult the Check", checker.calls, len(routes))
 	}
 }

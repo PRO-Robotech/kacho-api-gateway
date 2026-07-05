@@ -1,5 +1,14 @@
 [
   {
+    "fqn": "kacho.cloud.apigateway.v1.InternalAuthzCacheService/InvalidateSubject",
+    "permission": "<exempt>",
+    "required_relation": "",
+    "scope_extractor": {
+      "object_type": "",
+      "from_request_field": ""
+    }
+  },
+  {
     "fqn": "kacho.cloud.compute.v1.DiskService/Create",
     "permission": "compute.disks.create",
     "required_relation": "editor",
@@ -614,6 +623,236 @@
     "scope_extractor": {
       "object_type": "project",
       "from_request_field": "*"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Create",
+    "permission": "compute.instanceGroups.create",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/CreateFromYaml",
+    "permission": "compute.instanceGroups.createFromYaml",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Delete",
+    "permission": "compute.instanceGroups.delete",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/DeleteInstances",
+    "permission": "compute.instanceGroups.deleteInstances",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/DisableZones",
+    "permission": "compute.instanceGroups.disableZones",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/EnableZones",
+    "permission": "compute.instanceGroups.enableZones",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Get",
+    "permission": "compute.instanceGroups.get",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/List",
+    "permission": "compute.instanceGroups.list",
+    "required_relation": "v_list",
+    "scope_extractor": {
+      "object_type": "project",
+      "from_request_field": "project_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/ListAccessBindings",
+    "permission": "compute.instanceGroups.listAccessBindings",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/ListInstances",
+    "permission": "compute.instanceGroups.listInstances",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/ListLogRecords",
+    "permission": "compute.instanceGroups.listLogRecords",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/ListOperations",
+    "permission": "compute.instanceGroups.listOperations",
+    "required_relation": "v_get",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/PauseProcesses",
+    "permission": "compute.instanceGroups.pauseProcesses",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/ResumeProcesses",
+    "permission": "compute.instanceGroups.resumeProcesses",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/RollingRecreate",
+    "permission": "compute.instanceGroups.rollingRecreate",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/RollingRestart",
+    "permission": "compute.instanceGroups.rollingRestart",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/SetAccessBindings",
+    "permission": "compute.instanceGroups.setAccessBindings",
+    "required_relation": "owner",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Start",
+    "permission": "compute.instanceGroups.start",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Stop",
+    "permission": "compute.instanceGroups.stop",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/StopInstances",
+    "permission": "compute.instanceGroups.stopInstances",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/Update",
+    "permission": "compute.instanceGroups.update",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/UpdateAccessBindings",
+    "permission": "compute.instanceGroups.updateAccessBindings",
+    "required_relation": "owner",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "resource_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.compute.v1.instancegroup.InstanceGroupService/UpdateFromYaml",
+    "permission": "compute.instanceGroups.updateFromYaml",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "compute_instance_group",
+      "from_request_field": "instance_group_id"
     },
     "required_acr_min": "2"
   },
@@ -1617,36 +1856,6 @@
     "required_acr_min": "2"
   },
   {
-    "fqn": "kacho.cloud.iam.v1.UserTokenService/Issue",
-    "permission": "iam.issue_user_tokens.issue",
-    "required_relation": "token_admin",
-    "scope_extractor": {
-      "object_type": "iam_user",
-      "from_request_field": "user_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.UserTokenService/List",
-    "permission": "iam.user_tokens.list",
-    "required_relation": "token_admin",
-    "scope_extractor": {
-      "object_type": "iam_user",
-      "from_request_field": "user_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
-    "fqn": "kacho.cloud.iam.v1.UserTokenService/Revoke",
-    "permission": "iam.revoke_user_tokens.revoke",
-    "required_relation": "token_admin",
-    "scope_extractor": {
-      "object_type": "iam_user",
-      "from_request_field": "user_id"
-    },
-    "required_acr_min": "2"
-  },
-  {
     "fqn": "kacho.cloud.iam.v1.ServiceAccountService/Create",
     "permission": "iam.service_accounts.create",
     "required_relation": "editor",
@@ -1808,6 +2017,36 @@
     "fqn": "kacho.cloud.iam.v1.UserService/Update",
     "permission": "iam.users.update",
     "required_relation": "v_update",
+    "scope_extractor": {
+      "object_type": "iam_user",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.UserTokenService/Issue",
+    "permission": "iam.issue_user_tokens.issue",
+    "required_relation": "token_admin",
+    "scope_extractor": {
+      "object_type": "iam_user",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.UserTokenService/List",
+    "permission": "iam.user_tokens.list",
+    "required_relation": "token_admin",
+    "scope_extractor": {
+      "object_type": "iam_user",
+      "from_request_field": "user_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.iam.v1.UserTokenService/Revoke",
+    "permission": "iam.revoke_user_tokens.revoke",
+    "required_relation": "token_admin",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
