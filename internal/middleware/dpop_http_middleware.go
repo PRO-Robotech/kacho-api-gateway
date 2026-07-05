@@ -385,16 +385,22 @@ func injectVerifiedTokenHeaders(r *http.Request, t *VerifiedToken) {
 	if t == nil {
 		return
 	}
-	subj := t.Subject
+	// Derive the principal with the SAME precedence as the legacy auth.HTTP
+	// Hydra path (principalFromVerifiedToken): prefer the canonical
+	// kacho_principal_id / _type claims (top-level or ext_claims) over the raw
+	// OIDC `sub`. DPoP.Wrap runs as the inner handler after auth.HTTP and would
+	// otherwise overwrite the principal headers auth.HTTP just set, making the
+	// downstream FGA subject user:<oidc-sub> instead of user:<kacho-id> and the
+	// two authN paths disagree on identity (CWE-287 / OWASP A07).
+	pType, subj := "user", t.Subject
+	if claimType := verifiedClaim(t, "kacho_principal_type"); claimType != "" {
+		pType = claimType
+	}
+	if claimID := verifiedClaim(t, "kacho_principal_id"); claimID != "" {
+		subj = claimID
+	}
 	if subj == "" {
 		return
-	}
-	// kacho_principal_type from ext_claims (preferred); fallback to "user".
-	pType := "user"
-	if ext := t.ExtClaims; ext != nil {
-		if s, ok := ext["kacho_principal_type"].(string); ok && s != "" {
-			pType = s
-		}
 	}
 	r.Header.Set("X-Kacho-Principal-Type", pType)
 	r.Header.Set("X-Kacho-Principal-Id", subj)
