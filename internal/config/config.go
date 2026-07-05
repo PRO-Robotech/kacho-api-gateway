@@ -160,6 +160,37 @@ type Config struct {
 	// must not be on the external TLS endpoint (InternalAuthzCacheService).
 	InternalGRPCAddr string `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR" default:":9091"`
 
+	// --- cluster-internal gRPC listener mTLS (InternalAuthzCacheService) ---
+	//
+	// The dedicated internal listener (InternalGRPCAddr) hosts
+	// InternalAuthzCacheService.InvalidateSubject, invoked by the kacho-iam
+	// subject_change push-drainer. Under security.md invariant #1/#4 the internal
+	// perimeter is NOT trusted: mTLS + per-RPC authorization are mandatory.
+	//
+	// Backward-compat default = OFF (insecure listener — local/dev stands only).
+	// When enabled the listener presents a server cert
+	// (InternalGRPCTLSCertFile/KeyFile), verifies the client cert against the
+	// internal CA (MTLSCAFile) with RequireAndVerifyClientCert, AND requires the
+	// verified client SPIFFE SAN to be on InternalGRPCAllowedSPIFFE (the iam
+	// push-drainer identity). enable=true with missing cert/key/CA or an empty
+	// allow-list ⇒ fail-fast at startup (never a silent insecure fallback). A
+	// production-class env with the listener insecure is refused at startup
+	// (validateProductionInternalListener) — secure-by-default (CWE-1188).
+	InternalGRPCMTLSEnable  bool   `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_MTLS_ENABLE"    default:"false"`
+	InternalGRPCTLSCertFile string `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_TLS_CERT_FILE"  default:""`
+	InternalGRPCTLSKeyFile  string `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_TLS_KEY_FILE"   default:""`
+
+	// InternalGRPCAllowedSPIFFE — comma-separated allow-list of verified client
+	// SPIFFE SANs authorised to invoke the internal listener's RPCs. Normally the
+	// single kacho-iam push-drainer identity
+	// (spiffe://kacho.cloud/ns/kacho-iam/sa/kacho-iam). Enforced only under mTLS.
+	InternalGRPCAllowedSPIFFE []string `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_ALLOWED_SPIFFE" default:""`
+
+	// InternalGRPCReflection gates gRPC server-reflection on the internal listener.
+	// Default false (reflection OFF) — enable only for incident-response debugging
+	// (reflection enumerates the internal admin surface, so it is a debug-gate).
+	InternalGRPCReflection bool `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_REFLECTION" default:"false"`
+
 	// --- OIDC login/callback flow (UI auth) ---
 	// OIDCIssuer empty ⇒ the OIDC handler is disabled (login → 503). A partial
 	// config (issuer set, client-id/redirect missing) is TOLERATED at startup —
@@ -473,6 +504,19 @@ func (c Config) BackendAddrs() map[string]string {
 		"registry":             c.RegistryAddr,
 		"registryInternal":     c.RegistryInternalAddr,
 	}
+}
+
+// InternalGRPCAllowedSPIFFESet returns the internal-listener caller allow-list as
+// a set, dropping empty/blank entries. Empty set ⇒ no caller is authorised (the
+// mTLS wiring fails fast rather than authorising every verified peer).
+func (c Config) InternalGRPCAllowedSPIFFESet() map[string]struct{} {
+	set := make(map[string]struct{}, len(c.InternalGRPCAllowedSPIFFE))
+	for _, s := range c.InternalGRPCAllowedSPIFFE {
+		if s = strings.TrimSpace(s); s != "" {
+			set[s] = struct{}{}
+		}
+	}
+	return set
 }
 
 // EdgeTLSClient assembles the corelib grpcclient.TLSClient value-struct for a
