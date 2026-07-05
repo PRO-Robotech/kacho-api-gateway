@@ -170,6 +170,7 @@ func main() {
 	// JWT verifier rejects them gracefully → middleware passes through as
 	// anonymous when requireForAllRequests=false).
 	var dpopMiddleware *middleware.DPoPMiddleware
+	var cnfGRPCInterceptor *middleware.CnfBindingInterceptor
 	if cfg.AuthNEnableDPoP {
 		var verifierErr error
 		// Reuse the SAME verifier instance already wired into the
@@ -230,6 +231,18 @@ func main() {
 		if verifierErr != nil {
 			log.Fatalf("dpop middleware: %v", verifierErr)
 		}
+
+		// Native gRPC surface: the REST DPoPMiddleware enforces cnf-binding only
+		// on the HTTP path; the gRPC interceptor chain does not inspect cnf. Wire
+		// a gRPC interceptor that mirrors it so a sender-constrained (DPoP- or
+		// mTLS-bound) token cannot be replayed as a plain bearer over native gRPC
+		// (CWE-294). Reuses the SAME JWKS verifier instance.
+		cnfGRPCInterceptor, verifierErr = middleware.NewCnfBindingInterceptor(
+			verifier, middleware.NewMTLSBoundValidator(), logger)
+		if verifierErr != nil {
+			log.Fatalf("cnf grpc interceptor: %v", verifierErr)
+		}
+
 		logger.Info("dpop-mw wired",
 			"api_domain", cfg.APIDomain,
 			"jwks_url", cfg.ResolvedHydraJWKSURL(),
@@ -352,6 +365,14 @@ func main() {
 		middleware.StreamRequestID,
 		middleware.StreamRecovery(logger),
 		authInterceptor.Stream(),
+	}
+	// cnf-binding enforcement runs AFTER auth (token already shape-validated) and
+	// BEFORE authz: a bound token presented unbound over gRPC is rejected before
+	// any authorization decision. Mounted only when DPoP is enabled (parity with
+	// the REST DPoPMiddleware).
+	if cnfGRPCInterceptor != nil {
+		grpcUnaryInterceptors = append(grpcUnaryInterceptors, cnfGRPCInterceptor.Unary())
+		grpcStreamInterceptors = append(grpcStreamInterceptors, cnfGRPCInterceptor.Stream())
 	}
 	if authzMW != nil {
 		grpcUnaryInterceptors = append(grpcUnaryInterceptors, authzMW.Unary())
