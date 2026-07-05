@@ -197,3 +197,52 @@ the release that lands the matching `kacho-deploy` overlay change.
 
 Rubric reference: CWE-348 / CWE-290; security.md. Contract impact: none — no
 wire/API/DB change; behavior governed by existing env knobs.
+
+## 6. Backend-dial transport mTLS is per-edge opt-in (not startup-enforced); mesh-terminated in the prod profile
+
+**Rule (security.md #1).** Every service→service hop must be mTLS (verified client
+cert); plaintext/insecure-gRPC in prod is banned. An audit noted that
+`validateProductionAuthzConfig` fails closed on authz/authn posture but never
+checks that any backend-dial mTLS edge (`KACHO_API_GATEWAY_MTLS_*_ENABLE`, all
+default `false`) is enabled, nor that the external TLS listener is configured
+(`KACHO_API_GATEWAY_TLS_LISTEN_ADDR` default empty) — so a prod-class deploy that
+forgets the mTLS overlay boots and dials every backend (incl. `iam:9091` /
+`AuthorizeService`) over insecure gRPC with no startup error.
+
+**Gateway state.** Backend-dial transport is a per-edge overlay
+(`cmd/api-gateway/mtls_config.go`): each edge (vpc / compute / iam / nlb / geo /
+registry) is independently enabled via its `MTLS_<EDGE>_ENABLE` flag. The build is
+**fail-fast when an edge is enabled but its cert material is missing/partial**
+(`buildBackendDialCreds` → `main.go log.Fatalf`), so the process never comes up
+half-secured on a configured edge. With every edge disabled (the default), every
+dial is insecure — identical to dev. The shipped prod profile
+(`kacho-deploy values.prod.yaml`) does **not** set any
+`KACHO_API_GATEWAY_MTLS_*_ENABLE`.
+
+**Why a hard app-level startup guard is NOT added here.** The deployed prod
+topology terminates inter-pod transport security at the **service mesh** (sidecar
+mTLS), not in the application: the app legitimately dials plaintext to its local
+sidecar and the mesh wraps the hop transparently. In that model app-level
+`MTLS_*_ENABLE=false` is the correct, secure posture. A startup guard that fatally
+required app-level backend mTLS in prod-class envs would break `values.prod.yaml`
+(which does not enable it) and every mesh-based deployment — it would hard-code one
+deployment-topology assumption (app-terminated mTLS) and reject the other
+(mesh-terminated). This is the deliberate reason the **internal listener** guard
+(`validateProductionInternalListener`) is asymmetric with backend dials: that
+listener enforces an app-level **SPIFFE caller allow-list**, which requires the app
+to see the verified client cert — a decision the mesh cannot make for it — so
+app-level mTLS there is functionally required; backend dials need only transport
+security, which the mesh provides.
+
+**Compensating controls.** (a) fail-fast on any *enabled* edge with missing cert
+material; (b) the internal listener hard-requires mTLS + SPIFFE allow-list in prod
+(`validateProductionInternalListener`); (c) `main.go` emits a loud startup WARN when
+the external advertised TLS edge runs with a relaxed auth posture. Operators who run
+the gateway **without a mesh** (direct pod-to-pod) MUST enable the per-edge
+`KACHO_API_GATEWAY_MTLS_*_ENABLE` flags + cert material; promoting this to a fatal
+guard is tracked for the release that lands a mesh-vs-app transport-policy signal in
+`kacho-deploy` (so the guard can distinguish "mesh handles it" from "misconfigured"
+instead of over-constraining the prod profile).
+
+Rubric reference: security.md #1; CWE-319 / CWE-1188. Contract impact: none — no
+wire/API/DB change; behavior governed by existing per-edge env knobs.
