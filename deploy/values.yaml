@@ -8,6 +8,14 @@ imagePullPolicy: IfNotPresent
 
 port: 8080
 tlsPort: 8443
+# Dedicated cluster-internal admin REST listener. It is the ONLY listener that
+# serves Internal* REST paths (/vpc/v1/addressPools, `:internal` projections,
+# InternalRegistry/Cluster/Operations admin). SECURITY (ban #6): the ingress
+# MUST NOT target this port — it is exposed only as the cluster-internal
+# `internal-rest` Service port for admin-UI / port-forward / in-cluster tooling.
+# Every other listener (cmux :8080 that the ingress hits, and TLS :8443) is
+# external and 404s Internal* REST. Set internalRestPort to "" to disable.
+internalRestPort: 8081
 
 # Адреса активных backend-сервисов (KACHO_API_GATEWAY_*_GRPC env vars).
 # Публичные RPC nlb обслуживаются под /nlb/v1/*.
@@ -188,6 +196,16 @@ resources:
     cpu: 1000m
     memory: 512Mi
 
+# NOTE (per-pod state under HPA): the Idempotency-Key single-flight store and the
+# DPoP jti replay cache are per-pod in-memory. With maxReplicas > 1 they are NOT
+# global — same-key double-submits that land on different pods can each proceed,
+# and a captured DPoP proof can be replayed at most once per replica within the
+# 60s iat-freshness window. This is an accepted residual with compensating
+# controls (downstream services are the real exactly-once authority via DB-level
+# invariants; replay is bounded by freshness). See
+# docs/architecture/known-divergences.md §3. Do NOT cap maxReplicas to 1 to
+# "fix" it — that trades an edge case for a capacity regression on the RPS
+# bottleneck; the correct fix is a shared store (Postgres/Redis).
 autoscaling:
   enabled: true
   minReplicas: 1

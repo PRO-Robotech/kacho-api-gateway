@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 const (
@@ -324,7 +326,7 @@ func replayIdempotent(w http.ResponseWriter, e idempotencyEntry) {
 // idempotencyCacheKey строит fingerprint запроса. NUL-разделитель исключает
 // коллизии склейки между сегментами.
 func idempotencyCacheKey(r *http.Request, idemKey string) string {
-	principal := r.Header.Get("X-Kacho-Principal-Id")
+	principal := r.Header.Get(principalmeta.HeaderPrincipalID)
 	return principal + "\x00" + r.Method + "\x00" + r.URL.Path + "\x00" + idemKey
 }
 

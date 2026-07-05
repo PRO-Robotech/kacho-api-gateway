@@ -520,13 +520,18 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
-		// SECURITY: the SAME httpSrv serves both
-		// the cluster-internal listener and the advertised external TLS listener.
-		// ConnContext tags requests whose connection was accepted on the external
-		// listener (wrapped with listenerorigin.ExternalListener below) so the REST
-		// dispatcher / authz middleware can reject Internal* paths arriving from the
-		// edge. Internal-listener connections pass through unmarked.
-		ConnContext: listenerorigin.ExternalConnContext,
+		// SECURITY (fail-closed): the SAME httpSrv serves every HTTP listener —
+		// the plaintext cmux listener the ingress targets, the advertised
+		// external TLS listener, AND the dedicated cluster-internal admin REST
+		// listener. ConnContext tags ONLY the internal admin listener's
+		// connections (wrapped with listenerorigin.InternalListener below);
+		// every other listener stays unmarked → external (the fail-closed
+		// default), so the REST dispatcher / authz middleware 404 Internal*
+		// paths regardless of which edge listener the request hit (project-rule
+		// #6). This inverts the earlier model, which marked only the TLS
+		// listener external and left the ingress-facing plaintext listener
+		// trusted → Internal* REST reachable from the edge.
+		ConnContext: listenerorigin.InternalConnContext,
 	}
 
 	// --- internal-only gRPC listener for InternalAuthzCacheService ---
@@ -590,6 +595,36 @@ func main() {
 		}
 	}()
 
+	// --- dedicated cluster-internal admin REST listener ---
+	//
+	// SECURITY (project-rule #6, fail-closed): this is the ONLY listener wrapped
+	// with listenerorigin.InternalListener, so it is the ONLY listener on which
+	// the REST dispatcher serves Internal* paths (/vpc/v1/addressPools,
+	// `:internal` infra-sensitive projections, InternalRegistry/Cluster/
+	// Operations admin). Every other listener — the plaintext cmux listener the
+	// ingress targets and the external TLS listener — is external (unmarked)
+	// and 404s Internal* REST. The ingress MUST NOT target this port; admin-UI /
+	// port-forward / cluster-internal tooling reach it via the `internal-rest`
+	// Service port. It serves plain HTTP/1.1 REST (Internal* gRPC is blocked on
+	// EVERY listener by the proxy's HasInternalSuffix router), so no cmux split
+	// is needed. Empty addr → disabled (Internal* REST unreachable via gateway).
+	var internalRESTListener net.Listener
+	if cfg.InternalRESTAddr != "" {
+		var restErr error
+		internalRESTListener, restErr = net.Listen("tcp", cfg.InternalRESTAddr)
+		if restErr != nil {
+			log.Fatalf("internal REST listen %s: %v", cfg.InternalRESTAddr, restErr)
+		}
+		logger.Info("api-gateway internal admin REST started", "addr", cfg.InternalRESTAddr)
+		go func() {
+			serveErr := httpSrv.Serve(listenerorigin.InternalListener(internalRESTListener))
+			if serveErr != nil && serveErr != http.ErrServerClosed && ctx.Err() == nil {
+				logger.Error("internal REST listener died; shutting down", "error", serveErr)
+				cancel()
+			}
+		}()
+	}
+
 	// --- TLS listener (опционально) для TLS-клиентов ---
 	// Запускаем отдельный TLS-листенер; за ним — отдельный cmux, который точно так же
 	// разделяет gRPC vs HTTP/REST после TLS-handshake. Тот же grpcSrv и httpSrv обслуживают
@@ -644,14 +679,13 @@ func main() {
 				cancel()
 			}
 		}()
-		// SECURITY: wrap the EXTERNAL TLS HTTP
-		// sub-listener so every connection ConnContext receives is tagged external
-		// origin (listenerorigin.ExternalConnContext). The REST dispatcher then 404s
-		// Internal* paths arriving here; the cluster-internal listener (plain httpL)
-		// stays unmarked and keeps serving Internal* to UI / admin / port-forward.
-		externalTLSHTTPL := listenerorigin.ExternalListener(tlsHTTPL)
+		// SECURITY (fail-closed): the external TLS HTTP sub-listener is left
+		// UNWRAPPED — its connections carry no internal-origin marker, so they
+		// are external (the default) and the REST dispatcher 404s Internal*
+		// paths arriving here. Internal* REST is served ONLY on the dedicated
+		// cluster-internal admin listener (InternalListener-wrapped, below).
 		go func() {
-			serveErr := httpSrv.Serve(externalTLSHTTPL)
+			serveErr := httpSrv.Serve(tlsHTTPL)
 			if serveErr != nil && serveErr != http.ErrServerClosed && ctx.Err() == nil {
 				logger.Error("tls http listener died; shutting down", "error", serveErr)
 				cancel()
@@ -682,6 +716,9 @@ func main() {
 		_ = listener.Close()
 		if tlsListener != nil {
 			_ = tlsListener.Close()
+		}
+		if internalRESTListener != nil {
+			_ = internalRESTListener.Close()
 		}
 	}()
 

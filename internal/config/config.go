@@ -44,9 +44,20 @@ import (
 type Config struct {
 	ListenAddr    string `envconfig:"KACHO_API_GATEWAY_LISTEN_ADDR"          default:":8080"`
 	TLSListenAddr string `envconfig:"KACHO_API_GATEWAY_TLS_LISTEN_ADDR"      default:""`
-	TLSCertFile   string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
-	TLSKeyFile    string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
-	VPCAddr       string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+	// InternalRESTAddr — dedicated cluster-internal admin REST listener. It is
+	// the ONLY listener wrapped with listenerorigin.InternalListener, so it is
+	// the ONLY listener on which Internal* REST paths (/vpc/v1/addressPools,
+	// `:internal` projections, InternalRegistry/Cluster/Operations admin) are
+	// served. Every other listener — the plaintext cmux listener the ingress
+	// targets AND the external TLS listener — is external (fail-closed) and 404s
+	// Internal* REST (project-rule #6). The ingress MUST NOT target this port;
+	// admin-UI / port-forward / cluster-internal tooling reach it via the
+	// dedicated `internal-rest` Service port. Empty → the internal REST listener
+	// is disabled (Internal* REST unreachable via the gateway entirely).
+	InternalRESTAddr string `envconfig:"KACHO_API_GATEWAY_INTERNAL_REST_ADDR"  default:":8081"`
+	TLSCertFile      string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
+	TLSKeyFile       string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
+	VPCAddr          string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
 	// VPCInternalAddr — admin-only internal-port (9091) of vpc backend.
 	// Routes AddressPool RESTful endpoints (kacho-only admin).
 	VPCInternalAddr string `envconfig:"KACHO_API_GATEWAY_VPC_INTERNAL_GRPC" default:"vpc.kacho.svc.cluster.local:9091"`

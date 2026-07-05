@@ -41,6 +41,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 // DPoPMiddleware — HTTP middleware orchestrator for production authN.
@@ -402,19 +404,19 @@ func injectVerifiedTokenHeaders(r *http.Request, t *VerifiedToken) {
 	if subj == "" {
 		return
 	}
-	r.Header.Set("X-Kacho-Principal-Type", pType)
-	r.Header.Set("X-Kacho-Principal-Id", subj)
-	r.Header.Set("X-Kacho-Principal-Display-Name", "") // tokens carry no display name
+	r.Header.Set(principalmeta.HeaderPrincipalType, pType)
+	r.Header.Set(principalmeta.HeaderPrincipalID, subj)
+	r.Header.Set(principalmeta.HeaderPrincipalDisplay, "") // tokens carry no display name
 	// Legacy grpc-gateway convention fallback.
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", pType)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", "")
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalType, pType)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, subj)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, "")
 
 	// Bonus: expose ACR / scope / jti for downstream audit.
-	r.Header.Set("X-Kacho-Token-Acr", t.ACR)
+	r.Header.Set(principalmeta.HeaderTokenACR, t.ACR)
 	r.Header.Set("X-Kacho-Token-Jti", t.JTI)
 	r.Header.Set("X-Kacho-Token-Scope", t.Scope)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Token-Acr", t.ACR)
+	r.Header.Set(principalmeta.HeaderGRPCMetaTokenACR, t.ACR)
 	r.Header.Set("Grpc-Metadata-X-Kacho-Token-Jti", t.JTI)
 	r.Header.Set("Grpc-Metadata-X-Kacho-Token-Scope", t.Scope)
 	if !t.ExpiresAt.IsZero() {

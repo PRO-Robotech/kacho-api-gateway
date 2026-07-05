@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 )
 
 // TestIsInternalPath покрывает path-based dispatch правил для split-mux.
@@ -313,6 +315,9 @@ func TestNewMux_RegistersInternalClusterRoutes(t *testing.T) {
 		tc := tc
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
+			// Internal-origin marker → dedicated cluster-internal admin listener,
+			// the only listener that serves Internal* routes (fail-closed).
+			req = req.WithContext(listenerorigin.WithInternal(req.Context()))
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code == http.StatusNotFound {
@@ -342,6 +347,9 @@ func TestNewMux_NoIAMInternalBackend_ClusterRouteNotRegistered(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/iam/v1/internal/cluster", nil)
+	// Internal-origin marker: the 404 must be due to the missing registration,
+	// not the external-origin gate (which would 404 the path on any listener).
+	req = req.WithContext(listenerorigin.WithInternal(req.Context()))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {

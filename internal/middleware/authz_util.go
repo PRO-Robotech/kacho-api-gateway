@@ -15,8 +15,9 @@ import (
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-)
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
+)
 
 // isConcreteResourceScope reports whether the catalog entry's scope is a
 // CONCRETE per-resource id — i.e. `from_request_field` names a real resource-id
@@ -117,16 +118,16 @@ func verifiedTokenFromCtxOrHTTP(ctx context.Context, r *http.Request) (*Verified
 		extID string
 	)
 	if r != nil {
-		acr = r.Header.Get("X-Kacho-Token-Acr")
+		acr = r.Header.Get(principalmeta.HeaderTokenACR)
 		jti = r.Header.Get("X-Kacho-Token-Jti")
 		scope = r.Header.Get("X-Kacho-Token-Scope")
-		pType = r.Header.Get("X-Kacho-Principal-Type")
-		sub = r.Header.Get("X-Kacho-Principal-Id")
+		pType = r.Header.Get(principalmeta.HeaderPrincipalType)
+		sub = r.Header.Get(principalmeta.HeaderPrincipalID)
 	}
 	if sub == "" || acr == "" {
 		md := incomingMD(ctx)
 		if md != nil {
-			if v := md.Get("x-kacho-token-acr"); len(v) > 0 {
+			if v := md.Get(principalmeta.MetaTokenACR); len(v) > 0 {
 				acr = v[0]
 			}
 			if v := md.Get("x-kacho-token-jti"); len(v) > 0 {
@@ -135,10 +136,10 @@ func verifiedTokenFromCtxOrHTTP(ctx context.Context, r *http.Request) (*Verified
 			if v := md.Get("x-kacho-token-scope"); len(v) > 0 {
 				scope = v[0]
 			}
-			if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
+			if v := md.Get(principalmeta.MetaPrincipalID); len(v) > 0 {
 				sub = v[0]
 			}
-			if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
+			if v := md.Get(principalmeta.MetaPrincipalType); len(v) > 0 {
 				pType = v[0]
 			}
 		}
