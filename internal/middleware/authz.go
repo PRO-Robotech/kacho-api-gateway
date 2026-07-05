@@ -340,8 +340,10 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 					"fqn", fqn, "err", decision.checkErr)
 				return handler(ctx, req)
 			}
-			return nil, status.Errorf(codes.Unavailable,
-				"authz service unavailable: %v", decision.checkErr)
+			// Redact the raw backend/transport detail from the client message —
+			// leaking it aids fabric mapping. The code is preserved (retryable,
+			// fail-closed) and the detail is already logged in decide().
+			return nil, status.Error(codes.Unavailable, "authz service unavailable")
 		default:
 			return handler(ctx, req)
 		}
@@ -383,8 +385,10 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 					"fqn", fqn, "err", decision.checkErr)
 				return handler(srv, ss)
 			}
-			return status.Errorf(codes.Unavailable,
-				"authz service unavailable: %v", decision.checkErr)
+			// Redact the raw backend/transport detail from the client message —
+			// leaking it aids fabric mapping. The code is preserved (retryable,
+			// fail-closed) and the detail is already logged in decide().
+			return status.Error(codes.Unavailable, "authz service unavailable")
 		default:
 			return handler(srv, ss)
 		}

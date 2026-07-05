@@ -625,10 +625,6 @@ func (a *AuthInterceptor) HTTP(next http.Handler) http.Handler {
 		// corelib/grpcsrv.UnaryPrincipalExtract. Также пишем legacy-form
 		// `Grpc-Metadata-X-Kacho-Principal-*` для совместимости с default
 		// grpc-gateway convention (если WithMetadata не работает — fallback path).
-		if !injected {
-			_ = injected // satisfy unused-var в коротких ветках
-		}
-
 		// Hydra-issued RS256/ES256/EdDSA access JWT over REST — validate
 		// via the JWKS verifier (parity with the gRPC interceptor path) and
 		// derive the principal from the verified `kacho_principal_*` claims
