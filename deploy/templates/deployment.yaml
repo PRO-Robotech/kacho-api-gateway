@@ -70,6 +70,14 @@ spec:
             - name: KACHO_API_GATEWAY_GEO_INTERNAL_GRPC
               value: "{{ .Values.backends.geoInternal }}"
             {{- end }}
+            {{- if .Values.backends.registry }}
+            - name: KACHO_API_GATEWAY_REGISTRY_GRPC
+              value: "{{ .Values.backends.registry }}"
+            {{- end }}
+            {{- if .Values.backends.registryInternal }}
+            - name: KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC
+              value: "{{ .Values.backends.registryInternal }}"
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: KACHO_API_GATEWAY_TLS_LISTEN_ADDR
               value: ":{{ .Values.tlsPort }}"
@@ -175,6 +183,10 @@ spec:
             {{- end }}
             {{- if .Values.mtls.edges.geo }}
             - name: KACHO_API_GATEWAY_MTLS_GEO_ENABLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.mtls.edges.registry }}
+            - name: KACHO_API_GATEWAY_MTLS_REGISTRY_ENABLE
               value: "true"
             {{- end }}
             {{- if .Values.mtls.hybridExternal }}

@@ -32,6 +32,8 @@ import (
 //	KACHO_API_GATEWAY_NLB_INTERNAL_GRPC   — адрес backend kacho-nlb internal-port (9091)
 //	KACHO_API_GATEWAY_GEO_GRPC            — адрес backend kacho-geo (public, port 9090)
 //	KACHO_API_GATEWAY_GEO_INTERNAL_GRPC   — адрес backend kacho-geo internal-port (9091)
+//	KACHO_API_GATEWAY_REGISTRY_GRPC          — адрес backend kacho-registry (public, port 9090)
+//	KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC — адрес backend kacho-registry internal-port (9091)
 //
 // TLS требуется для совместимости с CLI-клиентами, жестко ожидающими TLS-endpoint.
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
@@ -88,6 +90,19 @@ type Config struct {
 	// (kacho-only). Cluster-internal listener only (запрет #6).
 	// Separate Service "kacho-geo-internal" (mirrors kacho-iam-internal).
 	GeoInternalAddr string `envconfig:"KACHO_API_GATEWAY_GEO_INTERNAL_GRPC" default:"kacho-geo-internal.kacho.svc.cluster.local:9091"`
+
+	// RegistryAddr — public gRPC backend of kacho-registry (RegistryService:
+	// control-plane реестра). Public RPC под /registry/v1/*. При пустом значении
+	// registry-handlers не регистрируются (graceful — позволяет деплоить
+	// api-gateway до kacho-registry pod'a). Data-plane OCI v2 (/v2/*) — отдельный
+	// ingress, НЕ через api-gateway.
+	RegistryAddr string `envconfig:"KACHO_API_GATEWAY_REGISTRY_GRPC" default:"kacho-registry.kacho.svc.cluster.local:9090"`
+
+	// RegistryInternalAddr — admin-only internal-port (9091) of kacho-registry
+	// backend. Routes InternalRegistryService (TriggerGarbageCollection/
+	// GetRegistryStats) — GC zot-стора + инфра-статистика namespace. Cluster-internal
+	// listener only (запрет #6). Same host, internal port (mirrors iam/nlb).
+	RegistryInternalAddr string `envconfig:"KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC" default:"kacho-registry.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises through
 	// the endpoint-discovery RPC. External clients dial this address. Defaults to
@@ -232,18 +247,20 @@ type Config struct {
 	MTLSClientKeyFile  string `envconfig:"KACHO_API_GATEWAY_MTLS_CLIENT_KEY_FILE"  default:""`
 	MTLSCAFile         string `envconfig:"KACHO_API_GATEWAY_MTLS_CA_FILE"          default:""`
 
-	MTLSVPCEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_ENABLE"     default:"false"`
-	MTLSComputeEnable bool `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE" default:"false"`
-	MTLSIAMEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_ENABLE"     default:"false"`
-	MTLSNLBEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_ENABLE"     default:"false"`
-	MTLSGeoEnable     bool `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_ENABLE"     default:"false"`
+	MTLSVPCEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_ENABLE"      default:"false"`
+	MTLSComputeEnable  bool `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_ENABLE"  default:"false"`
+	MTLSIAMEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_ENABLE"      default:"false"`
+	MTLSNLBEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_ENABLE"      default:"false"`
+	MTLSGeoEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_ENABLE"      default:"false"`
+	MTLSRegistryEnable bool `envconfig:"KACHO_API_GATEWAY_MTLS_REGISTRY_ENABLE" default:"false"`
 
 	// Per-edge SNI/server-name overrides. Empty ⇒ derive from the dial-addr host.
-	MTLSVPCServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_SERVER_NAME"     default:""`
-	MTLSComputeServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_SERVER_NAME" default:""`
-	MTLSIAMServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_SERVER_NAME"     default:""`
-	MTLSNLBServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"     default:""`
-	MTLSGeoServerName     string `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_SERVER_NAME"     default:""`
+	MTLSVPCServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_SERVER_NAME"      default:""`
+	MTLSComputeServerName  string `envconfig:"KACHO_API_GATEWAY_MTLS_COMPUTE_SERVER_NAME"  default:""`
+	MTLSIAMServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_IAM_SERVER_NAME"      default:""`
+	MTLSNLBServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"      default:""`
+	MTLSGeoServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_SERVER_NAME"      default:""`
+	MTLSRegistryServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_REGISTRY_SERVER_NAME" default:""`
 
 	// Hybrid external listener: when true, the external TLS listener
 	// (TLSListenAddr) runs with tls.VerifyClientCertIfGiven and the internal CA
@@ -384,12 +401,15 @@ func (c Config) BackendAddrs() map[string]string {
 		"loadbalancerInternal": c.NLBInternalAddr,
 		"geo":                  c.GeoAddr,
 		"geoInternal":          c.GeoInternalAddr,
+		"registry":             c.RegistryAddr,
+		"registryInternal":     c.RegistryInternalAddr,
 	}
 }
 
 // EdgeTLSClient assembles the corelib grpcclient.TLSClient value-struct for a
-// backend edge ("vpc" | "compute" | "iam" | "nlb" | "geo"), deriving the
-// server-name from the dial address host when no per-edge override is set.
+// backend edge ("vpc" | "compute" | "iam" | "nlb" | "geo" | "registry"),
+// deriving the server-name from the dial address host when no per-edge override
+// is set.
 //
 // Contract:
 //   - edge disabled ⇒ {Enable:false}; cert material is NOT consulted (insecure
@@ -448,6 +468,8 @@ func (c Config) edgeMTLS(edge string) (enable bool, serverName string, err error
 		return c.MTLSNLBEnable, c.MTLSNLBServerName, nil
 	case "geo":
 		return c.MTLSGeoEnable, c.MTLSGeoServerName, nil
+	case "registry":
+		return c.MTLSRegistryEnable, c.MTLSRegistryServerName, nil
 	default:
 		return false, "", fmt.Errorf("unknown mtls edge %q", edge)
 	}

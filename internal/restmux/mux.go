@@ -55,6 +55,10 @@
 //   - loadbalancer.v1 (kacho-nlb): NetworkLoadBalancerService, ListenerService,
 //     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
 //     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
+//   - registry.v1 (kacho-registry): RegistryService — публичный control-plane реестра
+//     под /registry/v1/* (registries CRUD + repositories/tags/DeleteTag).
+//     InternalRegistryService (GC/stats admin, :9091) — без http-аннотаций → default
+//     unbound-route, cluster-internal only (ban #6). Data-plane OCI v2 — отдельный ingress.
 //   - iam.v1: Account, Project, User (read+delete only), ServiceAccount, Group, Role, AccessBinding —
 //     все RPC public под /iam/v1/*.
 //   - iam.v1 admin (kacho-only): InternalUserService.Get — для admin tooling; зарегистрирован
@@ -77,15 +81,18 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	computepb "github.com/PRO-Robotech/kacho-compute/proto/gen/go/kacho/cloud/compute/v1"
+	computepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/compute/v1"
 	// geo.v1 — Region/Zone leaf-сервис kacho-geo.
-	geopb "github.com/PRO-Robotech/kacho-geo/proto/gen/go/kacho/cloud/geo/v1"
-	iampb "github.com/PRO-Robotech/kacho-iam/proto/gen/go/kacho/cloud/iam/v1"
+	geopb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/geo/v1"
+	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
-	operationpb "github.com/PRO-Robotech/kacho-corelib/proto/gen/go/kacho/cloud/operation"
-	lbpb "github.com/PRO-Robotech/kacho-nlb/proto/gen/go/kacho/cloud/loadbalancer/v1"
-	vpcpb "github.com/PRO-Robotech/kacho-vpc/proto/gen/go/kacho/cloud/vpc/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
+	// kacho-registry (registry.v1) — public RPC под /registry/v1/*.
+	registrypb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/registry/v1"
+	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
 )
@@ -172,6 +179,19 @@ func isInternalPath(path string) bool {
 		return true
 	}
 
+	// (4) Internal*Service default unbound-route
+	// (`/kacho.cloud.<domain>.v1.Internal<Xxx>Service/<Method>`). Сервисы без
+	// `google.api.http`-аннотаций (InternalRegistryService: GC/stats admin) при
+	// `generate_unbound_methods` получают default gRPC-style REST-путь — он не
+	// содержит сегмента `/internal`, поэтому явно ловим его тем же предикатом,
+	// что gRPC-роутер (HasInternalSuffix). Без этого admin-путь ушел бы на public
+	// mux и просочился на external listener (ban #6). Форма пути совпадает с
+	// gRPC-FQN (ведущий "/"), которую HasInternalSuffix и разбирает; для обычных
+	// REST-путей (`/registry/v1/registries`, `/vpc/v1/networks`) предикат ложен.
+	if allowlist.HasInternalSuffix(path) {
+		return true
+	}
+
 	return false
 }
 
@@ -195,6 +215,8 @@ func isInternalPath(path string) bool {
 //	                        сейчас InternalResourceLifecycleService — streaming gRPC-direct only)
 //	"geo"                  → kacho-geo.kacho.svc.cluster.local:9090 (Region/Zone read)
 //	"geoInternal"          → kacho-geo-internal.kacho.svc.cluster.local:9091 (admin Region/Zone CRUD)
+//	"registry"             → kacho-registry.kacho.svc.cluster.local:9090 (RegistryService control-plane)
+//	"registryInternal"     → kacho-registry.kacho.svc.cluster.local:9091 (InternalRegistryService GC/stats admin)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -299,7 +321,8 @@ func NewMux(
 	}
 
 	// lbAddr / lbInternalAddr обслуживают kacho-nlb (loadbalancer.v1).
-	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr, geoAddr, geoInternalAddr string
+	// registryAddr / registryInternalAddr обслуживают kacho-registry (registry.v1).
+	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr, geoAddr, geoInternalAddr, registryAddr, registryInternalAddr string
 	if addrs != nil {
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
@@ -311,6 +334,8 @@ func NewMux(
 		lbInternalAddr = addrs["loadbalancerInternal"]
 		geoAddr = addrs["geo"]
 		geoInternalAddr = addrs["geoInternal"]
+		registryAddr = addrs["registry"]
+		registryInternalAddr = addrs["registryInternal"]
 	}
 
 	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
@@ -465,6 +490,13 @@ func NewMux(
 			if err := iampb.RegisterSAKeyServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam SAKeyService: %w", err)
 			}
+			// UserTokenService (персональные API-токены пользователя). Public под
+			// /iam/v1/users/{user_id}/tokens. Зеркалит SAKeyService: Issue/Revoke —
+			// async Operation, List — sync. Без этой регистрации grpc-gateway не
+			// имеет REST-route → POST .../tokens → 404.
+			if err := iampb.RegisterUserTokenServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
+				return nil, fmt.Errorf("register iam UserTokenService: %w", err)
+			}
 			// AuthorizeService — tenant FGA check (POST /iam/v1/authorize:check).
 			if err := iampb.RegisterAuthorizeServiceHandlerFromEndpoint(ctx, mux, iamAddr, optsFor("iam")); err != nil {
 				return nil, fmt.Errorf("register iam AuthorizeService: %w", err)
@@ -544,6 +576,33 @@ func NewMux(
 		if lbInternalAddr != "" {
 			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, optsFor("loadbalancerInternal")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer InternalResourceLifecycleService: %w", err)
+			}
+		}
+
+		// --- registry.v1 (kacho-registry): RegistryService ---
+		// Public control-plane реестра под /registry/v1/*: registries CRUD +
+		// per-repo проекции (repositories/tags/DeleteTag). Регистрируется условно
+		// по registryAddr — backend еще может быть не задеплоен (поведение
+		// симметрично lbAddr / geoAddr выше). Data-plane OCI v2 (/v2/*) — отдельный
+		// ingress, НЕ через api-gateway.
+		if registryAddr != "" {
+			if err := registrypb.RegisterRegistryServiceHandlerFromEndpoint(ctx, mux, registryAddr, optsFor("registry")); err != nil {
+				return nil, fmt.Errorf("register registry RegistryService: %w", err)
+			}
+		}
+
+		// --- registry.v1 admin (InternalRegistryService) — kacho-only, internal-port (9091) ---
+		// TriggerGarbageCollection (GC zot-стора) + GetRegistryStats (инфра-проекция
+		// namespace: blob/размер — security.md). В proto НЕТ `google.api.http`, поэтому
+		// grpc-gateway создает default unbound-route
+		// POST /kacho.cloud.registry.v1.InternalRegistryService/<Method> (аналог iam
+		// InternalUserService.Get). Доступно ТОЛЬКО через cluster-internal REST listener:
+		// dispatcher (isInternalPath → HasInternalSuffix) 404-ит эти пути на external
+		// TLS listener (ban #6), а gRPC-роутер блокирует Internal* через HasInternalSuffix.
+		// Admin-tooling может ходить и напрямую gRPC до kacho-registry:9091.
+		if registryInternalAddr != "" {
+			if err := registrypb.RegisterInternalRegistryServiceHandlerFromEndpoint(ctx, mux, registryInternalAddr, optsFor("registryInternal")); err != nil {
+				return nil, fmt.Errorf("register registry InternalRegistryService: %w", err)
 			}
 		}
 

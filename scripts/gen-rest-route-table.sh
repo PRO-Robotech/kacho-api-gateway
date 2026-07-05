@@ -4,40 +4,39 @@
 # SPDX-License-Identifier: BUSL-1.1
 
 #
-# gen-permission-catalog.sh — регенерация permission_catalog.json из proto всех
-# доменов Kachō.
+# gen-rest-route-table.sh — регенерация internal/middleware/rest_route_table_gen.go
+# из аннотаций `option (google.api.http)` proto всех доменов Kachō.
 #
 # api-gateway импортирует proto-stubs всех доменов и потому является
-# единственным местом, откуда виден полный набор RPC платформы. Каталог
-# permissions собирается ЗДЕСЬ (а не в общем proto-репозитории): после
+# единственным местом, откуда виден полный набор REST-биндингов платформы.
+# Таблица path->FQN собирается ЗДЕСЬ (не в доменных репозиториях): после
 # proto-децентрализации доменные .proto живут в репозиториях-владельцах
-# (kacho-iam / kacho-vpc / kacho-compute / kacho-geo / kacho-nlb), а общая
-# инфраструктура (operation / validation / authz_options) — в kacho-corelib.
+# (kacho-iam / kacho-vpc / kacho-compute / kacho-geo / kacho-nlb /
+# kacho-registry), а общая инфраструктура (operation / validation) — в
+# kacho-corelib.
 #
-# Что делает скрипт:
+# Что делает скрипт (то же дерево, что gen-permission-catalog.sh):
 #   1. собирает единое buf-дерево во временном каталоге: общая инфраструктура из
 #      kacho-corelib + cloud/<domain> каждого домена-владельца + anchor-файл
-#      proto/kacho/iam/authz/catalog/v1/permissions_catalog_root.proto;
-#   2. собирает плагин ./cmd/protoc-gen-kacho-permissions;
+#      permissions_catalog_root.proto;
+#   2. собирает плагин ./cmd/protoc-gen-kacho-rest-routes;
 #   3. запускает `buf generate` со `strategy: all` — плагин получает ВЕСЬ образ
-#      одним вызовом и эмитит permission_catalog.json (+ warnings-файл, если
-#      какой-то RPC не аннотирован).
+#      одним вызовом и эмитит rest_route_table_gen.go;
+#   4. прогоняет gofmt и кладет результат в internal/middleware/.
 #
 # Требует рабочую копию workspace с соседними репозиториями (../kacho-*) — это
-# dev/maintenance-инструмент, а не часть рантайма (рантайм использует уже
-# вшитый internal/middleware/embed/permission_catalog.json). Single-repo сборка
-# (CI / Docker / опубликованный клон) каталог не регенерит — он зашит.
+# dev/maintenance-инструмент, а не часть рантайма (рантайм использует уже вшитую
+# таблицу). Идемпотентен: повторный прогон без изменений proto дает нулевой diff.
 #
 # Использование:
-#   scripts/gen-permission-catalog.sh [OUTPUT_JSON]
-# По умолчанию OUTPUT_JSON = build/permission_catalog.json (каталог не
-# перезаписывает вшитый embed — это делает `make permission-catalog-apply`).
+#   scripts/gen-rest-route-table.sh [OUTPUT_GO]
+# По умолчанию OUTPUT_GO = internal/middleware/rest_route_table_gen.go.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIBLINGS="$(cd "${REPO_ROOT}/.." && pwd)"
-OUT="${1:-${REPO_ROOT}/build/permission_catalog.json}"
+OUT="${1:-${REPO_ROOT}/internal/middleware/rest_route_table_gen.go}"
 
 CORELIB="${SIBLINGS}/kacho-corelib/proto"
 IAM="${SIBLINGS}/kacho-iam/proto"
@@ -56,13 +55,13 @@ for d in "${CORELIB}" "${IAM}" "${VPC}" "${COMPUTE}" "${GEO}" "${NLB}" "${REGIST
 done
 command -v buf >/dev/null || { echo "ERR: buf не установлен" >&2; exit 1; }
 
-STAGE="$(mktemp -d)/catalog-proto"
+STAGE="$(mktemp -d)/routes-proto"
 BIN="$(mktemp -d)"
 trap 'rm -rf "${STAGE%/*}" "${BIN}"' EXIT
 mkdir -p "${STAGE}/kacho/cloud" "${STAGE}/kacho/iam/authz"
 
-# --- общая инфраструктура из kacho-corelib (БЕЗ apigateway — у него свой
-#     служебный сервис, не входящий в публичный/доменный каталог) ---
+# --- общая инфраструктура из kacho-corelib (БЕЗ apigateway — служебный сервис,
+#     не входящий в публичный/доменный набор REST-биндингов) ---
 cp -R "${CORELIB}/google"                       "${STAGE}/google"
 cp -R "${CORELIB}/kacho/cloud/operation"        "${STAGE}/kacho/cloud/operation"
 cp    "${CORELIB}/kacho/cloud/validation.proto" "${STAGE}/kacho/cloud/validation.proto"
@@ -86,7 +85,7 @@ cp "${REPO_ROOT}/proto/kacho/iam/authz/catalog/v1/permissions_catalog_root.proto
    "${STAGE}/kacho/iam/authz/catalog/v1/permissions_catalog_root.proto"
 
 # --- сборка плагина ---
-go -C "${REPO_ROOT}" build -o "${BIN}/protoc-gen-kacho-permissions" ./cmd/protoc-gen-kacho-permissions
+go -C "${REPO_ROOT}" build -o "${BIN}/protoc-gen-kacho-rest-routes" ./cmd/protoc-gen-kacho-rest-routes
 
 # --- buf-конфиг во временном дереве ---
 cat > "${STAGE}/buf.yaml" <<'YAML'
@@ -99,8 +98,8 @@ version: v2
 plugins:
   # strategy: all — плагину подается ВЕСЬ образ одним вызовом (иначе buf по
   # умолчанию дробит генерацию по директориям и primary-файл получает пустое
-  # замыкание → пустой каталог).
-  - local: protoc-gen-kacho-permissions
+  # замыкание -> пустая таблица).
+  - local: protoc-gen-kacho-rest-routes
     out: out
     strategy: all
 YAML
@@ -108,12 +107,11 @@ YAML
 mkdir -p "${STAGE}/out"
 ( cd "${STAGE}" && PATH="${BIN}:${PATH}" buf generate )
 
-mkdir -p "$(dirname "${OUT}")"
-cp "${STAGE}/out/permission_catalog.json" "${OUT}"
-if [[ -f "${STAGE}/out/permission_catalog_warnings.txt" ]]; then
-  cp "${STAGE}/out/permission_catalog_warnings.txt" "$(dirname "${OUT}")/permission_catalog_warnings.txt"
-  echo "WARN: часть RPC без аннотаций — см. $(dirname "${OUT}")/permission_catalog_warnings.txt" >&2
-fi
+# Плагин уже прогоняет go/format; повторный gofmt — дешевая страховка.
+gofmt -w "${STAGE}/out/rest_route_table_gen.go"
 
-n="$(grep -c '"fqn"' "${OUT}" || true)"
-echo "OK: ${OUT} (${n} entries)"
+mkdir -p "$(dirname "${OUT}")"
+cp "${STAGE}/out/rest_route_table_gen.go" "${OUT}"
+
+n="$(grep -c 'Method:' "${OUT}" || true)"
+echo "OK: ${OUT} (${n} routes)"

@@ -28,6 +28,12 @@ backends:
   # (NXDOMAIN) → grpc "no children to pick from" 503 on every /geo/v1/* request.
   geo: kacho-geo.kacho.svc.cluster.local:9090
   geoInternal: kacho-geo-internal.kacho.svc.cluster.local:9091
+  # kacho-registry public + internal endpoints (OCI/Docker image registry leaf).
+  # Public RegistryService on /registries/v1/*; InternalRegistryService (GC/stats)
+  # on the internal :9091 mux (ban #6). The registry data-plane :8080 is NOT
+  # gateway-routed — docker push/pull go through the registry.kacho.local ingress.
+  registry: kacho-registry.kacho.svc.cluster.local:9090
+  registryInternal: kacho-registry.kacho.svc.cluster.local:9091
 
 # TLS termination на api-gateway pod. Включается автоматически когда tls.secretName указан.
 # Cert поставляется внешне через `kubectl create secret tls api-gateway-tls --cert=tls.crt --key=tls.key`.
@@ -165,6 +171,8 @@ mtls:
     nlb: false        # gateway→nlb (+ nlbInternal)
     geo: false        # gateway→geo (+ geoInternal); SERVER_NAME unset → derived per
                       # dial-host (kacho-geo / kacho-geo-internal), both in peer SAN
+    registry: false   # gateway→registry (+ registryInternal); SERVER_NAME unset →
+                      # derived per dial-host (kacho-registry / kacho-registry-internal)
 
 # Arbitrary env vars escape-hatch (key: value).
 extraEnv: {}
