@@ -50,11 +50,25 @@ type idempotencyItem struct {
 	entry idempotencyEntry
 }
 
+// idempotencyFlight — an in-flight reservation for a key. The first (leader)
+// caller for a key registers a flight; concurrent (follower) callers block on
+// `done` and then replay the leader's captured response, so a mutating
+// downstream runs exactly once per concurrent batch (single-flight — closes the
+// check-then-act TOCTOU, project-rule #10 / CWE-362).
+type idempotencyFlight struct {
+	done       chan struct{}
+	hasResult  bool
+	statusCode int
+	body       []byte
+	headers    http.Header
+}
+
 // IdempotencyStore — in-memory store с TTL, ограничением емкости и GC.
 type IdempotencyStore struct {
 	mu         sync.Mutex
-	elems      map[string]*list.Element // key → *list.Element{Value: *idempotencyItem}
-	order      *list.List               // FIFO insertion order для вытеснения
+	elems      map[string]*list.Element      // key → *list.Element{Value: *idempotencyItem}
+	order      *list.List                    // FIFO insertion order для вытеснения
+	inflight   map[string]*idempotencyFlight // key → in-flight reservation
 	ttl        time.Duration
 	maxEntries int
 }
@@ -72,11 +86,72 @@ func newIdempotencyStoreWithCap(ttl time.Duration, maxEntries int) *IdempotencyS
 	s := &IdempotencyStore{
 		elems:      make(map[string]*list.Element),
 		order:      list.New(),
+		inflight:   make(map[string]*idempotencyFlight),
 		ttl:        ttl,
 		maxEntries: maxEntries,
 	}
 	go s.gcLoop()
 	return s
+}
+
+// reserve is the single-flight admission point. Under the store lock it resolves
+// one of three outcomes for the key:
+//
+//   - cached != nil  — a completed long-term entry exists; replay it and return.
+//   - leader != nil  — no in-flight reservation existed; THIS caller owns the
+//     downstream execution and MUST call finishLeader or abortLeader exactly once.
+//   - follower != nil — another caller is already executing downstream; wait on
+//     follower.done, then replay follower's captured result (or fall through when
+//     the leader aborted without one).
+func (s *IdempotencyStore) reserve(key string) (cached *idempotencyEntry, leader, follower *idempotencyFlight) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.elems[key]; ok {
+		it := e.Value.(*idempotencyItem)
+		if !time.Now().After(it.entry.expiresAt) {
+			entry := it.entry
+			return &entry, nil, nil
+		}
+		s.removeElem(e)
+	}
+	if fl, ok := s.inflight[key]; ok {
+		return nil, nil, fl
+	}
+	fl := &idempotencyFlight{done: make(chan struct{})}
+	s.inflight[key] = fl
+	return nil, fl, nil
+}
+
+// finishLeader records the leader's response on the flight (so followers can
+// replay it), optionally commits it to the long-term store, drops the in-flight
+// reservation and wakes followers. Called exactly once by the leader.
+func (s *IdempotencyStore) finishLeader(key string, fl *idempotencyFlight, entry idempotencyEntry, cache bool) {
+	s.mu.Lock()
+	fl.statusCode = entry.statusCode
+	fl.body = entry.body
+	fl.headers = entry.headers
+	fl.hasResult = true
+	if cache {
+		s.putLocked(key, entry)
+	}
+	delete(s.inflight, key)
+	s.mu.Unlock()
+	close(fl.done)
+}
+
+// abortLeader drops the in-flight reservation without a result (downstream
+// panicked / never produced a cacheable response). Followers wake and fall
+// through to execute downstream themselves. Idempotent for the not-yet-finished
+// flight.
+func (s *IdempotencyStore) abortLeader(key string, fl *idempotencyFlight) {
+	s.mu.Lock()
+	if cur, ok := s.inflight[key]; ok && cur == fl {
+		delete(s.inflight, key)
+		s.mu.Unlock()
+		close(fl.done)
+		return
+	}
+	s.mu.Unlock()
 }
 
 // gcLoop удаляет expired entries раз в ttl/24 (но не реже минуты).
@@ -135,6 +210,11 @@ func (s *IdempotencyStore) get(key string) (idempotencyEntry, bool) {
 func (s *IdempotencyStore) put(key string, entry idempotencyEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.putLocked(key, entry)
+}
+
+// putLocked — общий insert-путь. Caller держит s.mu.
+func (s *IdempotencyStore) putLocked(key string, entry idempotencyEntry) {
 	if e, ok := s.elems[key]; ok {
 		e.Value.(*idempotencyItem).entry = entry
 		s.order.MoveToBack(e)
@@ -171,34 +251,74 @@ func HTTPIdempotency(store *IdempotencyStore) func(http.Handler) http.Handler {
 				return
 			}
 			key := idempotencyCacheKey(r, idemKey)
-			if e, ok := store.get(key); ok {
-				for k, vs := range e.headers {
-					for _, v := range vs {
-						w.Header().Add(k, v)
-					}
-				}
-				w.Header().Set("X-Idempotent-Replayed", "true")
-				w.WriteHeader(e.statusCode)
-				_, _ = w.Write(e.body)
+
+			// Single-flight admission. Atomically resolve to: an existing cached
+			// entry (replay), a follower waiting on an in-flight leader, or the
+			// leader that owns downstream execution. This closes the check-then-act
+			// TOCTOU where two concurrent same-key double-submits both miss the
+			// cache and both mutate downstream (project-rule #10 / CWE-362).
+			cached, leader, follower := store.reserve(key)
+			if cached != nil {
+				replayIdempotent(w, *cached)
 				return
 			}
+			if follower != nil {
+				<-follower.done
+				if follower.hasResult {
+					replayIdempotent(w, idempotencyEntry{
+						statusCode: follower.statusCode,
+						body:       follower.body,
+						headers:    follower.headers,
+					})
+					return
+				}
+				// Leader aborted without a result (panic / no cacheable response)
+				// — fall through and execute downstream directly, best-effort.
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Leader path. Guarantee the reservation is always released even if
+			// downstream panics (followers must never block forever).
+			finished := false
+			defer func() {
+				if !finished {
+					store.abortLeader(key, leader)
+				}
+			}()
 			rec := &responseRecorder{ResponseWriter: w, body: &bytes.Buffer{}, statusCode: 200}
 			next.ServeHTTP(rec, r)
-			// Кэшируем только не-5xx и тело в пределах лимита.
-			if rec.statusCode < 500 && rec.body.Len() <= idempotencyMaxBodyBytes {
-				headers := http.Header{}
-				if ct := w.Header().Get("Content-Type"); ct != "" {
-					headers.Set("Content-Type", ct)
-				}
-				store.put(key, idempotencyEntry{
-					statusCode: rec.statusCode,
-					body:       rec.body.Bytes(),
-					headers:    headers,
-					expiresAt:  time.Now().Add(store.ttl),
-				})
+			headers := http.Header{}
+			if ct := w.Header().Get("Content-Type"); ct != "" {
+				headers.Set("Content-Type", ct)
 			}
+			// Cache long-term only non-5xx responses within the size cap (5xx are
+			// retry-safe; oversized bodies would pin memory). Followers of this
+			// concurrent batch still replay the leader's captured response either
+			// way, so the batch shares one downstream execution.
+			cache := rec.statusCode < 500 && rec.body.Len() <= idempotencyMaxBodyBytes
+			store.finishLeader(key, leader, idempotencyEntry{
+				statusCode: rec.statusCode,
+				body:       rec.body.Bytes(),
+				headers:    headers,
+				expiresAt:  time.Now().Add(store.ttl),
+			}, cache)
+			finished = true
 		})
 	}
+}
+
+// replayIdempotent writes a stored/captured response to w with the
+// X-Idempotent-Replayed marker.
+func replayIdempotent(w http.ResponseWriter, e idempotencyEntry) {
+	for k, vs := range e.headers {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+	w.Header().Set("X-Idempotent-Replayed", "true")
+	w.WriteHeader(e.statusCode)
+	_, _ = w.Write(e.body)
 }
 
 // idempotencyCacheKey строит fingerprint запроса. NUL-разделитель исключает

@@ -25,7 +25,6 @@
 package middleware
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,8 +33,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/lrucache"
 )
 
 // ErrTokenInactive — Hydra reported `active=false`; bubble up to caller and
@@ -53,11 +53,12 @@ type IntrospectionResult struct {
 	TokenUse string `json:"token_use,omitempty"`
 }
 
-// IntrospectionCache — LRU + TTL.
+// IntrospectionCache — LRU + TTL over the shared lrucache primitive. The
+// authz-specific policy retained here is the exp-bounded per-entry TTL clamp and
+// negative caching; the eviction/TTL mechanics live in the primitive.
 type IntrospectionCache struct {
 	url        string
 	httpClient *http.Client
-	maxEntries int
 	ttl        time.Duration
 	now        func() time.Time
 
@@ -66,15 +67,7 @@ type IntrospectionCache struct {
 	basicUser string
 	basicPass string
 
-	mu      sync.Mutex
-	entries map[string]*list.Element
-	lru     *list.List
-}
-
-type introspectionEntry struct {
-	jti       string
-	result    IntrospectionResult
-	expiresAt time.Time
+	cache *lrucache.Cache[string, IntrospectionResult]
 }
 
 // IntrospectionCacheConfig — construction parameters.
@@ -110,13 +103,11 @@ func NewIntrospectionCache(cfg IntrospectionCacheConfig) (*IntrospectionCache, e
 	return &IntrospectionCache{
 		url:        cfg.HydraIntrospectionURL,
 		httpClient: hc,
-		maxEntries: cfg.MaxEntries,
 		ttl:        cfg.TTL,
 		now:        now,
 		basicUser:  cfg.BasicAuthUser,
 		basicPass:  cfg.BasicAuthPass,
-		entries:    make(map[string]*list.Element),
-		lru:        list.New(),
+		cache:      lrucache.New[string, IntrospectionResult](cfg.MaxEntries, cfg.TTL, now),
 	}, nil
 }
 
@@ -135,7 +126,7 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 	}
 
 	// 1. Cache hit?
-	if r, ok := c.get(jti); ok {
+	if r, ok := c.cache.Get(jti); ok {
 		if !r.Active {
 			return r, ErrTokenInactive
 		}
@@ -155,7 +146,10 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 	// next call so Hydra's fresh `active=false` is reflected immediately.
 	ttl := c.ttl
 	if res.ExpiryAt > 0 {
-		untilExp := time.Until(time.Unix(res.ExpiryAt, 0))
+		// Route the exp clamp through the injectable clock (c.now), not the real
+		// wall clock, so the TTL derivation is deterministic under test and
+		// consistent with the get()/put() expiry checks that already use c.now().
+		untilExp := time.Unix(res.ExpiryAt, 0).Sub(c.now())
 		if untilExp <= 0 {
 			res.Active = false
 			return res, ErrTokenInactive
@@ -164,7 +158,7 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 			ttl = untilExp
 		}
 	}
-	c.put(jti, res, ttl)
+	c.cache.PutWithTTL(jti, res, ttl)
 
 	if !res.Active {
 		return res, ErrTokenInactive
@@ -174,64 +168,10 @@ func (c *IntrospectionCache) Introspect(ctx context.Context, jti, rawToken strin
 
 // Invalidate removes the cached entry for jti. Called by session_revocations
 // LISTEN/NOTIFY handler to honor force-logout immediately (≤ 1s SLA).
-func (c *IntrospectionCache) Invalidate(jti string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.entries[jti]; ok {
-		c.lru.Remove(el)
-		delete(c.entries, jti)
-	}
-}
+func (c *IntrospectionCache) Invalidate(jti string) { c.cache.InvalidateKey(jti) }
 
 // Len returns current cache size; used by tests / observability.
-func (c *IntrospectionCache) Len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lru.Len()
-}
-
-func (c *IntrospectionCache) get(jti string) (IntrospectionResult, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	el, ok := c.entries[jti]
-	if !ok {
-		return IntrospectionResult{}, false
-	}
-	entry := el.Value.(*introspectionEntry)
-	if c.now().After(entry.expiresAt) {
-		c.lru.Remove(el)
-		delete(c.entries, jti)
-		return IntrospectionResult{}, false
-	}
-	c.lru.MoveToFront(el)
-	return entry.result, true
-}
-
-func (c *IntrospectionCache) put(jti string, res IntrospectionResult, ttl time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Bounded GC.
-	for c.lru.Len() >= c.maxEntries {
-		tail := c.lru.Back()
-		if tail == nil {
-			break
-		}
-		c.lru.Remove(tail)
-		delete(c.entries, tail.Value.(*introspectionEntry).jti)
-	}
-	entry := &introspectionEntry{
-		jti:       jti,
-		result:    res,
-		expiresAt: c.now().Add(ttl),
-	}
-	if el, ok := c.entries[jti]; ok {
-		el.Value = entry
-		c.lru.MoveToFront(el)
-		return
-	}
-	el := c.lru.PushFront(entry)
-	c.entries[jti] = el
-}
+func (c *IntrospectionCache) Len() int { return c.cache.Len() }
 
 func (c *IntrospectionCache) fetchHydra(ctx context.Context, rawToken string) (IntrospectionResult, error) {
 	form := url.Values{}

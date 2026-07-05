@@ -43,21 +43,15 @@ package middleware
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
 	corevalidate "github.com/PRO-Robotech/kacho-corelib/validate"
@@ -340,8 +334,10 @@ func (m *AuthzMiddleware) Unary() grpc.UnaryServerInterceptor {
 					"fqn", fqn, "err", decision.checkErr)
 				return handler(ctx, req)
 			}
-			return nil, status.Errorf(codes.Unavailable,
-				"authz service unavailable: %v", decision.checkErr)
+			// Redact the raw backend/transport detail from the client message —
+			// leaking it aids fabric mapping. The code is preserved (retryable,
+			// fail-closed) and the detail is already logged in decide().
+			return nil, status.Error(codes.Unavailable, "authz service unavailable")
 		default:
 			return handler(ctx, req)
 		}
@@ -383,8 +379,10 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 					"fqn", fqn, "err", decision.checkErr)
 				return handler(srv, ss)
 			}
-			return status.Errorf(codes.Unavailable,
-				"authz service unavailable: %v", decision.checkErr)
+			// Redact the raw backend/transport detail from the client message —
+			// leaking it aids fabric mapping. The code is preserved (retryable,
+			// fail-closed) and the detail is already logged in decide().
+			return status.Error(codes.Unavailable, "authz service unavailable")
 		default:
 			return handler(srv, ss)
 		}
@@ -549,29 +547,62 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		m.metrics.ObserveLatencyMs(float64(m.now().Sub(start).Microseconds()) / 1000.0)
 	}()
 
-	// 1. Allowlist short-circuit.
+	// The decision pipeline is a sequence of phases, each of which may return a
+	// terminal decision (handled=true) or defer to the next. Ordering is
+	// security-critical and preserved exactly; see each phase's doc.
+
+	// 1. Public-allowlist short-circuit.
+	if dec, handled := m.phaseAllowlist(dr); handled {
+		return dec
+	}
+	// 1b. Internal-listener-origin exempt gate.
+	if dec, handled := m.phaseInternalOriginExempt(dr); handled {
+		return dec
+	}
+	// 2. Per-route file override (allow/deny).
+	if dec, handled := m.phaseOverride(dr); handled {
+		return dec
+	}
+	// 3. Catalog lookup (exempt-allow / exempt-unauth / catalog-miss deny).
+	entry, dec, handled := m.phaseCatalog(ctx, dr)
+	if handled {
+		return dec
+	}
+	// 4. Subject extraction (unauthenticated → 401).
+	verified, subj, dec, handled := m.phaseSubject(ctx, dr, entry)
+	if handled {
+		return dec
+	}
+	// 5. Resource-scope resolution (+ 5b malformed-id short-circuit).
+	resourceID, resourceType, descriptor, dec, handled := m.phaseResource(dr, entry, subj)
+	if handled {
+		return dec
+	}
+	// 6–8. Context build, decision-cache read, IAM Check.
+	return m.phaseCheck(ctx, dr, entry, verified, subj, resourceID, resourceType, descriptor)
+}
+
+// phaseAllowlist admits FQNs on the public allowlist (login, health, recovery)
+// without any subject/catalog check.
+func (m *AuthzMiddleware) phaseAllowlist(dr decisionRequest) (decision, bool) {
 	if _, ok := m.allow[dr.FQN]; ok {
 		m.metrics.RecordAllow()
-		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}
+		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}, true
 	}
+	return decision{}, false
+}
 
-	// 1b. Internal-listener-origin gate. An Internal* RPC reaching this
-	// middleware is the cluster-internal REST flow (gRPC Internal* is blocked at
-	// the proxy routing). Internal callers (api-gateway self-call, kacho-iam drainer,
-	// port-forward admin) carry no external user JWT, so the catalog's
-	// `<exempt>` authN-enforcing path would 401 them. Admit them — but ONLY when
-	// BOTH hold:
-	//   (a) the request arrived on the cluster-internal listener (NOT the
-	//       advertised external TLS listener — listenerorigin), AND
-	//   (b) the Internal* RPC's catalog entry is `<exempt>` (RPCs that
-	//       intentionally skip authN+authz).
-	// Gated Internal* RPCs (those carrying a real `required_relation`, e.g.
-	// InternalClusterService) are deliberately NOT bypassed: they still run the
-	// full subject-extraction + FGA Check below, even on the internal listener
-	// (the cluster-admin gate must hold for an ordinary authenticated user).
-	// An external caller of any Internal* RPC is not admitted here and falls
-	// through to the normal catalog/authN path (deny / 401); the REST dispatcher
-	// independently 404s these on the external listener.
+// phaseInternalOriginExempt admits an `<exempt>` Internal* RPC ONLY when it
+// arrived on the cluster-internal listener (not the advertised external TLS
+// listener). Internal callers (api-gateway self-call, kacho-iam drainer,
+// port-forward admin) carry no external user JWT, so the catalog's authN-
+// enforcing exempt path would otherwise 401 them. Gated Internal* RPCs (a real
+// `required_relation`, e.g. InternalClusterService) are NOT bypassed — they run
+// the full subject-extraction + FGA Check below even on the internal listener.
+// An external caller of any Internal* RPC is not admitted here and falls through
+// to the normal catalog/authN path (deny / 401); the REST dispatcher
+// independently 404s these on the external listener.
+func (m *AuthzMiddleware) phaseInternalOriginExempt(dr decisionRequest) (decision, bool) {
 	if allowlist.HasInternalSuffix("/"+dr.FQN) && !m.isExternalRequest(dr) {
 		if entry, found := m.cfg.Catalog.Lookup(dr.FQN); found && entry.IsExempt() {
 			m.metrics.RecordAllow()
@@ -579,31 +610,43 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				outcome:    outcomeAllow,
 				descriptor: permissionDeniedDescriptor{FQN: dr.FQN, Action: entry.Permission},
 				entry:      entry,
-			}
+			}, true
 		}
 	}
+	return decision{}, false
+}
 
-	// 2. Per-route override (file-based).
-	if m.cfg.Overrides != nil {
-		if dec, ok := m.cfg.Overrides.Lookup(dr.FQN); ok {
-			switch dec {
-			case OverrideAllow:
-				m.metrics.RecordAllow()
-				m.cfg.Logger.Info("authz override allow", "fqn", dr.FQN)
-				return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}
-			case OverrideDeny:
-				m.metrics.RecordDeny()
-				m.cfg.Logger.Info("authz override deny", "fqn", dr.FQN)
-				return decision{
-					outcome:    outcomeDeny,
-					reasons:    []string{"override: explicit deny"},
-					descriptor: permissionDeniedDescriptor{FQN: dr.FQN},
-				}
-			}
-		}
+// phaseOverride applies a file-based per-route override (explicit allow/deny).
+func (m *AuthzMiddleware) phaseOverride(dr decisionRequest) (decision, bool) {
+	if m.cfg.Overrides == nil {
+		return decision{}, false
 	}
+	dec, ok := m.cfg.Overrides.Lookup(dr.FQN)
+	if !ok {
+		return decision{}, false
+	}
+	switch dec {
+	case OverrideAllow:
+		m.metrics.RecordAllow()
+		m.cfg.Logger.Info("authz override allow", "fqn", dr.FQN)
+		return decision{outcome: outcomeAllow, descriptor: permissionDeniedDescriptor{FQN: dr.FQN}}, true
+	case OverrideDeny:
+		m.metrics.RecordDeny()
+		m.cfg.Logger.Info("authz override deny", "fqn", dr.FQN)
+		return decision{
+			outcome:    outcomeDeny,
+			reasons:    []string{"override: explicit deny"},
+			descriptor: permissionDeniedDescriptor{FQN: dr.FQN},
+		}, true
+	}
+	return decision{}, false
+}
 
-	// 3. Catalog lookup.
+// phaseCatalog looks up the catalog entry. It returns handled=true for the two
+// terminal catalog outcomes: an `<exempt>` entry (allow, or 401 when
+// unauthenticated) and a catalog miss (deny). Otherwise it returns the resolved
+// entry with handled=false so the pipeline continues to subject extraction.
+func (m *AuthzMiddleware) phaseCatalog(ctx context.Context, dr decisionRequest) (CatalogEntry, decision, bool) {
 	entry, found := m.cfg.Catalog.Lookup(dr.FQN)
 	if found && entry.IsExempt() {
 		// `<exempt>` skips the FGA authz check, NOT authentication.
@@ -619,7 +662,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			// "deny" response would mislead callers into thinking they are
 			// authenticated but forbidden.
 			m.metrics.RecordDeny()
-			return decision{
+			return entry, decision{
 				outcome: outcomeUnauthenticated,
 				reasons: []string{"subject: unauthenticated request"},
 				descriptor: permissionDeniedDescriptor{
@@ -627,14 +670,14 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 					Action: entry.Permission,
 				},
 				entry: entry,
-			}
+			}, true
 		}
 		m.metrics.RecordAllow()
-		return decision{
+		return entry, decision{
 			outcome:    outcomeAllow,
 			descriptor: permissionDeniedDescriptor{FQN: dr.FQN, Action: entry.Permission},
 			entry:      entry,
-		}
+		}, true
 	}
 	if !found {
 		// Production policy: deny when catalog has no entry — every RPC must
@@ -661,16 +704,21 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		m.cfg.Logger.Warn("authz catalog miss, denying",
 			"fqn", dr.FQN,
 			"authenticated", isAuthed)
-		return decision{
+		return entry, decision{
 			outcome: outcomeDeny,
 			reasons: []string{missReason},
 			descriptor: permissionDeniedDescriptor{
 				FQN: dr.FQN,
 			},
-		}
+		}, true
 	}
+	return entry, decision{}, false
+}
 
-	// 4. Subject extraction.
+// phaseSubject extracts the authenticated subject. A missing/invalid credential
+// terminates with Unauthenticated(16)/401. On success it returns the verified
+// token and resolved subject for the downstream phases.
+func (m *AuthzMiddleware) phaseSubject(ctx context.Context, dr decisionRequest, entry CatalogEntry) (*VerifiedToken, ResolvedSubject, decision, bool) {
 	verified, _ := verifiedTokenFromCtxOrHTTP(ctx, dr.HTTPReq)
 	subj, ok := m.cfg.Subjects.Extract(verified)
 	if !ok {
@@ -679,7 +727,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 		// gRPC convention: UNAUTHENTICATED means "the caller is not identified";
 		// PERMISSION_DENIED means "identified caller has no access to the resource".
 		m.metrics.RecordDeny()
-		return decision{
+		return verified, subj, decision{
 			outcome: outcomeUnauthenticated,
 			reasons: []string{"subject: unauthenticated request"},
 			descriptor: permissionDeniedDescriptor{
@@ -687,10 +735,16 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				Action: entry.Permission,
 			},
 			entry: entry,
-		}
+		}, true
 	}
+	return verified, subj, decision{}, false
+}
 
-	// 5. Resource extraction.
+// phaseResource resolves the FGA resource scope (type + id) and applies the
+// malformed-id short-circuit (5b). It returns handled=true only for the
+// malformed-id case (InvalidArgument/400); otherwise it returns the resolved
+// scope + descriptor for the Check phase.
+func (m *AuthzMiddleware) phaseResource(dr decisionRequest, entry CatalogEntry, subj ResolvedSubject) (ResourceID, string, permissionDeniedDescriptor, decision, bool) {
 	var resourceID ResourceID
 	if dr.HTTPReq != nil {
 		resourceID, _ = m.cfg.Resources.ExtractFromHTTP(dr.HTTPReq, dr.FQN, entry)
@@ -769,16 +823,31 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 				"action", entry.Permission,
 				"resource", descriptor.ResourceType+":"+descriptor.ResourceID,
 			)
-			return decision{
+			return resourceID, resourceType, descriptor, decision{
 				outcome:      outcomeInvalidArgument,
 				reasons:      []string{"resource id is malformed"},
 				descriptor:   descriptor,
 				entry:        entry,
 				invalidArgID: resourceID.String(),
-			}
+			}, true
 		}
 	}
+	return resourceID, resourceType, descriptor, decision{}, false
+}
 
+// phaseCheck builds the Conditions context, consults the decision cache
+// (write-after-invalidate epoch-guarded) and, on a miss, runs the IAM FGA Check.
+// It is the terminal phase — it always returns a decision.
+func (m *AuthzMiddleware) phaseCheck(
+	ctx context.Context,
+	dr decisionRequest,
+	entry CatalogEntry,
+	verified *VerifiedToken,
+	subj ResolvedSubject,
+	resourceID ResourceID,
+	resourceType string,
+	descriptor permissionDeniedDescriptor,
+) decision {
 	// 6. Context build.
 	var contextMap map[string]any
 	if dr.HTTPReq != nil {
@@ -792,6 +861,11 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	// 7. Decision cache lookup.
 	traceID := traceFromContext(ctx, dr.HTTPReq, dr.GRPCMeta)
 	cacheKey := buildCacheKey(subj.FGA, entry.Permission, resourceType, resourceID.String(), contextMap)
+	// Snapshot the invalidation generation BEFORE reading the cache. Any
+	// Invalidate/InvalidateSubject that races the upcoming Check will move the
+	// generation, and the put below is dropped so a grant revoked mid-Check is
+	// never re-cached (write-after-invalidate guard; CWE-362 + CWE-613).
+	cacheGen := m.cache.generation()
 	if cached, ok := m.cache.get(cacheKey); ok {
 		m.metrics.RecordCacheHit()
 		if cached.allowed {
@@ -824,7 +898,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 			st, _ := status.FromError(err)
 			m.metrics.RecordDeny()
 			reasons := []string{st.Message()}
-			m.cache.put(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons})
+			m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons}, cacheGen)
 			return denyDecision(dr.FQN, entry, descriptor, reasons)
 		}
 		m.metrics.RecordError()
@@ -839,7 +913,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	}
 
 	if result.Allowed {
-		m.cache.put(cacheKey, decisionCacheEntry{allowed: true})
+		m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: true}, cacheGen)
 		m.metrics.RecordAllow()
 		m.cfg.Logger.Info("authz allow",
 			"fqn", dr.FQN,
@@ -856,7 +930,7 @@ func (m *AuthzMiddleware) decide(ctx context.Context, dr decisionRequest) decisi
 	if len(reasons) == 0 {
 		reasons = []string{"no path"}
 	}
-	m.cache.put(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons})
+	m.cache.putIfGen(cacheKey, decisionCacheEntry{allowed: false, reasons: reasons}, cacheGen)
 	m.metrics.RecordDeny()
 	m.cfg.Logger.Info("authz deny",
 		"fqn", dr.FQN,
@@ -892,378 +966,3 @@ func denyDecision(fqn string, entry CatalogEntry, descriptor permissionDeniedDes
 	}
 }
 
-// ---- helpers ----
-
-// isConcreteResourceScope reports whether the catalog entry's scope is a
-// CONCRETE per-resource id — i.e. `from_request_field` names a real resource-id
-// field (e.g. `network_id`, `access_binding_id`) rather than one of the
-// non-id forms the resource-extractor recognises:
-//
-//   - ""        — no scope field (gateway-default scope);
-//   - "*"       — wildcard (List/Search catch-all);
-//   - "subject" — the subject is its own scope (AuthorizeService.Check);
-//   - "resource"— a ResourceRef{type,id} wrapper (scope id is foreign-typed).
-//
-// It also excludes the scope-polymorphic path (`object_type_from_request_field`
-// set): there the extracted `resource_id` is a scope id of an arbitrary family
-// (project / account / cluster) carried for a ListByScope-style RPC, so the
-// per-resource-id syntax check does not apply.
-func isConcreteResourceScope(entry CatalogEntry) bool {
-	if strings.TrimSpace(entry.ScopeExtractor.ObjectTypeFromRequestField) != "" {
-		return false
-	}
-	switch strings.TrimSpace(entry.ScopeExtractor.FromRequestField) {
-	case "", "*", "subject", "resource":
-		return false
-	default:
-		return true
-	}
-}
-
-// normalizeFQN strips the leading `/` from gRPC FullMethod and turns the
-// `pkg.Service/Method` portion into the canonical FQN shape used by the
-// catalog ("kacho.cloud.iam.v1.AuthorizeService/Check").
-func normalizeFQN(full string) string {
-	return strings.TrimPrefix(full, "/")
-}
-
-// peerAddr returns the client peer.Addr.String() from a gRPC context, or
-// "" when no peer is attached.
-func peerAddr(ctx context.Context) string {
-	if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
-		return p.Addr.String()
-	}
-	return ""
-}
-
-// peerAddrToAddr — wraps a raw "ip:port" string in net.Addr (we use a thin
-// shim because peer.Peer keeps the original net.Addr; the wrapper avoids
-// re-parsing for the metric path).
-func peerAddrToAddr(s string) addrShim {
-	return addrShim(s)
-}
-
-type addrShim string
-
-func (a addrShim) Network() string { return "tcp" }
-func (a addrShim) String() string  { return string(a) }
-
-// incomingMD returns the gRPC incoming metadata or nil.
-func incomingMD(ctx context.Context) metadata.MD {
-	md, _ := metadata.FromIncomingContext(ctx)
-	return md
-}
-
-// grpcMetaForwardedFor extracts the X-Forwarded-For from grpc-gateway-
-// rewritten metadata. Empty when absent.
-func grpcMetaForwardedFor(md metadata.MD) string {
-	if md == nil {
-		return ""
-	}
-	// grpc-gateway rewrites incoming HTTP headers to `grpcgateway-<lower>`.
-	if v := md.Get("grpcgateway-x-forwarded-for"); len(v) > 0 {
-		return v[0]
-	}
-	if v := md.Get("x-forwarded-for"); len(v) > 0 {
-		return v[0]
-	}
-	if v := md.Get("grpcgateway-x-real-ip"); len(v) > 0 {
-		return v[0]
-	}
-	return ""
-}
-
-// verifiedTokenFromCtxOrHTTP — the DPoP middleware stores the verified token in
-// the request headers (X-Kacho-Token-Acr / Jti / Scope / Exp) and in the
-// gRPC metadata after it ran. We reconstruct a thin
-// VerifiedToken from the headers when needed. When the HTTP request is
-// nil we fall back to gRPC metadata.
-//
-// This is a best-effort reconstruction — the upstream middleware propagates
-// principal + ACR + JTI + scope + exp; ext_claims would need a richer payload.
-// We accept the limited view; the
-// extractor degrades gracefully (empty AMR slices, missing mfa_at).
-func verifiedTokenFromCtxOrHTTP(ctx context.Context, r *http.Request) (*VerifiedToken, bool) {
-	var (
-		acr   string
-		jti   string
-		scope string
-		sub   string
-		pType string
-		extID string
-	)
-	if r != nil {
-		acr = r.Header.Get("X-Kacho-Token-Acr")
-		jti = r.Header.Get("X-Kacho-Token-Jti")
-		scope = r.Header.Get("X-Kacho-Token-Scope")
-		pType = r.Header.Get("X-Kacho-Principal-Type")
-		sub = r.Header.Get("X-Kacho-Principal-Id")
-	}
-	if sub == "" || acr == "" {
-		md := incomingMD(ctx)
-		if md != nil {
-			if v := md.Get("x-kacho-token-acr"); len(v) > 0 {
-				acr = v[0]
-			}
-			if v := md.Get("x-kacho-token-jti"); len(v) > 0 {
-				jti = v[0]
-			}
-			if v := md.Get("x-kacho-token-scope"); len(v) > 0 {
-				scope = v[0]
-			}
-			if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
-				sub = v[0]
-			}
-			if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
-				pType = v[0]
-			}
-		}
-	}
-	if sub == "" {
-		return nil, false
-	}
-	extClaims := map[string]any{
-		"kacho_principal_type": defaultIfEmptyStr(pType, "user"),
-		"kacho_principal_id":   sub,
-	}
-	if extID != "" {
-		extClaims["kacho_external_id"] = extID
-	}
-	return &VerifiedToken{
-		Subject:   sub,
-		JTI:       jti,
-		ACR:       acr,
-		Scope:     scope,
-		ExtClaims: extClaims,
-	}, true
-}
-
-// defaultIfEmptyStr — tiny helper.
-func defaultIfEmptyStr(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
-}
-
-// resolveRestFQN best-effort maps an incoming HTTP request to a gRPC FQN
-// the catalog can look up. Uses the explicit RestRouteResolver first, then
-// falls back to the path-prefix heuristic from dpop_http_middleware.
-func (m *AuthzMiddleware) resolveRestFQN(r *http.Request) string {
-	if m.cfg.RestRouter != nil {
-		if fqn, ok := m.cfg.RestRouter.Resolve(r.Method, r.URL.Path); ok {
-			return fqn
-		}
-	}
-	return grpcMethodForPath(r.URL.Path)
-}
-
-// isPublicHTTPPath returns true for fixed public endpoints (healthz, readyz,
-// oauth flows). Matches dpop_http_middleware's allow-list — duplicated here
-// so this middleware works correctly even when mounted without the DPoP middleware.
-func isPublicHTTPPath(path string) bool {
-	switch path {
-	case "/healthz", "/readyz", "/oauth/logout":
-		return true
-	}
-	return strings.HasPrefix(path, "/iam/v1/auth/")
-}
-
-// traceFromContext extracts the request-id for correlation, prioritising
-// metadata over the gRPC context-key.
-func traceFromContext(ctx context.Context, r *http.Request, md metadata.MD) string {
-	if r != nil {
-		if v := r.Header.Get("X-Request-Id"); v != "" {
-			return v
-		}
-	}
-	if md != nil {
-		if v := md.Get("x-request-id"); len(v) > 0 {
-			return v[0]
-		}
-		if v := md.Get("grpcgateway-x-request-id"); len(v) > 0 {
-			return v[0]
-		}
-	}
-	return RequestIDFromContext(ctx)
-}
-
-// ---- decision cache ----
-
-// decisionCacheEntry — cached outcome.
-type decisionCacheEntry struct {
-	allowed bool
-	reasons []string
-}
-
-// decisionCache — LRU-with-TTL, safe for concurrent use.
-type decisionCache struct {
-	mu      sync.Mutex
-	entries map[string]*cacheNode
-	head    *cacheNode // most-recently-used
-	tail    *cacheNode // least-recently-used
-	maxSize int
-	ttl     time.Duration
-	now     func() time.Time
-}
-
-type cacheNode struct {
-	key       string
-	value     decisionCacheEntry
-	expiresAt time.Time
-	prev      *cacheNode
-	next      *cacheNode
-}
-
-func newDecisionCache(maxSize int, ttl time.Duration, now func() time.Time) *decisionCache {
-	if now == nil {
-		now = time.Now
-	}
-	return &decisionCache{
-		entries: make(map[string]*cacheNode, maxSize),
-		maxSize: maxSize,
-		ttl:     ttl,
-		now:     now,
-	}
-}
-
-func (c *decisionCache) get(key string) (decisionCacheEntry, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	n, ok := c.entries[key]
-	if !ok {
-		return decisionCacheEntry{}, false
-	}
-	if c.now().After(n.expiresAt) {
-		c.removeNode(n)
-		delete(c.entries, key)
-		return decisionCacheEntry{}, false
-	}
-	c.moveToHead(n)
-	return n.value, true
-}
-
-func (c *decisionCache) put(key string, v decisionCacheEntry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if existing, ok := c.entries[key]; ok {
-		existing.value = v
-		existing.expiresAt = c.now().Add(c.ttl)
-		c.moveToHead(existing)
-		return
-	}
-	n := &cacheNode{key: key, value: v, expiresAt: c.now().Add(c.ttl)}
-	c.entries[key] = n
-	c.addToHead(n)
-	if len(c.entries) > c.maxSize {
-		evict := c.tail
-		if evict != nil {
-			c.removeNode(evict)
-			delete(c.entries, evict.key)
-		}
-	}
-}
-
-// Invalidate removes ALL cache entries — used by the LISTEN/NOTIFY
-// session_revocations push. Implementation-side wiring may
-// further offer per-subject invalidation (filter keys by FGA prefix);
-// a full flush on session-revoke is acceptable (decisions are
-// short-TTL anyway).
-func (c *decisionCache) Invalidate() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = make(map[string]*cacheNode, c.maxSize)
-	c.head = nil
-	c.tail = nil
-}
-
-// InvalidateSubject removes cache entries for the given FGA subject prefix
-// ("user:usr_abc"). Subject is appended verbatim — must match the form used
-// at insert time.
-func (c *decisionCache) InvalidateSubject(subject string) int {
-	if subject == "" {
-		return 0
-	}
-	prefix := subject + "|"
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	removed := 0
-	for key, n := range c.entries {
-		if strings.HasPrefix(key, prefix) {
-			c.removeNode(n)
-			delete(c.entries, key)
-			removed++
-		}
-	}
-	return removed
-}
-
-func (c *decisionCache) moveToHead(n *cacheNode) {
-	if n == c.head {
-		return
-	}
-	c.removeNode(n)
-	c.addToHead(n)
-}
-
-func (c *decisionCache) addToHead(n *cacheNode) {
-	n.prev = nil
-	n.next = c.head
-	if c.head != nil {
-		c.head.prev = n
-	}
-	c.head = n
-	if c.tail == nil {
-		c.tail = n
-	}
-}
-
-func (c *decisionCache) removeNode(n *cacheNode) {
-	if n.prev != nil {
-		n.prev.next = n.next
-	} else if c.head == n {
-		c.head = n.next
-	}
-	if n.next != nil {
-		n.next.prev = n.prev
-	} else if c.tail == n {
-		c.tail = n.prev
-	}
-	n.prev = nil
-	n.next = nil
-}
-
-// Size returns the number of live cache entries.
-func (c *decisionCache) Size() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.entries)
-}
-
-// buildCacheKey — stable cache key over (subject, action, resource,
-// principal-binding context). Including `acr`/`mfa_at`/`client_ip` ensures
-// step-up changes invalidate naturally; excluding `current_time`/`jti`
-// avoids per-request cache busts.
-func buildCacheKey(subject, action, resourceType, resourceID string, contextMap map[string]any) string {
-	// Use a canonical concatenation of the security-affecting context keys
-	// so equivalent contexts collide cleanly. We pick a subset to keep keys
-	// reasonable in length; full-context-hash would change on harmless
-	// fields and obliterate the cache.
-	parts := []string{subject, action, resourceType, resourceID}
-	if contextMap != nil {
-		keys := []string{"acr_value", "mfa_at", "client_ip", "device_id", "passkey_aaguid"}
-		sort.Strings(keys) // deterministic
-		for _, k := range keys {
-			if v, ok := contextMap[k]; ok {
-				parts = append(parts, k+"="+fmt.Sprint(v))
-			}
-		}
-	}
-	raw := strings.Join(parts, "|")
-	// Compress with sha256 for stable length (the cache map handles
-	// collisions naturally — sha256 collision probability is negligible).
-	sum := sha256.Sum256([]byte(raw))
-	// Encode prefix + subject-prefix so InvalidateSubject can match.
-	// Format: "<subject>|<sha256-hex>".
-	return subject + "|" + hex.EncodeToString(sum[:])
-}

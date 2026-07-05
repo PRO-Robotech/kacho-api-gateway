@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -88,25 +89,43 @@ func TestIntrospection_ExpiredAlreadyAtFetch_TreatedAsInactive(t *testing.T) {
 	assert.Equal(t, int32(2), hits.Load())
 }
 
+// TestIntrospection_ShortExp_ClampsCacheTTL — deterministic (injected clock, no
+// wall-clock sleep). exp is 2s ahead of the injected `now`, so the 1h configured
+// TTL is clamped to the exp window. A read before exp is a cache hit; a read
+// after exp both misses AND re-fetches (where the clamp now finds exp in the
+// past → inactive), proving the clamp is driven by the injectable clock.
 func TestIntrospection_ShortExp_ClampsCacheTTL(t *testing.T) {
-	// exp is 50ms in the future → TTL is clamped to 50ms; second call after
-	// expiry must re-hit Hydra.
-	srv, hits := newIntrospectionServer(true, time.Now().Add(50*time.Millisecond).Unix()+1)
+	base := time.Unix(1_700_000_000, 0)
+	var mu sync.Mutex
+	nowT := base
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return nowT }
+	advance := func(d time.Duration) { mu.Lock(); nowT = nowT.Add(d); mu.Unlock() }
+
+	srv, hits := newIntrospectionServer(true, base.Add(2*time.Second).Unix())
 	defer srv.Close()
 	c, _ := middleware.NewIntrospectionCache(middleware.IntrospectionCacheConfig{
 		HydraIntrospectionURL: srv.URL,
 		TTL:                   1 * time.Hour,
+		Now:                   clock,
 	})
+
+	// First call at now=base → cached with TTL clamped to the ~2s exp window.
 	_, err := c.Introspect(context.Background(), "jti", "raw")
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), hits.Load())
-	time.Sleep(1100 * time.Millisecond) // exceed clamp
+
+	// Within the clamp window → cache hit, no re-fetch.
+	advance(1 * time.Second)
 	_, err = c.Introspect(context.Background(), "jti", "raw")
-	// After short clamp + sleep, exp may already be past → ErrTokenInactive,
-	// or Hydra still returns active=true depending on race; both are OK so
-	// long as the server was re-hit.
-	_ = err
-	assert.GreaterOrEqual(t, hits.Load(), int32(2))
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), hits.Load(), "read within clamp window must be a cache hit")
+
+	// Past exp → entry expired (miss) AND the re-fetch clamp sees exp in the
+	// past → ErrTokenInactive. Either way Hydra is re-hit.
+	advance(2 * time.Second)
+	_, err = c.Introspect(context.Background(), "jti", "raw")
+	assert.ErrorIs(t, err, middleware.ErrTokenInactive)
+	assert.Equal(t, int32(2), hits.Load(), "read past exp must re-hit Hydra")
 }
 
 func TestIntrospection_Invalidate(t *testing.T) {

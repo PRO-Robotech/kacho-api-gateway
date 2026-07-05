@@ -51,6 +51,7 @@ type DPoPMiddleware struct {
 	stepUp           *StepUpGate
 	introspection    *IntrospectionCache
 	permissionLookup PermissionLookup
+	routes           RestRouteResolver
 
 	logger    *slog.Logger
 	apiDomain string
@@ -61,11 +62,13 @@ type DPoPMiddleware struct {
 }
 
 // PermissionLookup — port-interface that resolves per-RPC requirements
-// (required_acr_min, mfa_max_age). The catalog implementation lives outside
-// the middleware (it is backed by `permission_catalog.json`); any source is
-// accepted.
+// (required_acr_min, mfa_max_age) keyed by the canonical gRPC FQN
+// ("kacho.cloud.vpc.v1.NetworkService/Create"). The catalog implementation
+// lives outside the middleware (it is backed by `permission_catalog.json`);
+// any source is accepted. An empty fqn (unresolved route) yields the no-op
+// requirement.
 type PermissionLookup interface {
-	Lookup(method string) PermissionRequirement
+	Lookup(fqn string) PermissionRequirement
 }
 
 // DefaultPermissionLookup — fallback returning PermissionRequirement{ACR=""}
@@ -77,6 +80,32 @@ func (DefaultPermissionLookup) Lookup(_ string) PermissionRequirement {
 	return PermissionRequirement{}
 }
 
+// catalogPermissionLookup — PermissionLookup backed by the embedded permission
+// catalog. It maps a resolved gRPC FQN to its per-RPC ACR floor
+// (`required_acr_min`). An unknown FQN (or empty key) resolves to the no-op
+// requirement so unmapped routes never fabricate a step-up demand.
+type catalogPermissionLookup struct {
+	catalog *PermissionCatalog
+}
+
+// NewCatalogPermissionLookup wires the step-up gate to the permission catalog.
+// A nil catalog degrades to the no-op requirement for every method.
+func NewCatalogPermissionLookup(catalog *PermissionCatalog) PermissionLookup {
+	return catalogPermissionLookup{catalog: catalog}
+}
+
+// Lookup returns the ACR requirement for the given gRPC FQN.
+func (c catalogPermissionLookup) Lookup(fqn string) PermissionRequirement {
+	if c.catalog == nil || fqn == "" {
+		return PermissionRequirement{}
+	}
+	entry, ok := c.catalog.Lookup(fqn)
+	if !ok {
+		return PermissionRequirement{}
+	}
+	return PermissionRequirement{RequiredACRMin: entry.RequiredACRMin}
+}
+
 // DPoPMiddlewareConfig — DI bag.
 type DPoPMiddlewareConfig struct {
 	Verifier         *JWTVerifier
@@ -85,8 +114,12 @@ type DPoPMiddlewareConfig struct {
 	StepUp           *StepUpGate
 	Introspection    *IntrospectionCache
 	PermissionLookup PermissionLookup
-	Logger           *slog.Logger
-	APIDomain        string
+	// RestRouter resolves the incoming (method, path) to the canonical gRPC
+	// FQN used as the PermissionLookup key. When nil the step-up gate has no
+	// FQN to resolve and therefore imposes no per-RPC ACR requirement.
+	RestRouter RestRouteResolver
+	Logger     *slog.Logger
+	APIDomain  string
 
 	// RequireForAllRequests — production-strict; reject anonymous traffic.
 	RequireForAllRequests bool
@@ -123,6 +156,7 @@ func NewDPoPMiddleware(cfg DPoPMiddlewareConfig) (*DPoPMiddleware, error) {
 		stepUp:                cfg.StepUp,
 		introspection:         cfg.Introspection,
 		permissionLookup:      cfg.PermissionLookup,
+		routes:                cfg.RestRouter,
 		logger:                cfg.Logger,
 		apiDomain:             cfg.APIDomain,
 		requireForAllRequests: cfg.RequireForAllRequests,
@@ -218,8 +252,10 @@ func (m *DPoPMiddleware) Wrap(next http.Handler) http.Handler {
 			}
 		}
 
-		// 5. Step-up gate.
-		req := m.permissionLookup.Lookup(grpcMethodForPath(path))
+		// 5. Step-up gate. Resolve the canonical gRPC FQN from the REST
+		//    (method, path) so the catalog-backed lookup keys on a real entry
+		//    (an unresolved route yields the empty FQN → no requirement).
+		req := m.permissionLookup.Lookup(m.resolveFQN(r.Method, path))
 		if err := m.stepUp.Check(verified, req); err != nil {
 			challenge := BuildStepUpChallenge(req, verified.ACR)
 			m.logger.Info("dpop-mw: step-up required",
@@ -279,11 +315,26 @@ func absoluteRequestURL(r *http.Request, apiDomain string) string {
 	return scheme + "://" + host + r.URL.Path
 }
 
-// grpcMethodForPath converts a REST path (`/iam/v1/users/abc`) to its
-// approximate gRPC FQN (`/kacho.cloud.iam.v1.UserService/Get`) for permission
-// catalog lookup. This is a best-effort mapping — full grpc-gateway-style
-// resolution would require an annotated path tree, which is overkill for the
-// step-up gate. The default lookup returns no-op for unknown paths anyway.
+// resolveFQN maps an incoming REST (method, path) to the canonical gRPC FQN
+// used as the permission-catalog key, via the generated REST route table. When
+// no router is wired or the route does not match a known template it returns
+// the empty string, which the catalog-backed PermissionLookup treats as "no
+// requirement" — an unmapped route must never fabricate a step-up demand.
+func (m *DPoPMiddleware) resolveFQN(method, path string) string {
+	if m.routes == nil {
+		return ""
+	}
+	if fqn, ok := m.routes.Resolve(method, path); ok {
+		return fqn
+	}
+	return ""
+}
+
+// grpcMethodForPath converts a REST path (`/iam/v1/users/abc`) to a best-effort
+// path-prefix key. It is the last-resort fallback for the authz middleware when
+// the generated RestRouteResolver does not match a route; it is NOT a valid
+// gRPC FQN and never matches a catalog entry, so callers treat its result as an
+// unknown method (deny-by-default / public-allowlist per policy).
 func grpcMethodForPath(path string) string {
 	// Strip leading slash, split into segments.
 	p := strings.TrimPrefix(path, "/")
@@ -334,16 +385,22 @@ func injectVerifiedTokenHeaders(r *http.Request, t *VerifiedToken) {
 	if t == nil {
 		return
 	}
-	subj := t.Subject
+	// Derive the principal with the SAME precedence as the legacy auth.HTTP
+	// Hydra path (principalFromVerifiedToken): prefer the canonical
+	// kacho_principal_id / _type claims (top-level or ext_claims) over the raw
+	// OIDC `sub`. DPoP.Wrap runs as the inner handler after auth.HTTP and would
+	// otherwise overwrite the principal headers auth.HTTP just set, making the
+	// downstream FGA subject user:<oidc-sub> instead of user:<kacho-id> and the
+	// two authN paths disagree on identity (CWE-287 / OWASP A07).
+	pType, subj := "user", t.Subject
+	if claimType := verifiedClaim(t, "kacho_principal_type"); claimType != "" {
+		pType = claimType
+	}
+	if claimID := verifiedClaim(t, "kacho_principal_id"); claimID != "" {
+		subj = claimID
+	}
 	if subj == "" {
 		return
-	}
-	// kacho_principal_type from ext_claims (preferred); fallback to "user".
-	pType := "user"
-	if ext := t.ExtClaims; ext != nil {
-		if s, ok := ext["kacho_principal_type"].(string); ok && s != "" {
-			pType = s
-		}
 	}
 	r.Header.Set("X-Kacho-Principal-Type", pType)
 	r.Header.Set("X-Kacho-Principal-Id", subj)
