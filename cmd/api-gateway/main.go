@@ -299,10 +299,12 @@ func main() {
 		}); vErr != nil {
 			log.Fatalf("authz config startup-validation: %v", vErr)
 		}
-		// In non-prod envs surface relaxed config as a structured warning so
-		// operators see it in pod logs without grepping env-vars manually.
+		// In the explicit dev-class envs (dev/local/test) surface relaxed config as
+		// a structured warning so operators see it in pod logs without grepping
+		// env-vars manually. An empty/unset env is NOT dev-class — it is
+		// production-class and already hard-failed above when relaxed.
 		switch appEnv {
-		case "", "dev", "local":
+		case "dev", "local", "test":
 			if !cfg.AuthZEnabled || cfg.AuthZFailOpen {
 				logger.Warn("authz config relaxed for non-prod env",
 					"env", appEnv,
@@ -312,10 +314,11 @@ func main() {
 			}
 		}
 
-		// Fail-open surfacing: KACHO_APP_ENV keys the fatal production-guard above,
-		// but a deploy that forgets to set it (empty → dev-class) while exposing the
-		// EXTERNAL advertised TLS edge would silently ship with gateway-side authz
-		// absent / anonymous authN (CWE-1188). The external listener is a strong
+		// Fail-open surfacing: KACHO_APP_ENV keys the fatal production-guard above.
+		// An empty/unset env is now production-class, so a relaxed posture under an
+		// unset env already hard-fails; this WARN additionally flags a relaxed
+		// posture on the EXTERNAL advertised TLS edge (CWE-1188). The external
+		// listener is a strong
 		// "this is reachable from outside the cluster" signal, so emit a loud
 		// startup WARN whenever it is enabled together with a relaxed posture,
 		// independent of the env label — the operator sees the fail-open edge in pod

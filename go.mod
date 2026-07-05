@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260705005204-a60a829f8607
-	github.com/PRO-Robotech/kacho-proto v0.0.0-20260705184504-76475d976058
+	github.com/PRO-Robotech/kacho-proto v0.0.0-20260705204852-75c163ecf237
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0

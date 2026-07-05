@@ -142,10 +142,13 @@ type Config struct {
 	// main.go; centralised here so they carry documented defaults + appear in the
 	// single Config env contract) ---
 
-	// AppEnv — deployment-environment label (prod / production / staging / dev /
-	// local / test / ""). Keys the fail-fast production authz guard
-	// (validateProductionAuthzConfig) and relaxed-posture warnings. Emitted from
-	// the helm overlay via extraEnv.
+	// AppEnv — deployment-environment label. Keys the fail-fast production authz
+	// guard (validateProductionAuthzConfig) and relaxed-posture warnings. Only the
+	// explicit dev-class labels "dev" / "local" / "test" tolerate a relaxed
+	// posture; every other value — including an empty/unset label (the default) —
+	// is production-class and fails closed, so a forgotten KACHO_APP_ENV cannot
+	// skip the guard (secure-by-default, CWE-1188). Emitted from the helm overlay
+	// via extraEnv.
 	AppEnv string `envconfig:"KACHO_APP_ENV" default:""`
 
 	// KratosPublicURL — base URL of the Ory Kratos public API (session /whoami).

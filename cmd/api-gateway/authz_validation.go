@@ -28,18 +28,22 @@ type AuthzMiddlewareConfig struct {
 // validateProductionAuthzConfig refuses to start when the deploy environment is
 // production-class AND the security posture is relaxed: authz disabled, authz
 // fail-open, or an anonymous (dev) authN mode. Only the explicit dev-class
-// labels ("" / dev / local / test) tolerate a relaxed config (the caller emits a
-// WARN line). Every OTHER env value — including a typo like "prd" or "live" — is
-// treated as production-class and validated, so a mistyped overlay fails closed
-// rather than silently skipping the guard.
+// labels ("dev" / "local" / "test") tolerate a relaxed config (the caller emits
+// a WARN line). Every OTHER env value — an empty/unset label, or a typo like
+// "prd" / "live" — is treated as production-class and validated (secure-by-
+// default): a deploy that forgets to set KACHO_APP_ENV still fails closed rather
+// than silently skipping the guard (CWE-1188; security.md "any deploy =
+// production-mode, anonymous fail-closed").
 //
 // Root cause it guards against: helm overlay drift that leaves the gateway with
 // authz disabled / fail-open / anonymous authN in a deployed environment (the
 // middleware would otherwise mount as a silent pass-through).
 func validateProductionAuthzConfig(env string, cfg AuthzMiddlewareConfig) error {
 	switch strings.ToLower(strings.TrimSpace(env)) {
-	case "", "dev", "local", "test":
+	case "dev", "local", "test":
 		// Dev-class — tolerate any combination (warn-only path lives in main).
+		// NOTE: an empty/unset env is intentionally NOT here — it is production-
+		// class (fail-closed) so a forgotten KACHO_APP_ENV cannot skip the guard.
 		return nil
 	}
 
