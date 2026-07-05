@@ -545,9 +545,28 @@ func main() {
 	// (cfg.AuthZEnabled=false), authzMW.AsInvalidator() returns a nopAuthzInvalidator
 	// and the handler returns NotFound on every InvalidateSubject (idempotent
 	// miss; drainer marks the row as already applied).
+	//
+	// SECURITY (security.md invariant #1/#4): the listener enforces mTLS +
+	// a per-RPC SPIFFE allow-list (the iam push-drainer identity) when enabled, so
+	// an arbitrary in-cluster caller cannot flush the authz decision-cache
+	// (cache-flush DoS / IAM-amplification). Fail-fast on enabled-but-misconfigured
+	// mTLS; refuse an insecure listener under a production-class env.
+	internalSec, isecErr := buildInternalListenerSecurity(cfg)
+	if isecErr != nil {
+		log.Fatalf("internal grpc listener security: %v", isecErr)
+	}
+	if pgErr := validateProductionInternalListener(cfg.AppEnv, internalSec.mtlsEnabled); pgErr != nil {
+		log.Fatalf("internal grpc listener config: %v", pgErr)
+	}
+	if !internalSec.mtlsEnabled {
+		logger.Warn("SECURITY: internal gRPC listener running INSECURE (no mTLS)",
+			"addr", cfg.InternalGRPCAddr,
+			"hint", "set KACHO_API_GATEWAY_INTERNAL_GRPC_MTLS_ENABLE=true + cert material + KACHO_API_GATEWAY_INTERNAL_GRPC_ALLOWED_SPIFFE for any deployed environment",
+		)
+	}
 	internalGRPCAddr := cfg.InternalGRPCAddr
 	internalGrpcSrv, internalLis, ierr := startInternalGRPCListener(
-		internalGRPCAddr, authzMW.AsInvalidator(), grpcSrv, logger)
+		internalGRPCAddr, authzMW.AsInvalidator(), grpcSrv, internalSec, logger)
 	if ierr != nil {
 		log.Fatalf("internal grpc listener: %v", ierr)
 	}
