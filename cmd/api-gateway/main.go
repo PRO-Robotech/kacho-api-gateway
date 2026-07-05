@@ -230,8 +230,22 @@ func main() {
 	}
 
 	// --- logout handler ---
+	//
+	// The endpoint is intentionally exempt from the mandatory DPoP/authz
+	// middleware (a user must be able to drop their browser session even with an
+	// expired token). Because of that exemption the handler itself must
+	// authenticate the caller before any server-side revocation: it verifies the
+	// presented access token via the SAME JWKS verifier used on the principal
+	// path and revokes ONLY the caller's own subject. Without a wired verifier
+	// (jverr != nil, e.g. empty JWKS URL) revocation fails closed (401); only
+	// cookie clearing remains.
+	var logoutVerifier handler.CallerVerifier
+	if jverr == nil {
+		logoutVerifier = logoutVerifierAdapter{v: jwtVerifier}
+	}
 	logoutHandler, lerr := handler.NewLogoutHandler(handler.LogoutHandlerConfig{
 		Logger:          logger,
+		Verifier:        logoutVerifier,
 		Revocations:     clients.NewSessionRevocationsAdapter(backends["iamInternal"]),
 		HydraAdminURL:   cfg.ResolvedHydraAdminURL(),
 		HookSharedToken: cfg.HookSharedSecret,
@@ -628,6 +642,20 @@ func main() {
 
 // stopGraceful runs GracefulStop bounded by timeout, then forces Stop() — so a
 // long-lived proxied stream cannot block process shutdown past the grace window.
+// logoutVerifierAdapter bridges the gateway's JWKS access-token verifier to the
+// narrow identity port the logout handler needs. It exposes ONLY the validated
+// subject/jti, so the handler revokes the caller's own session and never trusts
+// a client-supplied subject.
+type logoutVerifierAdapter struct{ v *middleware.JWTVerifier }
+
+func (a logoutVerifierAdapter) Verify(ctx context.Context, token string) (*handler.VerifiedCaller, error) {
+	vt, err := a.v.Verify(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return &handler.VerifiedCaller{Subject: vt.Subject, JTI: vt.JTI}, nil
+}
+
 func stopGraceful(s *grpc.Server, timeout time.Duration) {
 	done := make(chan struct{})
 	go func() {
