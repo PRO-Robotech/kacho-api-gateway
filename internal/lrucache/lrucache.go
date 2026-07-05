@@ -87,12 +87,46 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 	return e.value, true
 }
 
-// Put stores value under key with a fresh TTL, evicting the least-recently-used
-// entry when over capacity.
+// Peek returns the live value for key WITHOUT refreshing its LRU recency. Used
+// by set-membership callers (e.g. DPoP replay detection) that deliberately must
+// not keep a repeated key warm. Still honours TTL (an expired entry is evicted
+// and reported absent).
+func (c *Cache[K, V]) Peek(key K) (V, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	el, ok := c.items[key]
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	e := el.Value.(*entry[K, V])
+	if c.now().After(e.expiresAt) {
+		c.order.Remove(el)
+		delete(c.items, key)
+		var zero V
+		return zero, false
+	}
+	return e.value, true
+}
+
+// Put stores value under key with a fresh default TTL, evicting the
+// least-recently-used entry when over capacity.
 func (c *Cache[K, V]) Put(key K, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.putLocked(key, value)
+	c.putLocked(key, value, c.ttl)
+}
+
+// PutWithTTL stores value under key with a caller-supplied TTL (for callers
+// whose per-entry expiry is bounded by an external deadline, e.g. an OAuth
+// token `exp`). A non-positive ttl falls back to the cache default.
+func (c *Cache[K, V]) PutWithTTL(key K, value V, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ttl <= 0 {
+		ttl = c.ttl
+	}
+	c.putLocked(key, value, ttl)
 }
 
 // Generation returns the current invalidation generation. Snapshot it at
@@ -113,18 +147,18 @@ func (c *Cache[K, V]) PutIfGen(key K, value V, gen uint64) {
 	if c.gen != gen {
 		return
 	}
-	c.putLocked(key, value)
+	c.putLocked(key, value, c.ttl)
 }
 
-func (c *Cache[K, V]) putLocked(key K, value V) {
+func (c *Cache[K, V]) putLocked(key K, value V, ttl time.Duration) {
 	if el, ok := c.items[key]; ok {
 		e := el.Value.(*entry[K, V])
 		e.value = value
-		e.expiresAt = c.now().Add(c.ttl)
+		e.expiresAt = c.now().Add(ttl)
 		c.order.MoveToFront(el)
 		return
 	}
-	e := &entry[K, V]{key: key, value: value, expiresAt: c.now().Add(c.ttl)}
+	e := &entry[K, V]{key: key, value: value, expiresAt: c.now().Add(ttl)}
 	c.items[key] = c.order.PushFront(e)
 	if len(c.items) > c.maxSize {
 		if back := c.order.Back(); back != nil {

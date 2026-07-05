@@ -111,6 +111,53 @@ func TestCache_Invalidate_BumpsGeneration(t *testing.T) {
 	}
 }
 
+func TestCache_Peek_NoLRUTouch(t *testing.T) {
+	c := New[string, int](2, time.Minute, nil)
+	c.Put("a", 1)
+	c.Put("b", 2)
+	// Peek a — must NOT refresh its recency, so a stays LRU.
+	if v, ok := c.Peek("a"); !ok || v != 1 {
+		t.Fatalf("Peek(a)=%d,%v want 1,true", v, ok)
+	}
+	c.Put("c", 3) // evicts LRU
+	if _, ok := c.Peek("a"); ok {
+		t.Fatal("a should have been evicted (Peek must not keep it warm)")
+	}
+	if _, ok := c.Peek("b"); !ok {
+		t.Fatal("b should survive")
+	}
+}
+
+func TestCache_Peek_RespectsTTL(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	adv := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+	c := New[string, int](10, 50*time.Millisecond, clock)
+	c.Put("a", 1)
+	adv(60 * time.Millisecond)
+	if _, ok := c.Peek("a"); ok {
+		t.Fatal("Peek must report expired entry as absent")
+	}
+}
+
+func TestCache_PutWithTTL(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	adv := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+	c := New[string, int](10, time.Hour, clock) // long default TTL
+	c.PutWithTTL("a", 1, 100*time.Millisecond)  // short override
+	adv(90 * time.Millisecond)
+	if _, ok := c.Get("a"); !ok {
+		t.Fatal("entry must survive within per-entry TTL")
+	}
+	adv(20 * time.Millisecond)
+	if _, ok := c.Get("a"); ok {
+		t.Fatal("entry must expire at per-entry TTL, not the long default")
+	}
+}
+
 func TestCache_ConcurrentRace(t *testing.T) {
 	c := New[string, int](1000, time.Minute, nil)
 	var wg sync.WaitGroup
