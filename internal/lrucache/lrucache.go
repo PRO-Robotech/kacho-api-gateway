@@ -117,6 +117,32 @@ func (c *Cache[K, V]) Put(key K, value V) {
 	c.putLocked(key, value, c.ttl)
 }
 
+// AddIfAbsent atomically checks presence (honouring TTL eviction) and inserts
+// value under key only if no live entry exists, all under a single lock hold.
+// It returns true when it inserted (key was absent/expired) and false when a
+// live entry already existed. This is the atomic set-membership primitive for
+// callers enforcing a uniqueness invariant (e.g. DPoP jti replay detection):
+// unlike a separate Peek-then-Put pair it has no check-then-act window, so
+// concurrent adds of the same key resolve to exactly one winner.
+//
+// Presence is checked WITHOUT refreshing LRU recency (an already-present key is
+// not kept warm by a losing add); insertion uses the default TTL.
+func (c *Cache[K, V]) AddIfAbsent(key K, value V) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.items[key]; ok {
+		e := el.Value.(*entry[K, V])
+		if !c.now().After(e.expiresAt) {
+			return false // live entry present — do not touch recency, do not insert
+		}
+		// Expired: evict, then fall through to insert as fresh.
+		c.order.Remove(el)
+		delete(c.items, key)
+	}
+	c.putLocked(key, value, c.ttl)
+	return true
+}
+
 // PutWithTTL stores value under key with a caller-supplied TTL (for callers
 // whose per-entry expiry is bounded by an external deadline, e.g. an OAuth
 // token `exp`). A non-positive ttl falls back to the cache default.

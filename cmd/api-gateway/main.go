@@ -105,10 +105,7 @@ func main() {
 	// Kratos session-based auth для SPA (cookie ory_kratos_session).
 	// Env KACHO_API_GATEWAY_KRATOS_PUBLIC_URL — base URL Kratos public API.
 	// Default = cluster-internal kratos-public service.
-	kratosURL := os.Getenv("KACHO_API_GATEWAY_KRATOS_PUBLIC_URL")
-	if kratosURL == "" {
-		kratosURL = "http://kacho-umbrella-kratos-public.kacho.svc.cluster.local:80"
-	}
+	kratosURL := cfg.KratosPublicURL
 	if kratosURL != "disabled" {
 		authInterceptor = authInterceptor.WithKratos(middleware.NewKratosClient(kratosURL))
 		logger.Info("kratos session-auth wired", "kratos_url", kratosURL)
@@ -170,6 +167,7 @@ func main() {
 	// JWT verifier rejects them gracefully → middleware passes through as
 	// anonymous when requireForAllRequests=false).
 	var dpopMiddleware *middleware.DPoPMiddleware
+	var cnfGRPCInterceptor *middleware.CnfBindingInterceptor
 	if cfg.AuthNEnableDPoP {
 		var verifierErr error
 		// Reuse the SAME verifier instance already wired into the
@@ -230,6 +228,18 @@ func main() {
 		if verifierErr != nil {
 			log.Fatalf("dpop middleware: %v", verifierErr)
 		}
+
+		// Native gRPC surface: the REST DPoPMiddleware enforces cnf-binding only
+		// on the HTTP path; the gRPC interceptor chain does not inspect cnf. Wire
+		// a gRPC interceptor that mirrors it so a sender-constrained (DPoP- or
+		// mTLS-bound) token cannot be replayed as a plain bearer over native gRPC
+		// (CWE-294). Reuses the SAME JWKS verifier instance.
+		cnfGRPCInterceptor, verifierErr = middleware.NewCnfBindingInterceptor(
+			verifier, middleware.NewMTLSBoundValidator(), logger)
+		if verifierErr != nil {
+			log.Fatalf("cnf grpc interceptor: %v", verifierErr)
+		}
+
 		logger.Info("dpop-mw wired",
 			"api_domain", cfg.APIDomain,
 			"jwks_url", cfg.ResolvedHydraJWKSURL(),
@@ -281,7 +291,7 @@ func main() {
 		// KACHO_APP_ENV signal is emitted from the helm overlay via extraEnv
 		// (see kacho-deploy values.prod.yaml). Non-prod envs are tolerated and
 		// surfaced via the WARN log below.
-		appEnv := os.Getenv("KACHO_APP_ENV")
+		appEnv := cfg.AppEnv
 		if vErr := validateProductionAuthzConfig(appEnv, AuthzMiddlewareConfig{
 			Enabled:   cfg.AuthZEnabled,
 			FailOpen:  cfg.AuthZFailOpen,
@@ -300,6 +310,23 @@ func main() {
 					"fail_open", cfg.AuthZFailOpen,
 				)
 			}
+		}
+
+		// Fail-open surfacing: KACHO_APP_ENV keys the fatal production-guard above,
+		// but a deploy that forgets to set it (empty → dev-class) while exposing the
+		// EXTERNAL advertised TLS edge would silently ship with gateway-side authz
+		// absent / anonymous authN (CWE-1188). The external listener is a strong
+		// "this is reachable from outside the cluster" signal, so emit a loud
+		// startup WARN whenever it is enabled together with a relaxed posture,
+		// independent of the env label — the operator sees the fail-open edge in pod
+		// logs instead of it being invisible.
+		if cfg.TLSEnabled() && (!cfg.AuthZEnabled || cfg.AuthNMode == string(middleware.AuthModeDev)) {
+			logger.Warn("SECURITY: external TLS edge enabled with a relaxed auth posture",
+				"tls_listen_addr", cfg.TLSListenAddr,
+				"authz_enabled", cfg.AuthZEnabled,
+				"authn_mode", cfg.AuthNMode,
+				"hint", "set KACHO_API_GATEWAY_AUTHZ_ENABLED=true and KACHO_API_GATEWAY_AUTHN_MODE=production-strict for the advertised endpoint",
+			)
 		}
 
 		authzMW, err = buildAuthzMiddleware(cfg, logger)
@@ -352,6 +379,14 @@ func main() {
 		middleware.StreamRequestID,
 		middleware.StreamRecovery(logger),
 		authInterceptor.Stream(),
+	}
+	// cnf-binding enforcement runs AFTER auth (token already shape-validated) and
+	// BEFORE authz: a bound token presented unbound over gRPC is rejected before
+	// any authorization decision. Mounted only when DPoP is enabled (parity with
+	// the REST DPoPMiddleware).
+	if cnfGRPCInterceptor != nil {
+		grpcUnaryInterceptors = append(grpcUnaryInterceptors, cnfGRPCInterceptor.Unary())
+		grpcStreamInterceptors = append(grpcStreamInterceptors, cnfGRPCInterceptor.Stream())
 	}
 	if authzMW != nil {
 		grpcUnaryInterceptors = append(grpcUnaryInterceptors, authzMW.Unary())
@@ -416,13 +451,21 @@ func main() {
 
 	// OIDC login/callback/me/logout.
 	// Регистрируется ДО `/` чтобы перебить grpc-gateway catch-all.
+	if cfg.OIDCPartial() {
+		logger.Warn("OIDC config partial: issuer set but client-id/redirect missing",
+			"issuer", cfg.OIDCIssuer,
+			"client_id_set", cfg.OIDCClientID != "",
+			"redirect_set", cfg.OIDCRedirectURI != "",
+			"hint", "login returns 503 until the OIDC client secret is bootstrapped (zitadel-oidc-bootstrap Job)",
+		)
+	}
 	oidcHandler := middleware.NewOIDCHandler(middleware.OIDCConfig{
-		Issuer:         os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER"),
-		ExternalIssuer: os.Getenv("KACHO_API_GATEWAY_OIDC_EXTERNAL_ISSUER"),
-		ClientID:       os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_ID"),
-		ClientSecret:   os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_SECRET"),
-		RedirectURI:    os.Getenv("KACHO_API_GATEWAY_OIDC_REDIRECT_URI"),
-		Disabled:       os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER") == "",
+		Issuer:         cfg.OIDCIssuer,
+		ExternalIssuer: cfg.OIDCExternalIssuer,
+		ClientID:       cfg.OIDCClientID,
+		ClientSecret:   cfg.OIDCClientSecret,
+		RedirectURI:    cfg.OIDCRedirectURI,
+		Disabled:       cfg.OIDCDisabled(),
 	}, logger)
 	// /me читает Kratos session если есть cookie ory_kratos_session.
 	if kratosURL != "disabled" {
@@ -466,9 +509,17 @@ func main() {
 	)
 
 	httpSrv := &http.Server{
-		Handler:     httpHandler,
-		ReadTimeout: 30 * time.Second,
-		IdleTimeout: 120 * time.Second,
+		Handler: httpHandler,
+		// ReadHeaderTimeout bounds the slow-header (Slowloris) attack surface
+		// independently of the body-read budget: a client trickling request
+		// headers cannot pin a connection/goroutine indefinitely (CWE-400/770).
+		// WriteTimeout is intentionally left unset — the same server multiplexes
+		// grpc-gateway responses (incl. long-lived streaming/long-poll REST) and a
+		// blanket write deadline would truncate them; slow-read draining is bounded
+		// instead by IdleTimeout + the reverse-proxy/L7 in front of the edge.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 		// SECURITY: the SAME httpSrv serves both
 		// the cluster-internal listener and the advertised external TLS listener.
 		// ConnContext tags requests whose connection was accepted on the external
@@ -490,10 +541,7 @@ func main() {
 	// (cfg.AuthZEnabled=false), authzMW.AsInvalidator() returns a nopAuthzInvalidator
 	// and the handler returns NotFound on every InvalidateSubject (idempotent
 	// miss; drainer marks the row as already applied).
-	internalGRPCAddr := os.Getenv("KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR")
-	if internalGRPCAddr == "" {
-		internalGRPCAddr = ":9091"
-	}
+	internalGRPCAddr := cfg.InternalGRPCAddr
 	internalGrpcSrv, internalLis, ierr := startInternalGRPCListener(
 		internalGRPCAddr, authzMW.AsInvalidator(), grpcSrv, logger)
 	if ierr != nil {

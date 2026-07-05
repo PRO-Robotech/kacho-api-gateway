@@ -11,8 +11,11 @@
 // sufficient and no shared external store is introduced.
 //
 // Set semantics: the jti is the key, the value is empty. Replay detection uses
-// Peek (NOT Get) so a repeated jti is NOT kept warm in the LRU — an attacker
-// replaying a proof must not extend its own entry's lifetime.
+// a single atomic add-if-absent (lrucache.AddIfAbsent) so that (a) the
+// presence-check and insert share one critical section — no check-then-act race
+// — and (b) a repeated jti is NOT kept warm in the LRU (a losing add does not
+// refresh recency), so an attacker replaying a proof must not extend its own
+// entry's lifetime.
 package middleware
 
 import (
@@ -58,16 +61,23 @@ func NewDPoPReplayCache(cfg DPoPReplayCacheConfig) *DPoPReplayCache {
 // attacker cannot flood the cache to age out a real jti any faster than the LRU
 // bound allows).
 //
-// Thread-safe under concurrent goroutines.
+// The presence-check and insert are a single atomic add-if-absent under one
+// lock hold (lrucache.AddIfAbsent), NOT a check-then-act Peek+Put pair: this is
+// the in-memory analogue of an atomic CAS `INSERT … ON CONFLICT` and closes the
+// TOCTOU window that would otherwise let concurrent replays of one captured
+// proof (identical jti) all pass replay detection (project-rule #10; RFC 9449
+// §11.1). An already-present jti is not kept warm — a replay must not extend its
+// own entry's lifetime (AddIfAbsent does not refresh recency on a losing add).
+//
+// Thread-safe under concurrent goroutines; concurrent Adds of the same jti
+// resolve to exactly one winner.
 func (c *DPoPReplayCache) Add(jti string) error {
 	if jti == "" {
 		return errors.New("empty jti")
 	}
-	// Peek (no LRU touch) — a replayed jti must not keep itself warm.
-	if _, seen := c.c.Peek(jti); seen {
+	if !c.c.AddIfAbsent(jti, struct{}{}) {
 		return ErrDPoPReplay
 	}
-	c.c.Put(jti, struct{}{})
 	return nil
 }
 

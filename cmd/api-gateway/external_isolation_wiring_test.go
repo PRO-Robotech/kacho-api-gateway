@@ -83,7 +83,17 @@ func TestExternalIsolationWiring_EndToEnd(t *testing.T) {
 	go func() { _ = httpSrv.Serve(listenerorigin.ExternalListener(extHTTPL)) }()
 	go func() { _ = extCmux.Serve() }()
 
-	time.Sleep(100 * time.Millisecond) // let goroutines start
+	// Poll both listeners until they actually serve, instead of a fixed sleep —
+	// a loaded CI runner can leave the serve goroutines unscheduled past 100ms,
+	// racing the assertions below.
+	tlsClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test self-signed
+		},
+		Timeout: 2 * time.Second,
+	}
+	waitHTTPReady(t, http.DefaultClient, "http://"+intLn.Addr().String()+"/probe")
+	waitHTTPReady(t, tlsClient, "https://"+rawTLS.Addr().String()+"/probe")
 
 	// Internal call → IsExternal=false → 200 "internal".
 	t.Run("internal listener → origin internal", func(t *testing.T) {
@@ -108,6 +118,25 @@ func TestExternalIsolationWiring_EndToEnd(t *testing.T) {
 	})
 
 	_ = context.Background()
+}
+
+// waitHTTPReady polls url with the given client until it gets any HTTP response
+// (the serve goroutine + cmux are up) or a deadline elapses. This replaces a
+// fixed startup sleep with an actual readiness gate.
+func waitHTTPReady(t *testing.T, c *http.Client, url string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		resp, err := c.Get(url)
+		if err == nil {
+			_ = resp.Body.Close()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("listener not ready after 3s: GET %s: %v", url, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func doGet(t *testing.T, url string, _ http.RoundTripper) (string, int) {

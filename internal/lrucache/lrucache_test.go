@@ -6,6 +6,7 @@ package lrucache
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -155,6 +156,68 @@ func TestCache_PutWithTTL(t *testing.T) {
 	adv(20 * time.Millisecond)
 	if _, ok := c.Get("a"); ok {
 		t.Fatal("entry must expire at per-entry TTL, not the long default")
+	}
+}
+
+func TestCache_AddIfAbsent_Basic(t *testing.T) {
+	c := New[string, struct{}](10, time.Minute, nil)
+	if !c.AddIfAbsent("a", struct{}{}) {
+		t.Fatal("first AddIfAbsent(a) must insert and return true")
+	}
+	if c.AddIfAbsent("a", struct{}{}) {
+		t.Fatal("second AddIfAbsent(a) must observe present entry and return false")
+	}
+}
+
+func TestCache_AddIfAbsent_RespectsTTL(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	adv := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+	c := New[string, struct{}](10, 50*time.Millisecond, clock)
+	if !c.AddIfAbsent("a", struct{}{}) {
+		t.Fatal("first insert must succeed")
+	}
+	adv(60 * time.Millisecond) // expire
+	if !c.AddIfAbsent("a", struct{}{}) {
+		t.Fatal("after TTL expiry AddIfAbsent must treat key as absent and re-insert")
+	}
+}
+
+func TestCache_AddIfAbsent_NoLRUTouchOnLosingAdd(t *testing.T) {
+	c := New[string, struct{}](2, time.Minute, nil)
+	c.AddIfAbsent("a", struct{}{})
+	c.AddIfAbsent("b", struct{}{})
+	// Losing AddIfAbsent on present "a" must NOT refresh its recency.
+	if c.AddIfAbsent("a", struct{}{}) {
+		t.Fatal("AddIfAbsent(a) should have lost (a present)")
+	}
+	c.AddIfAbsent("c", struct{}{}) // evicts LRU
+	if _, ok := c.Peek("a"); ok {
+		t.Fatal("a should have been evicted (losing AddIfAbsent must not keep it warm)")
+	}
+	if _, ok := c.Peek("b"); !ok {
+		t.Fatal("b should survive")
+	}
+}
+
+func TestCache_AddIfAbsent_ConcurrentSameKey_OneWinner(t *testing.T) {
+	c := New[string, struct{}](64, time.Hour, nil)
+	const N = 200
+	var wins int32
+	var wg sync.WaitGroup
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if c.AddIfAbsent("contested", struct{}{}) {
+				atomic.AddInt32(&wins, 1)
+			}
+		}()
+	}
+	wg.Wait()
+	if wins != 1 {
+		t.Fatalf("AddIfAbsent concurrent winners = %d, want exactly 1", wins)
 	}
 }
 

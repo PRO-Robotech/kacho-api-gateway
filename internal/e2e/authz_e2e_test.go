@@ -321,13 +321,21 @@ func TestE2E_AuthZ_CacheReusedAcrossCalls(t *testing.T) {
 }
 
 func TestE2E_AuthZ_CacheExpiresAfterTTL(t *testing.T) {
+	// Deterministic clock: the decision cache is built with cfg.Now, so we step
+	// time explicitly past the TTL instead of a wall-clock sleep (which flakes on
+	// a loaded CI runner — a GC/scheduler stall can keep the entry alive).
+	var current atomic.Int64
+	current.Store(time.Now().UnixNano())
+	clock := func() time.Time { return time.Unix(0, current.Load()) }
 	ts, stub := buildE2E(t, func(c *middleware.AuthzMiddlewareConfig) {
 		c.CacheTTL = 50 * time.Millisecond
+		c.Now = clock
 	})
 	stub.allow.Store(true)
 
 	authedRequest(t, ts, http.MethodGet, "/vpc/v1/networks/enp_x", "2")
-	time.Sleep(80 * time.Millisecond)
+	// Advance the injected clock past the cache TTL.
+	current.Add(int64(60 * time.Millisecond))
 	authedRequest(t, ts, http.MethodGet, "/vpc/v1/networks/enp_x", "2")
 
 	// Two distinct uncached calls.
