@@ -34,6 +34,10 @@ import (
 //	KACHO_API_GATEWAY_GEO_INTERNAL_GRPC   — адрес backend kacho-geo internal-port (9091)
 //	KACHO_API_GATEWAY_REGISTRY_GRPC          — адрес backend kacho-registry (public, port 9090)
 //	KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC — адрес backend kacho-registry internal-port (9091)
+//	KACHO_APP_ENV                            — deployment-env label (keys the prod authz guard)
+//	KACHO_API_GATEWAY_KRATOS_PUBLIC_URL      — Ory Kratos public API base ("disabled" turns it off)
+//	KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR     — cluster-internal gRPC listener (default :9091)
+//	KACHO_API_GATEWAY_OIDC_ISSUER / _EXTERNAL_ISSUER / _CLIENT_ID / _CLIENT_SECRET / _REDIRECT_URI — OIDC UI flow
 //
 // TLS требуется для совместимости с CLI-клиентами, жестко ожидающими TLS-endpoint.
 // Когда TLS_LISTEN_ADDR пустой — TLS не запускается; plain-cmux на ListenAddr.
@@ -122,6 +126,36 @@ type Config struct {
 	// Если пуст — Bearer-токены в dev-режиме игнорируются (всегда anonymous).
 	// Production / production-strict — нужен Hydra JWKS.
 	AuthNDevSecret string `envconfig:"KACHO_API_GATEWAY_AUTHN_DEV_SECRET" default:""`
+
+	// --- composition-root settings (previously read via ad-hoc os.Getenv in
+	// main.go; centralised here so they carry documented defaults + appear in the
+	// single Config env contract) ---
+
+	// AppEnv — deployment-environment label (prod / production / staging / dev /
+	// local / test / ""). Keys the fail-fast production authz guard
+	// (validateProductionAuthzConfig) and relaxed-posture warnings. Emitted from
+	// the helm overlay via extraEnv.
+	AppEnv string `envconfig:"KACHO_APP_ENV" default:""`
+
+	// KratosPublicURL — base URL of the Ory Kratos public API (session /whoami).
+	// The sentinel "disabled" turns Kratos session-auth off entirely. Default is
+	// the cluster-internal kratos-public Service.
+	KratosPublicURL string `envconfig:"KACHO_API_GATEWAY_KRATOS_PUBLIC_URL" default:"http://kacho-umbrella-kratos-public.kacho.svc.cluster.local:80"`
+
+	// InternalGRPCAddr — dedicated cluster-internal gRPC listener for RPCs that
+	// must not be on the external TLS endpoint (InternalAuthzCacheService).
+	InternalGRPCAddr string `envconfig:"KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR" default:":9091"`
+
+	// --- OIDC login/callback flow (UI auth) ---
+	// OIDCIssuer empty ⇒ the OIDC handler is disabled (login → 503). A partial
+	// config (issuer set, client-id/redirect missing) is TOLERATED at startup —
+	// the bootstrap Job populates the client-id secret post-install and Login
+	// returns a descriptive 503 until then — but surfaced via a startup WARN.
+	OIDCIssuer         string `envconfig:"KACHO_API_GATEWAY_OIDC_ISSUER"          default:""`
+	OIDCExternalIssuer string `envconfig:"KACHO_API_GATEWAY_OIDC_EXTERNAL_ISSUER" default:""`
+	OIDCClientID       string `envconfig:"KACHO_API_GATEWAY_OIDC_CLIENT_ID"       default:""`
+	OIDCClientSecret   string `envconfig:"KACHO_API_GATEWAY_OIDC_CLIENT_SECRET"   default:""`
+	OIDCRedirectURI    string `envconfig:"KACHO_API_GATEWAY_OIDC_REDIRECT_URI"    default:""`
 
 	// --- AuthN core (DPoP / JWT / mTLS-bound / step-up / BCL) ---
 
@@ -326,6 +360,18 @@ func (c Config) ExternalListenerClientAuth(base *tls.Config) (*tls.Config, error
 	base.ClientAuth = tls.VerifyClientCertIfGiven
 	base.ClientCAs = pool
 	return base, nil
+}
+
+// OIDCDisabled reports whether the OIDC login/callback flow is off (no issuer).
+func (c Config) OIDCDisabled() bool { return c.OIDCIssuer == "" }
+
+// OIDCPartial reports whether OIDC is enabled (issuer set) but missing a field
+// required to complete the flow (client-id or redirect-uri). This is TOLERATED
+// at startup (the bootstrap Job fills the client-id secret post-install; Login
+// returns a descriptive 503 until then) but the caller surfaces it as a WARN so
+// a stuck bootstrap is visible in pod logs rather than only at runtime.
+func (c Config) OIDCPartial() bool {
+	return c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.OIDCRedirectURI == "")
 }
 
 // ResolvedHydraIssuer returns the Hydra issuer URL, deriving it from APIDomain

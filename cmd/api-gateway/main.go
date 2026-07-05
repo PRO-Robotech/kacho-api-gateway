@@ -105,10 +105,7 @@ func main() {
 	// Kratos session-based auth для SPA (cookie ory_kratos_session).
 	// Env KACHO_API_GATEWAY_KRATOS_PUBLIC_URL — base URL Kratos public API.
 	// Default = cluster-internal kratos-public service.
-	kratosURL := os.Getenv("KACHO_API_GATEWAY_KRATOS_PUBLIC_URL")
-	if kratosURL == "" {
-		kratosURL = "http://kacho-umbrella-kratos-public.kacho.svc.cluster.local:80"
-	}
+	kratosURL := cfg.KratosPublicURL
 	if kratosURL != "disabled" {
 		authInterceptor = authInterceptor.WithKratos(middleware.NewKratosClient(kratosURL))
 		logger.Info("kratos session-auth wired", "kratos_url", kratosURL)
@@ -294,7 +291,7 @@ func main() {
 		// KACHO_APP_ENV signal is emitted from the helm overlay via extraEnv
 		// (see kacho-deploy values.prod.yaml). Non-prod envs are tolerated and
 		// surfaced via the WARN log below.
-		appEnv := os.Getenv("KACHO_APP_ENV")
+		appEnv := cfg.AppEnv
 		if vErr := validateProductionAuthzConfig(appEnv, AuthzMiddlewareConfig{
 			Enabled:   cfg.AuthZEnabled,
 			FailOpen:  cfg.AuthZFailOpen,
@@ -454,13 +451,21 @@ func main() {
 
 	// OIDC login/callback/me/logout.
 	// Регистрируется ДО `/` чтобы перебить grpc-gateway catch-all.
+	if cfg.OIDCPartial() {
+		logger.Warn("OIDC config partial: issuer set but client-id/redirect missing",
+			"issuer", cfg.OIDCIssuer,
+			"client_id_set", cfg.OIDCClientID != "",
+			"redirect_set", cfg.OIDCRedirectURI != "",
+			"hint", "login returns 503 until the OIDC client secret is bootstrapped (zitadel-oidc-bootstrap Job)",
+		)
+	}
 	oidcHandler := middleware.NewOIDCHandler(middleware.OIDCConfig{
-		Issuer:         os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER"),
-		ExternalIssuer: os.Getenv("KACHO_API_GATEWAY_OIDC_EXTERNAL_ISSUER"),
-		ClientID:       os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_ID"),
-		ClientSecret:   os.Getenv("KACHO_API_GATEWAY_OIDC_CLIENT_SECRET"),
-		RedirectURI:    os.Getenv("KACHO_API_GATEWAY_OIDC_REDIRECT_URI"),
-		Disabled:       os.Getenv("KACHO_API_GATEWAY_OIDC_ISSUER") == "",
+		Issuer:         cfg.OIDCIssuer,
+		ExternalIssuer: cfg.OIDCExternalIssuer,
+		ClientID:       cfg.OIDCClientID,
+		ClientSecret:   cfg.OIDCClientSecret,
+		RedirectURI:    cfg.OIDCRedirectURI,
+		Disabled:       cfg.OIDCDisabled(),
 	}, logger)
 	// /me читает Kratos session если есть cookie ory_kratos_session.
 	if kratosURL != "disabled" {
@@ -536,10 +541,7 @@ func main() {
 	// (cfg.AuthZEnabled=false), authzMW.AsInvalidator() returns a nopAuthzInvalidator
 	// and the handler returns NotFound on every InvalidateSubject (idempotent
 	// miss; drainer marks the row as already applied).
-	internalGRPCAddr := os.Getenv("KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR")
-	if internalGRPCAddr == "" {
-		internalGRPCAddr = ":9091"
-	}
+	internalGRPCAddr := cfg.InternalGRPCAddr
 	internalGrpcSrv, internalLis, ierr := startInternalGRPCListener(
 		internalGRPCAddr, authzMW.AsInvalidator(), grpcSrv, logger)
 	if ierr != nil {
