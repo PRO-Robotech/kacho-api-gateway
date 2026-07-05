@@ -270,6 +270,15 @@ type Config struct {
 	// directly on the wire.
 	AuthZTrustedXForwardedFor bool `envconfig:"KACHO_API_GATEWAY_AUTHZ_TRUSTED_XFF" default:"true"`
 
+	// AuthZTrustedProxyCount — number of trusted reverse-proxy hops in front of
+	// the gateway. X-Forwarded-For is read from the RIGHT: the client IP is the
+	// entry the outermost trusted proxy recorded (parts[len-N]), so a
+	// client-forged leftmost XFF cannot drive `client_ip` / `source_ip_in_range`.
+	// Default 1 (single k8s ingress). Set 0 to ignore forwarded headers entirely
+	// and treat the TCP peer as authoritative. Only consulted when
+	// AuthZTrustedXForwardedFor is true.
+	AuthZTrustedProxyCount int `envconfig:"KACHO_API_GATEWAY_AUTHZ_TRUSTED_PROXY_COUNT" default:"1"`
+
 	// SubjectChangePollInterval — how often the subject-change watcher polls
 	// kacho-iam InternalIAMService.PollSubjectChanges to flush the authz
 	// decision cache on sibling replicas that did not process the mutation.

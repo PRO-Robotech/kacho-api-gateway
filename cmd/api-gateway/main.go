@@ -821,7 +821,7 @@ func buildAuthzMiddleware(cfg config.Config, logger *slog.Logger) (*middleware.A
 		FailOpen:        cfg.AuthZFailOpen,
 		Catalog:         catalog,
 		Subjects:        middleware.NewSubjectExtractor(true),
-		Context:         middleware.NewContextExtractor(time.Now, cfg.AuthZTrustedXForwardedFor),
+		Context:         middleware.NewContextExtractor(time.Now, cfg.AuthZTrustedXForwardedFor, middleware.WithTrustedProxyHops(cfg.AuthZTrustedProxyCount)),
 		Resources:       middleware.NewResourceExtractor(restRouter.PathTemplates()),
 		Checker:         clients.NewAuthzChecker(authzClient),
 		Overrides:       overrides,
