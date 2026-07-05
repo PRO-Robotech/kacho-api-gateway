@@ -55,9 +55,9 @@ type Config struct {
 	// dedicated `internal-rest` Service port. Empty → the internal REST listener
 	// is disabled (Internal* REST unreachable via the gateway entirely).
 	InternalRESTAddr string `envconfig:"KACHO_API_GATEWAY_INTERNAL_REST_ADDR"  default:":8081"`
-	TLSCertFile   string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
-	TLSKeyFile    string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
-	VPCAddr       string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
+	TLSCertFile      string `envconfig:"KACHO_API_GATEWAY_TLS_CERT_FILE"        default:""`
+	TLSKeyFile       string `envconfig:"KACHO_API_GATEWAY_TLS_KEY_FILE"         default:""`
+	VPCAddr          string `envconfig:"KACHO_API_GATEWAY_VPC_GRPC"              default:"vpc.kacho.svc.cluster.local:9090"`
 	// VPCInternalAddr — admin-only internal-port (9091) of vpc backend.
 	// Routes AddressPool RESTful endpoints (kacho-only admin).
 	VPCInternalAddr string `envconfig:"KACHO_API_GATEWAY_VPC_INTERNAL_GRPC" default:"vpc.kacho.svc.cluster.local:9091"`

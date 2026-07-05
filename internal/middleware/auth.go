@@ -51,6 +51,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/PRO-Robotech/kacho-corelib/operations"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 // AuthMode — режим работы auth-interceptor'а.
@@ -61,6 +63,15 @@ const (
 	AuthModeProduction       AuthMode = "production"
 	AuthModeProductionStrict AuthMode = "production-strict"
 )
+
+// authFailedMsg is the single, constant client-visible message for every
+// authN-failure returned by the gRPC interceptor. It deliberately does NOT
+// echo backend/JWT error detail (info-exposure, CWE-209) and does NOT vary by
+// whether the token was malformed vs the subject was unprovisioned — a varying
+// message is a provisioned-subject enumeration oracle (CWE-204). The detailed
+// cause is logged server-side only (mirrors the redaction already done in
+// authz.go). The REST path uses its own fixed strings via writeHTTPUnauthorized.
+const authFailedMsg = "authentication failed"
 
 // SubjectLookuper — port-интерфейс для subject-резолва. Реализация —
 // `internal/clients/iam_subject_client.go` (gRPC-direct к kacho-iam:9091).
@@ -106,9 +117,9 @@ type AuthInterceptor struct {
 	// Headers, которые auth-interceptor пропускает в backend metadata
 	// (после успешного auth). Backend через corelib `grpcsrv.PrincipalExtractInterceptor`
 	// прочитает их в ctx.
-	mdKeyPrincipalType    string // "x-kacho-principal-type"
-	mdKeyPrincipalID      string // "x-kacho-principal-id"
-	mdKeyPrincipalDisplay string // "x-kacho-principal-display-name"
+	mdKeyPrincipalType    string // principalmeta.MetaPrincipalType
+	mdKeyPrincipalID      string // principalmeta.MetaPrincipalID
+	mdKeyPrincipalDisplay string // principalmeta.MetaPrincipalDisplay
 }
 
 // NewAuthInterceptor создает interceptor с настройками из конфига.
@@ -118,9 +129,9 @@ func NewAuthInterceptor(mode AuthMode, devSecret string, lookup SubjectLookuper,
 		devSecret:             []byte(devSecret),
 		subjectLookup:         lookup,
 		logger:                logger,
-		mdKeyPrincipalType:    "x-kacho-principal-type",
-		mdKeyPrincipalID:      "x-kacho-principal-id",
-		mdKeyPrincipalDisplay: "x-kacho-principal-display-name",
+		mdKeyPrincipalType:    principalmeta.MetaPrincipalType,
+		mdKeyPrincipalID:      principalmeta.MetaPrincipalID,
+		mdKeyPrincipalDisplay: principalmeta.MetaPrincipalDisplay,
 	}
 }
 
@@ -240,7 +251,7 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 		if verr != nil {
 			a.logger.Warn("auth: Hydra JWT validation failed (JWKS)",
 				"method", fullMethod, "err", verr)
-			return nil, status.Errorf(codes.Unauthenticated, "token validation failed: %v", verr)
+			return nil, status.Error(codes.Unauthenticated, authFailedMsg)
 		}
 		pType, pID, display, perr := principalFromVerifiedToken(vt)
 		if perr == nil {
@@ -263,7 +274,7 @@ func (a *AuthInterceptor) authorize(ctx context.Context, fullMethod string) (con
 	if err != nil {
 		a.logger.Warn("auth: JWT validation failed",
 			"method", fullMethod, "err", err)
-		return nil, status.Errorf(codes.Unauthenticated, "token validation failed: %v", err)
+		return nil, status.Error(codes.Unauthenticated, authFailedMsg)
 	}
 
 	// Resolve subject via kacho-iam (gRPC-direct).
@@ -301,11 +312,15 @@ func (a *AuthInterceptor) authorizeViaLookup(ctx context.Context, fullMethod, su
 	subj, err := a.subjectLookup.LookupByExternalID(ctx, subjectID)
 	if err != nil {
 		switch a.mode {
-		case AuthModeProductionStrict:
-			return nil, status.Errorf(codes.Unauthenticated, "subject not found: %v", err)
-		case AuthModeProduction:
-			// production: subject обязан уже существовать в kacho-iam.
-			return nil, status.Errorf(codes.Unauthenticated, "subject not found: %v", err)
+		case AuthModeProductionStrict, AuthModeProduction:
+			// production[-strict]: subject обязан уже существовать в kacho-iam.
+			// Log the raw iam error server-side; return the constant non-oracle
+			// message so a validly-signed-but-unprovisioned token is
+			// indistinguishable from a bad-signature token (no subject
+			// enumeration, no iam error-text leak).
+			a.logger.Warn("auth: subject not in kacho-iam (rejecting)",
+				"method", fullMethod, "external_id", subjectID, "err", err)
+			return nil, status.Error(codes.Unauthenticated, authFailedMsg)
 		default: // dev
 			a.logger.Debug("auth: subject not in kacho-iam, fallback to anonymous",
 				"method", fullMethod, "external_id", subjectID, "err", err)
@@ -498,12 +513,12 @@ func (a *AuthInterceptor) validateJWT(tokenStr string) (jwt.MapClaims, error) {
 // and the legacy grpc-gateway convention form (fallback path). Shared by the
 // Hydra-JWT branch with the Kratos and SA-token paths.
 func setPrincipalHeaders(r *http.Request, pType, pID, displayName string) {
-	r.Header.Set("X-Kacho-Principal-Type", pType)
-	r.Header.Set("X-Kacho-Principal-Id", pID)
-	r.Header.Set("X-Kacho-Principal-Display-Name", displayName)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", pType)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", pID)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", displayName)
+	r.Header.Set(principalmeta.HeaderPrincipalType, pType)
+	r.Header.Set(principalmeta.HeaderPrincipalID, pID)
+	r.Header.Set(principalmeta.HeaderPrincipalDisplay, displayName)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalType, pType)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, pID)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, displayName)
 }
 
 // writeHTTPUnauthorized emits a 401 with a gRPC-shaped JSON body (code 16 =
@@ -527,8 +542,8 @@ func writeHTTPUnauthorized(w http.ResponseWriter, desc string) {
 // and the backend acr-floor.
 func isClientForgeableIdentityHeader(lower string) bool {
 	switch {
-	case strings.HasPrefix(lower, "x-kacho-principal-"),
-		strings.HasPrefix(lower, "grpc-metadata-x-kacho-principal-"),
+	case strings.HasPrefix(lower, principalmeta.MetaPrincipalPrefix),
+		strings.HasPrefix(lower, principalmeta.MetaGRPCPrincipalPrefix),
 		strings.HasPrefix(lower, "x-kacho-token-"),
 		strings.HasPrefix(lower, "grpc-metadata-x-kacho-token-"):
 		return true
@@ -624,12 +639,12 @@ func (a *AuthInterceptor) tryKratosSession(r *http.Request) bool {
 			"identity_id", res.IdentityID, "err", err.Error())
 		return false
 	}
-	r.Header.Set("X-Kacho-Principal-Type", subj.Type)
-	r.Header.Set("X-Kacho-Principal-Id", subj.ID)
-	r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+	r.Header.Set(principalmeta.HeaderPrincipalType, subj.Type)
+	r.Header.Set(principalmeta.HeaderPrincipalID, subj.ID)
+	r.Header.Set(principalmeta.HeaderPrincipalDisplay, subj.DisplayName)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalType, subj.Type)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, subj.ID)
+	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, subj.DisplayName)
 	a.logger.Info("auth.HTTP: Principal injected (Kratos)",
 		"type", subj.Type, "id", subj.ID, "email", res.Email)
 	return true
@@ -734,12 +749,12 @@ func (a *AuthInterceptor) tryDevSecretJWT(w http.ResponseWriter, r *http.Request
 		if saID == "" {
 			saID = subjectID
 		}
-		r.Header.Set("X-Kacho-Principal-Type", "service_account")
-		r.Header.Set("X-Kacho-Principal-Id", saID)
-		r.Header.Set("X-Kacho-Principal-Display-Name", saID)
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", "service_account")
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", saID)
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", saID)
+		r.Header.Set(principalmeta.HeaderPrincipalType, "service_account")
+		r.Header.Set(principalmeta.HeaderPrincipalID, saID)
+		r.Header.Set(principalmeta.HeaderPrincipalDisplay, saID)
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalType, "service_account")
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, saID)
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, saID)
 		a.logger.Info("auth.HTTP: SA principal injected", "id", saID)
 		next.ServeHTTP(w, r)
 		return true
@@ -749,13 +764,13 @@ func (a *AuthInterceptor) tryDevSecretJWT(w http.ResponseWriter, r *http.Request
 		a.logger.Debug("auth.HTTP: SubjectLookup failed", "external_id", subjectID, "err", lookupErr.Error())
 	} else {
 		// Plain headers — WithMetadata callback in restmux форвардит.
-		r.Header.Set("X-Kacho-Principal-Type", subj.Type)
-		r.Header.Set("X-Kacho-Principal-Id", subj.ID)
-		r.Header.Set("X-Kacho-Principal-Display-Name", subj.DisplayName)
+		r.Header.Set(principalmeta.HeaderPrincipalType, subj.Type)
+		r.Header.Set(principalmeta.HeaderPrincipalID, subj.ID)
+		r.Header.Set(principalmeta.HeaderPrincipalDisplay, subj.DisplayName)
 		// Legacy form — grpc-gateway default convention fallback.
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Type", subj.Type)
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Id", subj.ID)
-		r.Header.Set("Grpc-Metadata-X-Kacho-Principal-Display-Name", subj.DisplayName)
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalType, subj.Type)
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, subj.ID)
+		r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, subj.DisplayName)
 		a.logger.Info("auth.HTTP: Principal injected", "type", subj.Type, "id", subj.ID)
 	}
 	return false

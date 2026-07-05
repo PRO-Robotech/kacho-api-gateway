@@ -967,4 +967,3 @@ func denyDecision(fqn string, entry CatalogEntry, descriptor permissionDeniedDes
 		entry:      entry,
 	}
 }
-

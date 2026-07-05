@@ -36,6 +36,8 @@ import (
 
 	"github.com/PRO-Robotech/kacho-corelib/ids"
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 // Operation-id prefixes without an exported kacho-corelib constant reachable
@@ -250,10 +252,10 @@ func principalFromContext(ctx context.Context) (id, ptype string) {
 	if !ok {
 		return "", ""
 	}
-	if v := md.Get("x-kacho-principal-id"); len(v) > 0 {
+	if v := md.Get(principalmeta.MetaPrincipalID); len(v) > 0 {
 		id = v[0]
 	}
-	if v := md.Get("x-kacho-principal-type"); len(v) > 0 {
+	if v := md.Get(principalmeta.MetaPrincipalType); len(v) > 0 {
 		ptype = v[0]
 	}
 	return id, ptype

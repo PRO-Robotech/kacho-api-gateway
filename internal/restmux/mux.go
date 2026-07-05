@@ -86,8 +86,8 @@ import (
 	geopb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/geo/v1"
 	iampb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
 	// kacho-nlb (loadbalancer.v1) — public RPC под /nlb/v1/*.
-	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	lbpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/loadbalancer/v1"
+	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	// kacho-registry (registry.v1) — public RPC под /registry/v1/*.
 	registrypb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/registry/v1"
 	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
@@ -95,6 +95,7 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/listenerorigin"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/opsproxy"
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 // buildPrincipalMetadata собирает outgoing gRPC-metadata из HTTP middleware-set
@@ -119,21 +120,21 @@ func buildPrincipalMetadata(r *http.Request) metadata.MD {
 		}
 		return r.Header.Get(fallback)
 	}
-	pt := get("Grpc-Metadata-X-Kacho-Principal-Type", "X-Kacho-Principal-Type")
-	pi := get("Grpc-Metadata-X-Kacho-Principal-Id", "X-Kacho-Principal-Id")
-	pd := get("Grpc-Metadata-X-Kacho-Principal-Display-Name", "X-Kacho-Principal-Display-Name")
-	acr := get("Grpc-Metadata-X-Kacho-Token-Acr", "X-Kacho-Token-Acr")
+	pt := get(principalmeta.HeaderGRPCMetaPrincipalType, principalmeta.HeaderPrincipalType)
+	pi := get(principalmeta.HeaderGRPCMetaPrincipalID, principalmeta.HeaderPrincipalID)
+	pd := get(principalmeta.HeaderGRPCMetaPrincipalDisplay, principalmeta.HeaderPrincipalDisplay)
+	acr := get(principalmeta.HeaderGRPCMetaTokenACR, principalmeta.HeaderTokenACR)
 	if pt != "" {
-		md.Append("x-kacho-principal-type", pt)
+		md.Append(principalmeta.MetaPrincipalType, pt)
 	}
 	if pi != "" {
-		md.Append("x-kacho-principal-id", pi)
+		md.Append(principalmeta.MetaPrincipalID, pi)
 	}
 	if pd != "" {
-		md.Append("x-kacho-principal-display-name", pd)
+		md.Append(principalmeta.MetaPrincipalDisplay, pd)
 	}
 	if acr != "" {
-		md.Append("x-kacho-token-acr", acr)
+		md.Append(principalmeta.MetaTokenACR, acr)
 	}
 	return md
 }
@@ -282,7 +283,7 @@ func NewMux(
 			return k, true
 		}
 		lower := strings.ToLower(key)
-		if strings.HasPrefix(lower, "x-kacho-principal-") {
+		if strings.HasPrefix(lower, principalmeta.MetaPrincipalPrefix) {
 			return lower, true
 		}
 		return "", false
