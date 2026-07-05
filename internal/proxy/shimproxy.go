@@ -16,8 +16,9 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
 
 // MethodResolver — функция определяет в какой backend forward'ить RPC.
@@ -32,9 +33,10 @@ type methodResolverInternal = func(fullMethod string) (string, grpc.ClientConnIn
 // Handler — gRPC StreamHandler для UnknownServiceHandler. Принимает resolver
 // и proxies stream к target backend.
 //
-// Реализация — minimal pass-through; full features (metadata propagation,
-// trailers) дергают grpc internals. Используем стандартный grpc.NewStream
-// API для прозрачного proxy.
+// Прозрачный pass-through: incoming metadata форвардится как outgoing (header),
+// backend response header/trailer форвардятся обратно клиенту (иначе gRPC
+// error-details и trailing metadata бэкенда молча терялись бы), а error-status
+// бэкенда пробрасывается как есть.
 func Handler(resolve methodResolverInternal) grpc.StreamHandler {
 	return func(srv interface{}, ss grpc.ServerStream) error {
 		method, ok := grpc.MethodFromServerStream(ss)
@@ -50,9 +52,9 @@ func Handler(resolve methodResolverInternal) grpc.StreamHandler {
 			// реализован" — это разведка.
 			return status.Errorf(codes.NotFound, "unknown method: %s", method)
 		}
-		// Forward incoming metadata as outgoing.
-		md, _ := metadata.FromIncomingContext(ss.Context())
-		outCtx := metadata.NewOutgoingContext(ss.Context(), md)
+		// Forward incoming metadata as outgoing (shared helper: always .Copy()s,
+		// same contract as every cross-process gRPC hop in the gateway).
+		outCtx := principalmeta.OutgoingFromIncoming(ss.Context())
 
 		// Create bidi stream on target.
 		desc := &grpc.StreamDesc{StreamName: target, ServerStreams: true, ClientStreams: true}
@@ -82,9 +84,22 @@ func Handler(resolve methodResolverInternal) grpc.StreamHandler {
 			}
 		}()
 		go func() {
+			// Propagate the backend's response header to the client BEFORE the
+			// first response frame — a transparent proxy must forward the
+			// backend's initial metadata. Header() blocks until the backend
+			// flushes headers (on its first SendMsg or on completion).
+			if h, herr := clientStream.Header(); herr == nil && h.Len() > 0 {
+				_ = ss.SetHeader(h)
+			}
 			f := &emptyFrame{}
 			for {
 				if err := clientStream.RecvMsg(f); err != nil {
+					// Stream finished (EOF) or errored: forward the backend's
+					// trailing metadata (gRPC error-details / trailers) to the
+					// client. Trailer() is valid once RecvMsg returns non-nil.
+					if tr := clientStream.Trailer(); tr.Len() > 0 {
+						ss.SetTrailer(tr)
+					}
 					if err == io.EOF {
 						errCh <- nil
 						return
