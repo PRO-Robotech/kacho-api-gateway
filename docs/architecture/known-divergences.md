@@ -68,3 +68,50 @@ change their semantics, not just their mechanics:
 
 Rubric reference: kacho-corelib reuse principle. Contract impact: none — both are
 unexported, in-process, no wire/API/DB change.
+
+## 3. Per-pod in-memory idempotency & DPoP-replay state under HPA (accepted residual)
+
+**Rule (project-rule #10 spirit).** A within-domain invariant should be enforced
+at a layer that spans the whole concurrency domain, not a per-process software
+check. `IdempotencyStore.reserve()` (single-flight, exactly-once per
+`Idempotency-Key`) and `DPoPReplayCache` (RFC 9449 §11.1 anti-replay on `jti`)
+are both correct **within one process** (atomic reserve / `AddIfAbsent`), but the
+concurrency domain is the whole gateway fleet — and the shipped chart enables HPA
+(`autoscaling.enabled=true`, `maxReplicas: 10`), so the domain spans N pods.
+
+**Why the gateway keeps per-pod state (for now).**
+
+- **No shared store is provisioned.** Backing these with Postgres/Redis
+  (`INSERT … ON CONFLICT DO NOTHING` for idempotency; `SET NX` with TTL for
+  `jti`) is a genuinely correct fix but adds a hard runtime dependency and a
+  per-request round-trip to the request-side bottleneck (~3500 RPS/pod). That is
+  a deliberate infra decision, tracked separately — not something to bolt on
+  silently under this hardening pass.
+- **Capping `maxReplicas: 1` is worse.** api-gateway is the documented RPS
+  bottleneck; forcing a single replica to "restore" the store's precondition
+  trades a correctness edge case for a hard availability/capacity regression.
+
+**Accepted residual + compensating controls.**
+
+- *Idempotency:* two same-key double-submits that land on different pods each
+  become a leader → duplicate downstream mutation. This is bounded to genuine
+  concurrent double-submits of the **same** key racing across pods within the TTL
+  window; the common single-client-retry case still hits one pod (keep-alive /
+  L7 affinity) and dedups. The downstream resource services remain the real
+  exactly-once authority via their own DB-level invariants (FK / partial-UNIQUE /
+  atomic CAS, project-rule #10) — the gateway store is a latency/UX optimisation,
+  not the integrity boundary.
+- *DPoP replay:* a captured proof can be replayed at most once per replica that
+  has not yet seen its `jti`, bounded by the 60s `iat`-freshness window (cache
+  TTL = 2× that). Replay is capped at ~N (live replicas), not unbounded, and only
+  within one freshness window.
+
+**Path to full fix (when provisioned):** move both to a shared low-latency store
+(idempotency: `INSERT … ON CONFLICT DO NOTHING` keyed on
+`(principal,method,path,key)` with `RETURNING` to elect leader vs follower; DPoP:
+`SET NX` with TTL = freshness window), or pin same-key/same-`jti` requests to one
+pod via consistent-hash sticky routing.
+
+Rubric reference: project-rule #10 (concurrency-domain enforcement); CWE-362 /
+CWE-294. Contract impact: none — internal in-process state only; no wire/API/DB
+change. The `deploy/values.yaml` autoscaling block documents this residual inline.

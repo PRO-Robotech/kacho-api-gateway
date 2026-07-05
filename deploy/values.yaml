@@ -196,6 +196,16 @@ resources:
     cpu: 1000m
     memory: 512Mi
 
+# NOTE (per-pod state under HPA): the Idempotency-Key single-flight store and the
+# DPoP jti replay cache are per-pod in-memory. With maxReplicas > 1 they are NOT
+# global — same-key double-submits that land on different pods can each proceed,
+# and a captured DPoP proof can be replayed at most once per replica within the
+# 60s iat-freshness window. This is an accepted residual with compensating
+# controls (downstream services are the real exactly-once authority via DB-level
+# invariants; replay is bounded by freshness). See
+# docs/architecture/known-divergences.md §3. Do NOT cap maxReplicas to 1 to
+# "fix" it — that trades an edge case for a capacity regression on the RPS
+# bottleneck; the correct fix is a shared store (Postgres/Redis).
 autoscaling:
   enabled: true
   minReplicas: 1
