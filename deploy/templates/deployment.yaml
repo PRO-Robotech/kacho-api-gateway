@@ -24,6 +24,10 @@ spec:
           ports:
             - name: cmux
               containerPort: {{ .Values.port }}
+            {{- if .Values.internalRestPort }}
+            - name: internal-rest
+              containerPort: {{ .Values.internalRestPort }}
+            {{- end }}
             {{- if .Values.tls.enabled }}
             - name: tls
               containerPort: {{ .Values.tlsPort }}
@@ -31,6 +35,11 @@ spec:
           env:
             - name: KACHO_API_GATEWAY_LISTEN_ADDR
               value: ":{{ .Values.port }}"
+            # Dedicated cluster-internal admin REST listener — the ONLY listener
+            # that serves Internal* REST (ban #6). NEVER targeted by the ingress.
+            # Empty → the internal REST listener is disabled.
+            - name: KACHO_API_GATEWAY_INTERNAL_REST_ADDR
+              value: {{ if .Values.internalRestPort }}":{{ .Values.internalRestPort }}"{{ else }}""{{ end }}
             # Resource-management backend — kacho-iam (отдельной RESOURCEMANAGER_GRPC переменной нет).
             - name: KACHO_API_GATEWAY_VPC_GRPC
               value: "{{ .Values.backends.vpc }}"
