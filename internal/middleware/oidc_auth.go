@@ -14,6 +14,7 @@ package middleware
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -36,7 +37,8 @@ type OIDCConfig struct {
 	ExternalIssuer string
 	ClientID       string // OIDC-client из Zitadel admin
 	RedirectURI    string // напр. http://<host>/iam/v1/auth/callback
-	// ClientSecret — confidential client; для PKCE/public — оставим пустым.
+	// ClientSecret — confidential client; для public-client оставляем пустым. В
+	// обоих случаях code-exchange защищён PKCE (RFC 7636, S256) — см. Login/Callback.
 	ClientSecret string
 	// Disabled — если true, login возвращает 503 (Zitadel еще не настроен на стенде).
 	Disabled bool
@@ -52,6 +54,7 @@ func (c OIDCConfig) externalIssuer() string {
 
 const (
 	stateCookieName   = "kacho_oauth_state"
+	pkceCookieName    = "kacho_oauth_pkce" // RFC 7636 code_verifier (HttpOnly, browser-bound)
 	sessionCookieName = "kacho_session"
 	stateCookieMaxAge = 600 // 10 минут на signin flow
 	sessionMaxAge     = 3600
@@ -123,6 +126,21 @@ func (h *OIDCHandler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"failed to generate state"}`, http.StatusInternalServerError)
 		return
 	}
+	// PKCE (RFC 7636): generate a per-request code_verifier and its S256
+	// code_challenge. The verifier is stored in an HttpOnly, browser-bound cookie
+	// (unreadable to JS) and the challenge travels in the front-channel authorize
+	// redirect; an attacker who intercepts the authorization code cannot redeem it
+	// without the verifier cookie. Emitted unconditionally — harmless for a
+	// confidential client (which also sends client_secret), essential for the
+	// public-client case (empty ClientSecret) where it is the ONLY code-binding.
+	verifier, err := randomState()
+	if err != nil {
+		http.Error(w, `{"error":"failed to generate pkce verifier"}`, http.StatusInternalServerError)
+		return
+	}
+	challengeSum := sha256.Sum256([]byte(verifier))
+	codeChallenge := base64.RawURLEncoding.EncodeToString(challengeSum[:])
+	secure := requestIsHTTPS(r)
 	// #nosec G124 -- Secure is set conditionally via requestIsHTTPS(r) (gosec's
 	// literal-only heuristic cannot evaluate it); HttpOnly+SameSite always present.
 	http.SetCookie(w, &http.Cookie{
@@ -130,7 +148,17 @@ func (h *OIDCHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   requestIsHTTPS(r),
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   stateCookieMaxAge,
+	})
+	// #nosec G124 -- Secure mirrors requestIsHTTPS(r); HttpOnly+SameSite always present.
+	http.SetCookie(w, &http.Cookie{
+		Name:     pkceCookieName,
+		Value:    verifier,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   stateCookieMaxAge,
 	})
@@ -145,6 +173,8 @@ func (h *OIDCHandler) Login(w http.ResponseWriter, r *http.Request) {
 	q.Set("response_type", "code")
 	q.Set("scope", "openid profile email")
 	q.Set("state", state)
+	q.Set("code_challenge", codeChallenge)
+	q.Set("code_challenge_method", "S256")
 	u.RawQuery = q.Encode()
 	h.logger.Info("oidc login redirect", "to", u.String())
 	http.Redirect(w, r, u.String(), http.StatusFound)
@@ -171,6 +201,13 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	form.Set("client_id", h.cfg.ClientID)
 	if h.cfg.ClientSecret != "" {
 		form.Set("client_secret", h.cfg.ClientSecret)
+	}
+	// PKCE (RFC 7636): return the code_verifier stored at Login so the IdP can
+	// verify it against the code_challenge it recorded with the authorization
+	// code. Absence (cookie dropped/expired) fails the exchange closed at the IdP
+	// — the code is not redeemable without the verifier, which is the point.
+	if pk, perr := r.Cookie(pkceCookieName); perr == nil && pk.Value != "" {
+		form.Set("code_verifier", pk.Value)
 	}
 	tokenURL := strings.TrimRight(h.cfg.Issuer, "/") + "/oauth/v2/token"
 	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL,
@@ -211,8 +248,10 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   sessionMaxAge,
 	})
-	// Clear state cookie (mirror the set-form security attributes).
+	// Clear state + PKCE cookies (mirror the set-form security attributes) —
+	// single-use, must not linger past a completed exchange.
 	clearCookie(w, stateCookieName, requestIsHTTPS(r))
+	clearCookie(w, pkceCookieName, requestIsHTTPS(r))
 	// Redirect на локальный путь. safeRelativePath отсекает open-redirect:
 	// абсолютные и protocol-relative (`//host`) цели сворачиваются в "/".
 	next := safeRelativePath(r.URL.Query().Get("next"))

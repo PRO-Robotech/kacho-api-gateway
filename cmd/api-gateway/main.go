@@ -315,6 +315,23 @@ func main() {
 			}
 		}
 
+		// Fail-open surfacing: KACHO_APP_ENV keys the fatal production-guard above,
+		// but a deploy that forgets to set it (empty → dev-class) while exposing the
+		// EXTERNAL advertised TLS edge would silently ship with gateway-side authz
+		// absent / anonymous authN (CWE-1188). The external listener is a strong
+		// "this is reachable from outside the cluster" signal, so emit a loud
+		// startup WARN whenever it is enabled together with a relaxed posture,
+		// independent of the env label — the operator sees the fail-open edge in pod
+		// logs instead of it being invisible.
+		if cfg.TLSEnabled() && (!cfg.AuthZEnabled || cfg.AuthNMode == string(middleware.AuthModeDev)) {
+			logger.Warn("SECURITY: external TLS edge enabled with a relaxed auth posture",
+				"tls_listen_addr", cfg.TLSListenAddr,
+				"authz_enabled", cfg.AuthZEnabled,
+				"authn_mode", cfg.AuthNMode,
+				"hint", "set KACHO_API_GATEWAY_AUTHZ_ENABLED=true and KACHO_API_GATEWAY_AUTHN_MODE=production-strict for the advertised endpoint",
+			)
+		}
+
 		authzMW, err = buildAuthzMiddleware(cfg, logger)
 		if err != nil {
 			log.Fatalf("authz middleware: %v", err)
@@ -487,9 +504,17 @@ func main() {
 	)
 
 	httpSrv := &http.Server{
-		Handler:     httpHandler,
-		ReadTimeout: 30 * time.Second,
-		IdleTimeout: 120 * time.Second,
+		Handler: httpHandler,
+		// ReadHeaderTimeout bounds the slow-header (Slowloris) attack surface
+		// independently of the body-read budget: a client trickling request
+		// headers cannot pin a connection/goroutine indefinitely (CWE-400/770).
+		// WriteTimeout is intentionally left unset — the same server multiplexes
+		// grpc-gateway responses (incl. long-lived streaming/long-poll REST) and a
+		// blanket write deadline would truncate them; slow-read draining is bounded
+		// instead by IdleTimeout + the reverse-proxy/L7 in front of the edge.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 		// SECURITY: the SAME httpSrv serves both
 		// the cluster-internal listener and the advertised external TLS listener.
 		// ConnContext tags requests whose connection was accepted on the external
