@@ -3,21 +3,17 @@ module github.com/PRO-Robotech/kacho-api-gateway
 go 1.26.4
 
 require (
-	github.com/PRO-Robotech/kacho-compute v1.0.2
-	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260629221224-9ee70b8d274e
-	github.com/PRO-Robotech/kacho-geo v1.0.2
-	github.com/PRO-Robotech/kacho-iam v1.0.2
-	github.com/PRO-Robotech/kacho-nlb v1.0.3
-	github.com/PRO-Robotech/kacho-registry v0.0.0
-	github.com/PRO-Robotech/kacho-vpc v1.0.3
+	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260705005204-a60a829f8607
+	github.com/PRO-Robotech/kacho-proto v0.0.0-20260705003346-993d5ebb2e31
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.56.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -36,5 +32,4 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 )
