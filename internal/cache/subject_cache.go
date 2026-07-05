@@ -2,44 +2,33 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 // Package cache — in-process cache helpers для api-gateway.
-// subject_cache.go — LRU-bounded + TTL cache для subject-резолва.
+// subject_cache.go — LRU-bounded + TTL cache для subject-резолва, поверх общего
+// internal/lrucache примитива (единая протестированная eviction/TTL-логика).
 package cache
 
 import (
-	"container/list"
-	"sync"
 	"time"
 
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/lrucache"
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 )
 
 type SubjectCache struct {
-	mu      sync.Mutex
-	maxSize int
-	ttl     time.Duration
-	items   map[string]*list.Element
-	order   *list.List
-	now     func() time.Time
-}
-
-type subjectEntry struct {
-	key       string
-	value     middleware.Subject
-	expiresAt time.Time
+	c *lrucache.Cache[string, middleware.Subject]
 }
 
 // SubjectCacheOption tunes an optional constructor parameter.
-type SubjectCacheOption func(*SubjectCache)
+type SubjectCacheOption func(*subjectCacheOptions)
+
+type subjectCacheOptions struct {
+	now func() time.Time
+}
 
 // WithClock injects the time source (tests step a mock clock past the TTL
 // instead of sleeping on the wall clock). Production callers omit it and get
 // time.Now.
 func WithClock(now func() time.Time) SubjectCacheOption {
-	return func(c *SubjectCache) {
-		if now != nil {
-			c.now = now
-		}
-	}
+	return func(o *subjectCacheOptions) { o.now = now }
 }
 
 func NewSubjectCache(maxSize int, ttl time.Duration, opts ...SubjectCacheOption) *SubjectCache {
@@ -49,76 +38,19 @@ func NewSubjectCache(maxSize int, ttl time.Duration, opts ...SubjectCacheOption)
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	c := &SubjectCache{
-		maxSize: maxSize,
-		ttl:     ttl,
-		items:   make(map[string]*list.Element, maxSize),
-		order:   list.New(),
-		now:     time.Now,
+	o := subjectCacheOptions{now: time.Now}
+	for _, opt := range opts {
+		opt(&o)
 	}
-	for _, o := range opts {
-		o(c)
-	}
-	return c
+	return &SubjectCache{c: lrucache.New[string, middleware.Subject](maxSize, ttl, o.now)}
 }
 
-func (c *SubjectCache) Get(key string) (middleware.Subject, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	el, ok := c.items[key]
-	if !ok {
-		return middleware.Subject{}, false
-	}
-	e := el.Value.(*subjectEntry)
-	if c.now().After(e.expiresAt) {
-		c.order.Remove(el)
-		delete(c.items, key)
-		return middleware.Subject{}, false
-	}
-	c.order.MoveToFront(el)
-	return e.value, true
-}
+func (c *SubjectCache) Get(key string) (middleware.Subject, bool) { return c.c.Get(key) }
 
-func (c *SubjectCache) Set(key string, v middleware.Subject) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.items[key]; ok {
-		e := el.Value.(*subjectEntry)
-		e.value = v
-		e.expiresAt = c.now().Add(c.ttl)
-		c.order.MoveToFront(el)
-		return
-	}
-	e := &subjectEntry{key: key, value: v, expiresAt: c.now().Add(c.ttl)}
-	el := c.order.PushFront(e)
-	c.items[key] = el
-	if c.order.Len() > c.maxSize {
-		oldest := c.order.Back()
-		if oldest != nil {
-			c.order.Remove(oldest)
-			delete(c.items, oldest.Value.(*subjectEntry).key)
-		}
-	}
-}
+func (c *SubjectCache) Set(key string, v middleware.Subject) { c.c.Put(key, v) }
 
-func (c *SubjectCache) Invalidate(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.items[key]; ok {
-		c.order.Remove(el)
-		delete(c.items, key)
-	}
-}
+func (c *SubjectCache) Invalidate(key string) { c.c.InvalidateKey(key) }
 
-func (c *SubjectCache) InvalidateAll() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items = make(map[string]*list.Element, c.maxSize)
-	c.order = list.New()
-}
+func (c *SubjectCache) InvalidateAll() { c.c.Invalidate() }
 
-func (c *SubjectCache) Len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.order.Len()
-}
+func (c *SubjectCache) Len() int { return c.c.Len() }
