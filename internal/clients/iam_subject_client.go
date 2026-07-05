@@ -94,7 +94,7 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger, transportCreds grpc.D
 		conn:          conn,
 		stub:          iamv1.NewInternalIAMServiceClient(conn),
 		userStub:      iamv1.NewInternalUserServiceClient(conn),
-		cache:         cache.NewSubjectCache(10_000, 30*time.Second),
+		cache:         cache.NewSubjectCache(10_000, 30*time.Second, nil),
 		logger:        logger,
 		sleep:         time.Sleep,
 		upsertRetries: 5,

@@ -71,6 +71,71 @@ func TestIdempotency_ScopedByPathMethod(t *testing.T) {
 	}
 }
 
+// TestIdempotency_5xxNotCached_Retried proves a failed mutation (5xx) is NOT
+// cached long-term, so a retry with the same key re-executes downstream instead
+// of replaying a fabricated failure/success. This pins the `statusCode < 500`
+// caching predicate (retry-safety, idempotency.go).
+func TestIdempotency_5xxNotCached_Retried(t *testing.T) {
+	store := NewIdempotencyStore(time.Minute)
+	var calls int
+	h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable) // 503
+		_, _ = w.Write([]byte("upstream down"))
+	}))
+
+	rr1, _ := drive(h, "u", "/iam/v1/projects", "K")
+	if rr1.Code != http.StatusServiceUnavailable || calls != 1 {
+		t.Fatalf("first: code=%d calls=%d", rr1.Code, calls)
+	}
+	if rr1.Header().Get("X-Idempotent-Replayed") != "" {
+		t.Fatalf("first request must not be a replay")
+	}
+	// Retry same key: 5xx was not cached → downstream runs again, not replayed.
+	rr2, _ := drive(h, "u", "/iam/v1/projects", "K")
+	if calls != 2 {
+		t.Fatalf("5xx was cached and replayed: calls=%d want 2", calls)
+	}
+	if rr2.Header().Get("X-Idempotent-Replayed") != "" {
+		t.Fatalf("5xx retry must not carry X-Idempotent-Replayed")
+	}
+}
+
+// TestIdempotency_StatusBoundary_499Cached_500NotCached pins the exact `< 500`
+// boundary: 499 is cached (replayed), 500 is not (re-executed).
+func TestIdempotency_StatusBoundary_499Cached_500NotCached(t *testing.T) {
+	cases := []struct {
+		name         string
+		status       int
+		wantCalls    int
+		wantReplayed bool
+	}{
+		{"499_cached", 499, 1, true},
+		{"500_not_cached", 500, 2, false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			store := NewIdempotencyStore(time.Minute)
+			var calls int
+			h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte("b"))
+			}))
+			_, _ = drive(h, "u", "/iam/v1/projects", "K")
+			rr2, _ := drive(h, "u", "/iam/v1/projects", "K")
+			if calls != tc.wantCalls {
+				t.Fatalf("status %d: calls=%d want %d", tc.status, calls, tc.wantCalls)
+			}
+			replayed := rr2.Header().Get("X-Idempotent-Replayed") == "true"
+			if replayed != tc.wantReplayed {
+				t.Fatalf("status %d: replayed=%v want %v", tc.status, replayed, tc.wantReplayed)
+			}
+		})
+	}
+}
+
 // TestIdempotency_Bounded proves the store never grows past its capacity.
 func TestIdempotency_Bounded(t *testing.T) {
 	store := newIdempotencyStoreWithCap(time.Hour, 8)

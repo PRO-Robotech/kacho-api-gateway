@@ -57,7 +57,7 @@ func newTestClient(stub subjectLookupStub, user userUpsertStub) *IAMSubjectClien
 	return &IAMSubjectClient{
 		stub:          stub,
 		userStub:      user,
-		cache:         cache.NewSubjectCache(1000, 30*time.Second),
+		cache:         cache.NewSubjectCache(1000, 30*time.Second, nil),
 		logger:        slog.Default(),
 		sleep:         func(time.Duration) {}, // deterministic: no real sleep
 		upsertRetries: 5,

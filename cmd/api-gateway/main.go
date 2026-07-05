@@ -406,10 +406,6 @@ func main() {
 	opsProxy := opsproxy.New(backends)
 	operationpb.RegisterOperationServiceServer(grpcSrv, opsProxy)
 
-	// proxy.Resolver маршрутизирует только нативные kacho.cloud.* сервисы;
-	// advertised endpoint в роутинге не участвует.
-	_ = cfg.AdvertisedEndpoint()
-
 	// gRPC reflection — позволяет grpcurl и совместимым CLI получить список
 	// сервисов через ServerReflection. Видны только сервисы, нативно
 	// зарегистрированные на api-gateway (OperationService + Health). Сервисы

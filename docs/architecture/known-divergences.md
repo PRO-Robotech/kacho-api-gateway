@@ -31,7 +31,28 @@ fail-fast: mismatched/missing mTLS/authz env vars are caught at process start,
 not at request time. The gateway does not silently run with a half-set security
 toggle.
 
-Rubric reference: envconfig-vs-YAML (evgeniy). Contract impact: none.
+**Sub-concern: a misspelled env var is silently ignored, and the external-edge
+relaxed-posture check is a WARN, not a fatal, outside prod-labelled envs.**
+`envconfig` binds by exact name and ignores names it does not recognise, so a
+fat-fingered `KACHO_API_GATEWAY_AUTHZ_ENABLE` (missing `D`) leaves
+`AuthZEnabled` at its default. Two compensating controls already exist and are
+deliberate:
+
+- `validateProductionAuthzConfig` (main.go, keyed on `KACHO_APP_ENV`) **fatally**
+  refuses to start a prod-class deploy with disabled/relaxed authz.
+- For deploys that forget to set `KACHO_APP_ENV` (empty → dev-class) while
+  exposing the **external advertised TLS edge**, main.go emits a loud startup
+  `WARN` (SECURITY: external TLS edge enabled with a relaxed auth posture),
+  independent of the env label. This is intentionally a WARN and not a fatal:
+  the external listener can be legitimately fronted by a dev/local stack with a
+  self-signed cert and relaxed auth for iteration, and hard-failing that case
+  would break the documented dev workflow. The fatal guard is reserved for the
+  explicit prod-class signal (`KACHO_APP_ENV`), which is the contract operators
+  set for production. Making the external-edge case fatal regardless of env
+  label is a deployment-policy change (would break dev stacks that expose TLS),
+  not a gateway-code defect.
+
+Rubric reference: envconfig-vs-YAML (evgeniy); CWE-1188. Contract impact: none.
 
 ## 2. Two in-process caches intentionally NOT folded into `internal/lrucache`
 
@@ -115,3 +136,33 @@ pod via consistent-hash sticky routing.
 Rubric reference: project-rule #10 (concurrency-domain enforcement); CWE-362 /
 CWE-294. Contract impact: none — internal in-process state only; no wire/API/DB
 change. The `deploy/values.yaml` autoscaling block documents this residual inline.
+
+## 4. `main()` is a long composition root (single wiring site, by design)
+
+**Rule (Go clean-code / McCabe).** A ~700-line function with dozens of
+`if … { log.Fatalf }` startup branches is a high-cognitive-load signal; an audit
+recommended extracting `buildBackends` / `buildExternalListener` /
+`buildInternalListener` / `buildHTTPServer` helpers.
+
+**Gateway state.** `cmd/api-gateway/main.go`'s `main()` wires the whole process
+inline: backend dials, mTLS creds, IAM clients, JWT/DPoP/introspection setup,
+authz middleware, REST mux, internal + external gRPC listeners, HTTP server and
+graceful shutdown.
+
+**Why this is not a gateway defect.** The workspace architecture rule
+(`.claude/rules/architecture.md`) designates `cmd/<svc>/main.go` as the
+**single composition root** — *"единственное место wiring"* — and explicitly
+bans wiring/singletons leaking out of `cmd/`. Keeping the wiring literally in one
+sequential `main()` is the intended shape: the security-critical **ordering** of
+listener/interceptor registration (authz before/after DPoP, internal-vs-external
+listener setup) is easiest to audit as one linear top-to-bottom read rather than
+scattered across helper constructors that hide the sequence behind call sites.
+The function is branch-heavy but not logic-heavy: nearly every branch is a
+`log.Fatalf` fail-fast guard, not business logic. Splitting it would move code
+without reducing the essential wiring complexity, and would risk exactly the
+mis-ordering the audit worries about by making the order implicit. If the wiring
+grows further, extraction is revisited — but a long *composition root* is a
+deliberate, reviewed shape, not a defect.
+
+Rubric reference: architecture.md (composition root); CWE-1121. Contract impact:
+none — no behavior/wire/API/DB change.
