@@ -53,13 +53,26 @@ func TestDPoPReplayCache_CapacityEviction(t *testing.T) {
 	require.NoError(t, c.Add("a"))
 	require.NoError(t, c.Add("b"))
 	require.NoError(t, c.Add("c"))
-	require.NoError(t, c.Add("d")) // evicts oldest tail (a)
+	// Capacity is 3 and full. Adding a 4th key evicts EXACTLY the
+	// least-recently-inserted key (the LRU tail, "a"); "b" and "c" must remain
+	// resident. Add does not refresh recency of a present key (AddIfAbsent), so
+	// insertion order == recency order here.
+	require.NoError(t, c.Add("d"))
+	assert.Equal(t, 3, c.Len(), "capacity must stay bounded at MaxEntries")
 
-	// `a` is now evictable → reuse permitted as fresh.
-	require.NoError(t, c.Add("a"))
-	// But d, b, c — d and c stay; the previous add of `a` again caused
-	// re-insertion at head + evict of next tail. Just assert no panic / non-zero.
-	assert.LessOrEqual(t, c.Len(), 3)
+	// The eviction victim ("a") is the ONLY key that becomes re-addable — i.e.
+	// it was the one evicted. Re-adding it is the replay-relevant path: an
+	// evicted jti is legitimately treated as fresh again.
+	require.NoError(t, c.Add("a"), "evicted jti must be re-addable as fresh")
+
+	// Re-adding "a" (now at capacity again) evicts the new tail ("b"). The
+	// still-resident keys ("c", "d") MUST continue to be rejected as replays —
+	// eviction pressure must not silently re-admit a jti that was never evicted.
+	require.ErrorIs(t, c.Add("c"), middleware.ErrDPoPReplay,
+		"resident jti c must stay blocked under eviction pressure")
+	require.ErrorIs(t, c.Add("d"), middleware.ErrDPoPReplay,
+		"resident jti d must stay blocked under eviction pressure")
+	assert.Equal(t, 3, c.Len())
 }
 
 func TestDPoPReplayCache_ConcurrentAdd(t *testing.T) {

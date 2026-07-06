@@ -115,7 +115,17 @@ spec:
             {{- end }}
             - name: KACHO_API_GATEWAY_OIDC_REDIRECT_URI
               value: {{ .Values.oidc.redirectUri | quote }}
-            {{- if .Values.oidc.clientSecret }}
+            {{- if .Values.oidc.clientSecretSecretRef }}
+            # Confidential OIDC client secret (CWE-522): sourced from a k8s Secret,
+            # never rendered as a plaintext PodSpec `value:`. secretKeyRef keeps the
+            # secret out of `kubectl get deploy -o yaml` and the Helm release object.
+            - name: KACHO_API_GATEWAY_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.clientSecretSecretRef.name }}
+                  key: {{ .Values.oidc.clientSecretSecretRef.key }}
+                  optional: {{ default true .Values.oidc.clientSecretSecretRef.optional }}
+            {{- else if .Values.oidc.clientSecret }}
             - name: KACHO_API_GATEWAY_OIDC_CLIENT_SECRET
               value: {{ .Values.oidc.clientSecret | quote }}
             {{- end }}
@@ -123,7 +133,18 @@ spec:
             {{- if .Values.authn }}
             - name: KACHO_API_GATEWAY_AUTHN_MODE
               value: {{ .Values.authn.mode | default "dev" | quote }}
-            {{- if .Values.authn.devSecret }}
+            {{- if .Values.authn.devSecretSecretRef }}
+            # HMAC dev-signing secret (CWE-522): sourced from a k8s Secret, never a
+            # plaintext PodSpec `value:`. A leaked dev secret enables symmetric-key
+            # principal forgery (see validateProductionAuthzConfig), so it must not
+            # be embedded in the manifest even where the dev path is enabled.
+            - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authn.devSecretSecretRef.name }}
+                  key: {{ .Values.authn.devSecretSecretRef.key }}
+                  optional: {{ default true .Values.authn.devSecretSecretRef.optional }}
+            {{- else if .Values.authn.devSecret }}
             - name: KACHO_API_GATEWAY_AUTHN_DEV_SECRET
               value: {{ .Values.authn.devSecret | quote }}
             {{- end }}

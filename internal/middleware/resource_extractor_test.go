@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	iamv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/iam/v1"
+	vpcv1 "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 )
@@ -157,19 +158,27 @@ func TestResourceExtractor_FromHTTP_NilRequest(t *testing.T) {
 	assert.True(t, id.IsWildcard())
 }
 
-// dummyReq — non-proto struct to exercise the reflect fallback.
-type dummyReq struct {
-	NetworkID string
-	FolderID  string
-}
-
-func TestResourceExtractor_FromProto_ReflectFallback(t *testing.T) {
+// Extraction of a scalar string field (`network_id`) off a real domain proto
+// message — the production path always hands the extractor a proto.Message.
+func TestResourceExtractor_FromProto_StringField_NetworkID(t *testing.T) {
 	e := middleware.NewResourceExtractor(nil)
 	entry := middleware.CatalogEntry{
 		ScopeExtractor: middleware.ScopeExtractor{FromRequestField: "network_id"},
 	}
-	req := &dummyReq{NetworkID: "enp_x", FolderID: "fld_x"}
+	req := &vpcv1.CreateSubnetRequest{NetworkId: "enp_x", Name: "sn"}
 	id, ok := e.ExtractFromProto(req, entry)
 	require.True(t, ok)
 	assert.Equal(t, "enp_x", id.String())
+}
+
+// A non-proto request is unreachable on the production authz path (ProtoReq is
+// always a proto.Message); the extractor fails closed to the wildcard scope.
+func TestResourceExtractor_FromProto_NonProto_Wildcard(t *testing.T) {
+	e := middleware.NewResourceExtractor(nil)
+	entry := middleware.CatalogEntry{
+		ScopeExtractor: middleware.ScopeExtractor{FromRequestField: "network_id"},
+	}
+	id, ok := e.ExtractFromProto(struct{ NetworkID string }{NetworkID: "enp_x"}, entry)
+	require.True(t, ok)
+	assert.True(t, id.IsWildcard())
 }

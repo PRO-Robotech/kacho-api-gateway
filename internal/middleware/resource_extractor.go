@@ -40,7 +40,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"reflect"
 	"strings"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -89,12 +88,9 @@ func (e *ResourceExtractor) ExtractFromProto(req any, entry CatalogEntry) (Resou
 	}
 	msg, ok := protoMessageFromAny(req)
 	if !ok {
-		// Non-proto request (e.g. handwritten Go struct) — fall back to
-		// reflect-based field walking. This branch is exercised by tests
-		// that pass plain structs rather than full proto messages.
-		if id, ok := extractByReflect(req, field); ok {
-			return id, true
-		}
+		// Non-proto request. On the production authz path the intercepted gRPC
+		// request is always a proto.Message (authz.decisionRequest.ProtoReq),
+		// so this is unreachable in prod; fail closed to the wildcard scope.
 		return ResourceID("*"), true
 	}
 	return extractByProtoReflect(msg, field), true
@@ -162,9 +158,8 @@ func (e *ResourceExtractor) ScopeTypeFromProto(req any, field string) string {
 	}
 	msg, ok := protoMessageFromAny(req)
 	if !ok {
-		if id, ok := extractByReflect(req, field); ok && !id.IsWildcard() {
-			return id.String()
-		}
+		// Non-proto request — unreachable on the production authz path (see
+		// ExtractFromProto). No dynamic object type available.
 		return ""
 	}
 	id := extractByProtoReflect(msg, field)
@@ -326,78 +321,6 @@ func extractByProtoReflect(msg protoreflect.Message, field string) ResourceID {
 		return ResourceID(s)
 	}
 	return ResourceID("*")
-}
-
-// extractByReflect — non-proto fallback for tests / handwritten request
-// types. Walks the struct using `reflect` looking for the named field
-// (case-insensitive); returns the first non-empty string match.
-func extractByReflect(req any, field string) (ResourceID, bool) {
-	v := reflect.ValueOf(req)
-	for v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return "", false
-		}
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return "", false
-	}
-	t := v.Type()
-	target := strings.ToLower(field)
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		name := strings.ToLower(f.Name)
-		// Match either the Go field name or its protobuf tag (`<name>,...`).
-		if name == target || name == strings.ReplaceAll(target, "_", "") {
-			return readStringField(v.Field(i)), true
-		}
-		if tag := f.Tag.Get("protobuf"); tag != "" {
-			if strings.Contains(tag, "name="+target+",") || strings.HasSuffix(tag, "name="+target) {
-				return readStringField(v.Field(i)), true
-			}
-		}
-		if tag := f.Tag.Get("json"); tag != "" {
-			if tagName := strings.SplitN(tag, ",", 2)[0]; tagName == field {
-				return readStringField(v.Field(i)), true
-			}
-		}
-	}
-	return "", false
-}
-
-// readStringField extracts a string-typed field, recursing into pointers /
-// nested structs (taking the first non-empty string field) so a
-// `*ResourceRef{Id:"X"}` resolves to "X".
-func readStringField(fv reflect.Value) ResourceID {
-	for fv.Kind() == reflect.Pointer {
-		if fv.IsNil() {
-			return ""
-		}
-		fv = fv.Elem()
-	}
-	switch fv.Kind() {
-	case reflect.String:
-		s := fv.String()
-		if s == "" {
-			return ResourceID("*")
-		}
-		return ResourceID(s)
-	case reflect.Struct:
-		// Look for an "Id" / "ID" string field first.
-		for _, name := range []string{"Id", "ID", "id"} {
-			f := fv.FieldByName(name)
-			if f.IsValid() && f.Kind() == reflect.String && f.String() != "" {
-				return ResourceID(f.String())
-			}
-		}
-		// Walk for first non-empty string.
-		for i := 0; i < fv.NumField(); i++ {
-			if s := readStringField(fv.Field(i)); s != "" && s != "*" {
-				return s
-			}
-		}
-	}
-	return ""
 }
 
 // extractByPathTemplate parses a grpc-gateway-style path template
