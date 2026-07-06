@@ -126,3 +126,56 @@ func TestW1_3_09c_ProdReportsBothProblems(t *testing.T) {
 		t.Fatalf("expected both problems in error, got: %v", err)
 	}
 }
+
+// SEC (sec-hardening-r8): a non-empty KACHO_API_GATEWAY_AUTHN_DEV_SECRET in a
+// production-class env is a FATAL misconfig — the symmetric HMAC-dev token path
+// (a validly-HS256-signed token) yields a real principal / forges a
+// service_account with no IAM lookup. A production deploy must never carry a dev
+// secret; the gateway must refuse to boot (defense-in-depth alongside the
+// runtime refusal in the middleware).
+func TestProdRefusesDevSecretSet(t *testing.T) {
+	err := validateProductionAuthzConfig("production", AuthzMiddlewareConfig{
+		Enabled: true, FailOpen: false, AuthNMode: "production-strict", DevSecretSet: true,
+	})
+	if err == nil {
+		t.Fatalf("expected error for prod + dev secret set, got nil")
+	}
+	if !strings.Contains(err.Error(), "devSecret") {
+		t.Fatalf("expected 'devSecret' problem in error, got: %v", err)
+	}
+}
+
+// Empty/unset env is production-class (secure-by-default), so a dev secret under
+// an unset env must also hard-fail — a forgotten KACHO_APP_ENV cannot smuggle the
+// HMAC-dev path into a deployed environment.
+func TestEmptyEnvRefusesDevSecretSet(t *testing.T) {
+	err := validateProductionAuthzConfig("", AuthzMiddlewareConfig{
+		Enabled: true, FailOpen: false, AuthNMode: "production-strict", DevSecretSet: true,
+	})
+	if err == nil {
+		t.Fatalf("expected error for empty env + dev secret set, got nil")
+	}
+	if !strings.Contains(err.Error(), "devSecret") {
+		t.Fatalf("expected 'devSecret' problem in error, got: %v", err)
+	}
+}
+
+// Dev-class envs tolerate a dev secret (the HMAC-dev path is a dev/e2e affordance
+// and the middleware only accepts it under mode==dev anyway).
+func TestDevEnvAllowsDevSecretSet(t *testing.T) {
+	if err := validateProductionAuthzConfig("dev", AuthzMiddlewareConfig{
+		Enabled: true, FailOpen: false, AuthNMode: "dev", DevSecretSet: true,
+	}); err != nil {
+		t.Fatalf("dev env must allow a dev secret, got: %v", err)
+	}
+}
+
+// A secure prod posture with NO dev secret still boots — only the dev secret is
+// the fatal factor here, not the prod env by itself.
+func TestProdAcceptsNoDevSecret(t *testing.T) {
+	if err := validateProductionAuthzConfig("production", AuthzMiddlewareConfig{
+		Enabled: true, FailOpen: false, AuthNMode: "production-strict", DevSecretSet: false,
+	}); err != nil {
+		t.Fatalf("prod with no dev secret + secure posture must boot, got: %v", err)
+	}
+}
