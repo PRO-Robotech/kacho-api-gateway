@@ -46,3 +46,18 @@ permission-catalog:
 permission-catalog-apply: permission-catalog
 	cp $(PERMISSION_CATALOG_BUILD) $(PERMISSION_CATALOG_TARGET)
 	@echo "Applied regenerated catalog to $(PERMISSION_CATALOG_TARGET)."
+
+# CI GATE: fail if the embedded catalog is STALE vs the proto surface. Catches the
+# class of regression where a new/renamed RPC ships without a catalog entry → the
+# per-RPC authz middleware returns "catalog: no entry for method" (AUTHZ_DENIED) at
+# runtime. Requires a workspace checkout (../kacho-proto) + buf. The IAM embedded
+# copy MUST byte-match this one (single source of truth) — also asserted here.
+IAM_CATALOG := ../kacho-iam/internal/apps/kacho/seed/embedded/permission_catalog.json
+.PHONY: permission-catalog-check
+permission-catalog-check:
+	./scripts/gen-permission-catalog.sh $(PERMISSION_CATALOG_BUILD)
+	@diff -u $(PERMISSION_CATALOG_TARGET) $(PERMISSION_CATALOG_BUILD) \
+	  || { echo "::error::permission_catalog.json (api-gateway embed) is STALE vs proto — run 'make permission-catalog-apply' + sync IAM copy, then commit"; exit 1; }
+	@if [ -f $(IAM_CATALOG) ]; then diff -u $(IAM_CATALOG) $(PERMISSION_CATALOG_TARGET) \
+	  || { echo "::error::IAM embedded catalog drifted from api-gateway copy — re-sync both from the regenerated catalog"; exit 1; }; fi
+	@echo "permission catalog is complete and both copies are in sync."

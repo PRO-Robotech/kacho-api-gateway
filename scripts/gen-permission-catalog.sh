@@ -39,13 +39,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIBLINGS="$(cd "${REPO_ROOT}/.." && pwd)"
 OUT="${1:-${REPO_ROOT}/build/permission_catalog.json}"
 
-CORELIB="${SIBLINGS}/kacho-corelib/proto"
-IAM="${SIBLINGS}/kacho-iam/proto"
-VPC="${SIBLINGS}/kacho-vpc/proto"
-COMPUTE="${SIBLINGS}/kacho-compute/proto"
-GEO="${SIBLINGS}/kacho-geo/proto"
-NLB="${SIBLINGS}/kacho-nlb/proto"
-REGISTRY="${SIBLINGS}/kacho-registry/proto"
+CORELIB="${SIBLINGS}/kacho-proto/proto"
+IAM="${SIBLINGS}/kacho-proto/proto"
+VPC="${SIBLINGS}/kacho-proto/proto"
+COMPUTE="${SIBLINGS}/kacho-proto/proto"
+GEO="${SIBLINGS}/kacho-proto/proto"
+NLB="${SIBLINGS}/kacho-proto/proto"
+REGISTRY="${SIBLINGS}/kacho-proto/proto"
 
 for d in "${CORELIB}" "${IAM}" "${VPC}" "${COMPUTE}" "${GEO}" "${NLB}" "${REGISTRY}"; do
   if [[ ! -d "${d}" ]]; then
