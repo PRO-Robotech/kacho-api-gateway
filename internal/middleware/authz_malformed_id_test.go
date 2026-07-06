@@ -21,7 +21,7 @@ import (
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/middleware"
 )
 
-// gh kacho-api-gateway#73 — the authz interceptor ran the FGA Check BEFORE the
+// The authz interceptor previously ran the FGA Check BEFORE the
 // downstream handler validated the resource-id format. A malformed id
 // (wrong-prefix / wrong-length) → FGA no-path → 403, instead of the
 // Kachō-convention 400 InvalidArgument. These tests pin the fix: for catalog

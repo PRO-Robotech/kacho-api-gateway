@@ -58,7 +58,7 @@ type idempotencyItem struct {
 // caller for a key registers a flight; concurrent (follower) callers block on
 // `done` and then replay the leader's captured response, so a mutating
 // downstream runs exactly once per concurrent batch (single-flight — closes the
-// check-then-act TOCTOU, project-rule #10 / CWE-362).
+// check-then-act TOCTOU, CWE-362).
 type idempotencyFlight struct {
 	done       chan struct{}
 	hasResult  bool
@@ -260,7 +260,7 @@ func HTTPIdempotency(store *IdempotencyStore) func(http.Handler) http.Handler {
 			// entry (replay), a follower waiting on an in-flight leader, or the
 			// leader that owns downstream execution. This closes the check-then-act
 			// TOCTOU where two concurrent same-key double-submits both miss the
-			// cache and both mutate downstream (project-rule #10 / CWE-362).
+			// cache and both mutate downstream (CWE-362).
 			cached, leader, follower := store.reserve(key)
 			if cached != nil {
 				replayIdempotent(w, *cached)

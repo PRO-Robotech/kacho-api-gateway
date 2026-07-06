@@ -53,7 +53,7 @@ type AuthorizeCheckInput struct {
 	Action string
 
 	// RequiredRelation — explicit FGA relation from the permission catalog.
-	// When non-empty, IAM honors it verbatim instead of deriving from the
+	// When non-empty, IAM honors it as-is instead of deriving from the
 	// action verb. Required for admin-only RPCs whose `*.list`/`*.get` verb
 	// would otherwise resolve to `viewer` and slip through the
 	// `cluster.viewer = user:*` cascade.

@@ -6,7 +6,7 @@
 // The idempotency contract is "same Idempotency-Key -> same Operation.id".
 // A naive check-then-act (get-miss -> downstream -> put) lets two concurrent
 // double-submits both miss the cache and both execute the mutating downstream,
-// creating two resources / two Operations (CWE-362 / TOCTOU; project-rule #10).
+// creating two resources / two Operations (CWE-362 / TOCTOU).
 // This test asserts exactly-one-winner under concurrency; it fails without the
 // single-flight reservation.
 package middleware

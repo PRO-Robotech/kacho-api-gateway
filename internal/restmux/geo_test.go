@@ -104,7 +104,7 @@ func TestGeo_S5_AdminCRUDRoutesRegistered_InternalListener(t *testing.T) {
 // geo Internal* handlers must NOT be registered (graceful degrade, mirrors
 // computeInternal / vpcInternal). The geo PUBLIC reads still register from the
 // public geoAddr. This proves the *InternalAddr guard wraps only the Internal*
-// registrations (ban #6: Internal* on the internal port only).
+// registrations (Internal* on the internal port only).
 func TestGeo_S5_GeoInternalGuard_NoInternalAddr(t *testing.T) {
 	addrs := geoMuxAddrs()
 	addrs["geoInternal"] = "" // internal backend absent
@@ -129,7 +129,7 @@ func TestGeo_S5_GeoInternalGuard_NoInternalAddr(t *testing.T) {
 	// (method not registered) — NOT a served response. This is identical to how
 	// compute behaves with an empty computeInternalAddr (POST /compute/v1/zones →
 	// 501). The invariant under test: without the internal backend the admin write
-	// handler does not come up (ban #6 — Internal* only via the *InternalAddr block).
+	// handler does not come up (Internal* only via the *InternalAddr block).
 	req = httptest.NewRequest("POST", "/geo/v1/regions", nil)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

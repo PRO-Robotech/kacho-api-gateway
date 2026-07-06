@@ -42,7 +42,7 @@ import (
 // terminate request with 401.
 var ErrTokenInactive = errors.New("token is not active (revoked or expired upstream)")
 
-// IntrospectionResult — minimal RFC 7662 §2.2 response shape. Hydra returns
+// IntrospectionResult — minimal RFC 7662 section 2.2 response shape. Hydra returns
 // many more fields; we keep only what downstream needs.
 type IntrospectionResult struct {
 	Active   bool   `json:"active"`

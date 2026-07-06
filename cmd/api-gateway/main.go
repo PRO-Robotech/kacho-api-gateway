@@ -526,8 +526,8 @@ func main() {
 		// connections (wrapped with listenerorigin.InternalListener below);
 		// every other listener stays unmarked → external (the fail-closed
 		// default), so the REST dispatcher / authz middleware 404 Internal*
-		// paths regardless of which edge listener the request hit (project-rule
-		// #6). This inverts the earlier model, which marked only the TLS
+		// paths regardless of which edge listener the request hit. This
+		// inverts the earlier model, which marked only the TLS
 		// listener external and left the ingress-facing plaintext listener
 		// trusted → Internal* REST reachable from the edge.
 		ConnContext: listenerorigin.InternalConnContext,
@@ -546,7 +546,7 @@ func main() {
 	// and the handler returns NotFound on every InvalidateSubject (idempotent
 	// miss; drainer marks the row as already applied).
 	//
-	// SECURITY (security.md invariant #1/#4): the listener enforces mTLS +
+	// SECURITY: the listener enforces mTLS +
 	// a per-RPC SPIFFE allow-list (the iam push-drainer identity) when enabled, so
 	// an arbitrary in-cluster caller cannot flush the authz decision-cache
 	// (cache-flush DoS / IAM-amplification). Fail-fast on enabled-but-misconfigured
@@ -615,7 +615,7 @@ func main() {
 
 	// --- dedicated cluster-internal admin REST listener ---
 	//
-	// SECURITY (project-rule #6, fail-closed): this is the ONLY listener wrapped
+	// SECURITY (fail-closed): this is the ONLY listener wrapped
 	// with listenerorigin.InternalListener, so it is the ONLY listener on which
 	// the REST dispatcher serves Internal* paths (/vpc/v1/addressPools,
 	// `:internal` infra-sensitive projections, InternalRegistry/Cluster/

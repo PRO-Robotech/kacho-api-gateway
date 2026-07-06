@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 // Package clients — gRPC-direct клиенты для cluster-internal сервисов
-// (НЕ через restmux api-gateway — loop-prevention запрет #6).
+// (НЕ через restmux api-gateway — loop-prevention).
 //
 // iam_subject_client.go: вызов `InternalIAMService.LookupSubject` на
 // kacho-iam:9091.

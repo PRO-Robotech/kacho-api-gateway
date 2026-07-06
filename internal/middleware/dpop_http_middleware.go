@@ -303,7 +303,7 @@ func absoluteRequestURL(r *http.Request, apiDomain string) string {
 	scheme := "https"
 	// Strict canonicalisation — DPoP htu must equal the URL the client
 	// actually sent. We accept r.Host as-is; the client computed htu from
-	// the same URL. (See RFC 9449 §4.3: "the htu claim contains the HTTP
+	// the same URL. (See RFC 9449 section 4.3: "the htu claim contains the HTTP
 	// URI used for the request").
 	host := r.Host
 	if host == "" {
@@ -352,7 +352,7 @@ func grpcMethodForPath(path string) string {
 }
 
 // sanitizeErr returns a single-line human description suitable for HTTP
-// header value. Strips quotation marks + control chars (RFC 6750 §3 forbids
+// header value. Strips quotation marks + control chars (RFC 6750 section 3 forbids
 // quoted-strings with embedded `"`).
 func sanitizeErr(err error) string {
 	s := err.Error()

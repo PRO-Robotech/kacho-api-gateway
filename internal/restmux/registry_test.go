@@ -106,7 +106,7 @@ func TestRegistry_InternalService_InternalListenerServes(t *testing.T) {
 
 // TestRegistry_InternalService_ExternalListenerRejected — тот же
 // InternalRegistryService default-путь на EXTERNAL TLS листенере обязан
-// вернуть 404 (existence-hiding, ban #6): GC/stats admin не публикуется на
+// вернуть 404 (existence-hiding): GC/stats admin не публикуется на
 // external endpoint. isInternalPath должен ловить Internal*Service
 // default-route (зеркалит gRPC HasInternalSuffix-блок).
 func TestRegistry_InternalService_ExternalListenerRejected(t *testing.T) {
@@ -127,7 +127,7 @@ func TestRegistry_InternalService_ExternalListenerRejected(t *testing.T) {
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotFound {
-				t.Errorf("registry Internal* %s %s on EXTERNAL listener: got %d, want 404 (CRITICAL: admin GC/stats exposed on external endpoint, ban #6)",
+				t.Errorf("registry Internal* %s %s on EXTERNAL listener: got %d, want 404 (CRITICAL: admin GC/stats exposed on external endpoint)",
 					tc.method, tc.path, rec.Code)
 			}
 		})
@@ -138,7 +138,7 @@ func TestRegistry_InternalService_ExternalListenerRejected(t *testing.T) {
 // InternalRegistryService handler НЕ регистрируется (graceful degrade,
 // зеркалит vpcInternal/computeInternal/geoInternal). Публичный RegistryService
 // продолжает регистрироваться из registryAddr. Доказывает, что *InternalAddr
-// guard оборачивает только Internal*-регистрацию (ban #6).
+// guard оборачивает только Internal*-регистрацию.
 func TestRegistry_InternalGuard_NoInternalAddr(t *testing.T) {
 	addrs := registryMuxAddrs()
 	addrs["registryInternal"] = "" // internal backend absent

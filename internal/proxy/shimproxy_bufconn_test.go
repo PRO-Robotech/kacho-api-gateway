@@ -87,8 +87,8 @@ func dialBufconn(t *testing.T, lis *bufconn.Listener) *grpc.ClientConn {
 // TestShimProxy_ForwardsThroughGateway exercises the production external data
 // path: client → proxy.NewServer(Resolver) → backend, over bufconn. It guards
 // (1) byte-accurate round-trip + backend header/trailer propagation, (2) blocked
-// / unknown methods map to NotFound (not Unimplemented — Internal*-hiding, rule
-// #6), and (3) backend error-status propagation.
+// / unknown methods map to NotFound (not Unimplemented — Internal*-hiding),
+// and (3) backend error-status propagation.
 func TestShimProxy_ForwardsThroughGateway(t *testing.T) {
 	backendConn := dialBufconn(t, newFakeBackend(t))
 

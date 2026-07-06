@@ -51,14 +51,14 @@
 //     /geo/v1/zones (geoAddr). Geography — leaf-сервис kacho-geo; обслуживается
 //     ИСКЛЮЧИТЕЛЬНО geo.v1.
 //   - geo.v1 admin (kacho-only): InternalRegionService, InternalZoneService — admin Region/Zone
-//     CRUD на internal-порту geo backend (geoInternalAddr, 9091); cluster-internal only (ban #6).
+//     CRUD на internal-порту geo backend (geoInternalAddr, 9091); cluster-internal only.
 //   - loadbalancer.v1 (kacho-nlb): NetworkLoadBalancerService, ListenerService,
 //     TargetGroupService — публичные RPC под /nlb/v1/*. InternalResourceLifecycleService —
 //     streaming gRPC-direct only, REST не регистрируется (нет http-аннотаций).
 //   - registry.v1 (kacho-registry): RegistryService — публичный control-plane реестра
 //     под /registry/v1/* (registries CRUD + repositories/tags/DeleteTag).
 //     InternalRegistryService (GC/stats admin, :9091) — без http-аннотаций → default
-//     unbound-route, cluster-internal only (ban #6). Data-plane OCI v2 — отдельный ingress.
+//     unbound-route, cluster-internal only. Data-plane OCI v2 — отдельный ingress.
 //   - iam.v1: Account, Project, User (read+delete only), ServiceAccount, Group, Role, AccessBinding —
 //     все RPC public под /iam/v1/*.
 //   - iam.v1 admin (kacho-only): InternalUserService.Get — для admin tooling; зарегистрирован
@@ -181,12 +181,12 @@ func isInternalPath(path string) bool {
 	}
 
 	// (4) Internal*Service default unbound-route
-	// (`/kacho.cloud.<domain>.v1.Internal<Xxx>Service/<Method>`). Сервисы без
+	// (`/kacho.cloud.<domain>.v1.Internal<Name>Service/<Method>`). Сервисы без
 	// `google.api.http`-аннотаций (InternalRegistryService: GC/stats admin) при
 	// `generate_unbound_methods` получают default gRPC-style REST-путь — он не
 	// содержит сегмента `/internal`, поэтому явно ловим его тем же предикатом,
 	// что gRPC-роутер (HasInternalSuffix). Без этого admin-путь ушел бы на public
-	// mux и просочился на external listener (ban #6). Форма пути совпадает с
+	// mux и просочился на external listener. Форма пути совпадает с
 	// gRPC-FQN (ведущий "/"), которую HasInternalSuffix и разбирает; для обычных
 	// REST-путей (`/registry/v1/registries`, `/vpc/v1/networks`) предикат ложен.
 	if allowlist.HasInternalSuffix(path) {
@@ -406,8 +406,8 @@ func NewMux(
 
 		// --- compute admin (InternalDiskType) — kacho-only, internal-port (9091) ---
 		// CRUD справочника DiskType (POST/PATCH/DELETE на /compute/v1/diskTypes).
-		// Доступен только через cluster-internal REST listener для UI/admin-tooling
-		// (запрет #6). InternalWatchService — gRPC server-streaming (outbox), через
+		// Доступен только через cluster-internal REST listener для UI/admin-tooling.
+		// InternalWatchService — gRPC server-streaming (outbox), через
 		// grpc-gateway REST не проксируется; consumer'ы ходят в compute.kacho.svc:9091
 		// напрямую gRPC. Admin Region/Zone обслуживает geo.v1.
 		if computeInternalAddr != "" {
@@ -434,7 +434,7 @@ func NewMux(
 		// --- geo admin (InternalRegionService/InternalZoneService) — kacho-only, internal-port (9091) ---
 		// Admin-CRUD справочников Region/Zone (POST/PATCH/DELETE на /geo/v1/regions,
 		// /geo/v1/zones). Доступен ТОЛЬКО через cluster-internal REST listener для
-		// UI/admin-tooling (запрет #6). На external TLS endpoint admin Region/Zone-
+		// UI/admin-tooling. На external TLS endpoint admin Region/Zone-
 		// функции не светятся: gRPC-роутер блокирует Internal*-сервисы через
 		// HasInternalSuffix, а authz-каталог гейтит эти RPC relation `system_admin`
 		// на cluster-singleton. Мутации Region/Zone — это catalog-паттерн (sync-ответ
@@ -505,7 +505,7 @@ func NewMux(
 		}
 
 		// --- iam.v1 admin (InternalUserService + InternalIAMService) —
-		// kacho-only, internal-port (9091); запрет #6 ---
+		// kacho-only, internal-port (9091) ---
 		// REST HTTP annotations on internal IAM proto RPCs (UpsertFromIdentity,
 		// LookupSubject, ListPermissions, Check) make grpc-gateway create routes
 		// for /iam/v1/internal/* paths.
@@ -525,7 +525,7 @@ func NewMux(
 			}
 			// InternalClusterService — cluster-admin RBAC management
 			// (Get / GrantAdmin / RevokeAdmin / ListAdmins) under
-			// /iam/v1/internal/cluster/...  Internal-only (запрет #6);
+			// /iam/v1/internal/cluster/...  Internal-only;
 			// isInternalPath sends these paths to the internal sub-mux. Catalog gate
 			// (`required_relation: admin`) enforces the FGA computed-alias
 			// `system_admin OR emergency_admin` on `cluster:cluster_kacho_root`.
@@ -534,7 +534,7 @@ func NewMux(
 			}
 			// InternalOperationsService.ListIamOperations — cluster-wide IAM
 			// operations dump for admin-UI under GET /iam/v1/internal/operations.
-			// Internal-only (запрет #6); isInternalPath routes /iam/v1/internal/* to
+			// Internal-only; isInternalPath routes /iam/v1/internal/* to
 			// the internal sub-mux and the dispatcher 404s it on the external TLS
 			// listener. The gRPC router's HasInternalSuffix also blocks the
 			// InternalOperationsService suffix on the public listener.
@@ -573,7 +573,7 @@ func NewMux(
 		// http-аннотации, REST автоматически появится на internal mux.
 		// HasInternalSuffix в gRPC-роутере (server.go Resolver / shimproxy.go)
 		// блокирует попадание InternalResourceLifecycleService.* на external/TLS
-		// endpoint (запрет #6).
+		// endpoint.
 		if lbInternalAddr != "" {
 			if err := lbpb.RegisterInternalResourceLifecycleServiceHandlerFromEndpoint(ctx, mux, lbInternalAddr, optsFor("loadbalancerInternal")); err != nil {
 				return nil, fmt.Errorf("register loadbalancer InternalResourceLifecycleService: %w", err)
@@ -599,7 +599,7 @@ func NewMux(
 		// POST /kacho.cloud.registry.v1.InternalRegistryService/<Method> (аналог iam
 		// InternalUserService.Get). Доступно ТОЛЬКО через cluster-internal REST listener:
 		// dispatcher (isInternalPath → HasInternalSuffix) 404-ит эти пути на external
-		// TLS listener (ban #6), а gRPC-роутер блокирует Internal* через HasInternalSuffix.
+		// TLS listener, а gRPC-роутер блокирует Internal* через HasInternalSuffix.
 		// Admin-tooling может ходить и напрямую gRPC до kacho-registry:9091.
 		if registryInternalAddr != "" {
 			if err := registrypb.RegisterInternalRegistryServiceHandlerFromEndpoint(ctx, mux, registryInternalAddr, optsFor("registryInternal")); err != nil {
@@ -628,7 +628,7 @@ func NewMux(
 	// сожмет response пустых полей.
 	dispatcher := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isInternalPath(r.URL.Path) {
-			// SECURITY (запрет #6): Internal* REST paths are cluster-internal-only.
+			// SECURITY: Internal* REST paths are cluster-internal-only.
 			// When the request arrived on the advertised external TLS listener
 			// (listenerorigin.IsExternal), reject with 404 — existence-hiding,
 			// mirroring the gRPC router's HasInternalSuffix block. Internal-listener
