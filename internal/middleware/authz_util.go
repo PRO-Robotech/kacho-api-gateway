@@ -180,8 +180,9 @@ func (m *AuthzMiddleware) resolveRestFQN(r *http.Request) string {
 }
 
 // isPublicHTTPPath returns true for fixed public endpoints (healthz, readyz,
-// oauth flows). Matches dpop_http_middleware's allow-list — duplicated here
-// so this middleware works correctly even when mounted without the DPoP middleware.
+// oauth flows). It is the single source of truth for the pre-auth HTTP
+// allow-list: both this middleware and DPoPMiddleware.Wrap consult it, so the
+// two layers cannot drift (a path admitted by one but challenged by the other).
 func isPublicHTTPPath(path string) bool {
 	switch path {
 	case "/healthz", "/readyz", "/oauth/logout":

@@ -169,8 +169,11 @@ func NewDPoPMiddleware(cfg DPoPMiddlewareConfig) (*DPoPMiddleware, error) {
 func (m *DPoPMiddleware) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Always skip on health / auth-flow endpoints — those run pre-auth.
+		// Single source of truth for the pre-auth allow-list is
+		// isPublicHTTPPath (authz_util.go), shared with the authz middleware so
+		// the two layers can never drift.
 		path := r.URL.Path
-		if path == "/healthz" || path == "/readyz" || strings.HasPrefix(path, "/iam/v1/auth/") || path == "/oauth/logout" {
+		if isPublicHTTPPath(path) {
 			next.ServeHTTP(w, r)
 			return
 		}

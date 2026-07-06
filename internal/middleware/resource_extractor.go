@@ -357,7 +357,7 @@ func extractByPathTemplate(reqPath, template, field string) (string, bool) {
 			return "", false
 		}
 
-		if len(tBase) >= 2 && tBase[0] == '{' && tBase[len(tBase)-1] == '}' {
+		if isPlaceholder(tBase) {
 			name := tBase[1 : len(tBase)-1]
 			if name == field {
 				found = pBase

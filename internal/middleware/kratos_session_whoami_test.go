@@ -78,16 +78,15 @@ func TestKratosClient_Whoami(t *testing.T) {
 				t.Errorf("expected exactly 1 HTTP call (result cached), got %d", got)
 			}
 
-			// The result must land in the correct cache class.
-			c.mu.RLock()
-			_, posOK := c.posCache[cookie]
-			_, negOK := c.negCache[cookie]
-			c.mu.RUnlock()
-			if tc.wantActive && !posOK {
-				t.Error("active result not stored in positive cache")
+			// The result must land in the correct cache class: positive entries
+			// carry active=true, negative (fail-closed) entries active=false.
+			// Peek does not disturb LRU recency.
+			e, cached := c.cache.Peek(cookie)
+			if !cached {
+				t.Fatal("result not cached after whoami")
 			}
-			if !tc.wantActive && !negOK {
-				t.Error("inactive/fail-closed result not stored in negative cache")
+			if e.active != tc.wantActive {
+				t.Errorf("cache entry active=%v, want %v (wrong positive/negative class)", e.active, tc.wantActive)
 			}
 		})
 	}

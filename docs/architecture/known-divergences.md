@@ -54,13 +54,14 @@ deliberate:
 
 Rubric reference: envconfig-vs-YAML (evgeniy); CWE-1188. Contract impact: none.
 
-## 2. Two in-process caches intentionally NOT folded into `internal/lrucache`
+## 2. One in-process cache intentionally NOT folded into `internal/lrucache`
 
-The audit recommended consolidating the six hand-rolled TTL+LRU caches into one
-generic primitive. Four now share `internal/lrucache` (authz decision cache,
-subject cache, DPoP replay cache, introspection cache). Two are **deliberately
-left separate** because forcing them onto the single-TTL LRU primitive would
-change their semantics, not just their mechanics:
+The audit recommended consolidating the hand-rolled TTL+LRU caches into one
+generic primitive. Five now share `internal/lrucache` (authz decision cache,
+subject cache, DPoP replay cache, introspection cache, and — as of
+sec-hardening-r9b — the `KratosClient` whoami cache). One is **deliberately left
+separate** because forcing it onto the primitive would change its semantics, not
+just its mechanics:
 
 ### 2a. `IdempotencyStore` (internal/middleware/idempotency.go)
 
@@ -75,19 +76,19 @@ change their semantics, not just their mechanics:
   a general primitive with a one-caller concern) or the store would lose its
   exactly-once guarantee. Kept as a focused component.
 
-### 2b. `KratosClient` whoami cache (internal/middleware/kratos_session.go)
+### Migrated (was 2b): `KratosClient` whoami cache
 
-- **Divergent semantics:** two separate maps (positive and negative results)
-  with **different TTLs** (positive 30s, negative 5s) and a combined hard cap
-  across both — a dual-TTL split-cache, not a single-TTL LRU. Keyed on the
-  attacker-controlled full Cookie header, so the combined-cap eviction is a
-  memory-safety control, not a recency optimisation.
-- **Why separate:** the generic primitive is single-TTL; expressing "positive
-  entries live 6× longer than negative entries, bounded by one shared cap" would
-  require two primitives plus bespoke cross-cap coordination, which is more code
-  and more surface than the current focused implementation.
+The whoami cache previously hand-rolled two maps (positive / negative) with
+bespoke `evictLocked` / `enforceCapLocked` cap enforcement. It now uses a single
+`lrucache.Cache[string, kratosCacheEntry]` where the positive/negative class is a
+field on the value (`active`) and the dual TTL (positive 30s, negative 5s) is
+expressed per entry via `PutWithTTL`. The attacker-controlled-cookie keyspace is
+still bounded by the primitive's hard cap (`kratosCacheMaxEntries`). The earlier
+"dual-TTL split-cache needs two primitives" rationale did not hold: one keyed
+value + `PutWithTTL` covers it, so the eviction/cap path is now tested exactly
+once in `internal/lrucache`.
 
-Rubric reference: kacho-corelib reuse principle. Contract impact: none — both are
+Rubric reference: kacho-corelib reuse principle. Contract impact: none —
 unexported, in-process, no wire/API/DB change.
 
 ## 3. Per-pod in-memory idempotency & DPoP-replay state under HPA (accepted residual)

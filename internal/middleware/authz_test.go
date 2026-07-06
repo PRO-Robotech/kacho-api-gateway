@@ -658,11 +658,15 @@ func TestAuthz_CheckInputCarriesContext(t *testing.T) {
 
 func TestAuthz_Stream_Allow(t *testing.T) {
 	checker := &fakeChecker{allowed: true}
-	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker)
+	// A wildcard/non-concrete scope entry (the shape real streaming RPCs use):
+	// there is no concrete resource id to resolve on the unmaterialised stream
+	// path, so the checker's decision stands. A concrete-scope entry would fail
+	// closed here instead — see TestAuthz_Stream_ConcreteScope_FailClosed.
+	mw := buildAuthzMiddleware(t, buildCatalog(t, streamWildcardEntry), checker)
 	// Build a fake server stream context.
 	ss := &fakeServerStream{ctx: withTokenMD("usr_x", "user")}
 	called := false
-	err := mw.Stream()(nil, ss, &grpc.StreamServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+	err := mw.Stream()(nil, ss, &grpc.StreamServerInfo{FullMethod: "/kacho.cloud.compute.v1.InternalWatchService/Watch"},
 		func(srv any, ss grpc.ServerStream) error { called = true; return nil })
 	require.NoError(t, err)
 	assert.True(t, called)
