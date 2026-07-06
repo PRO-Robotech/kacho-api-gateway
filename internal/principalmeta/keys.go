@@ -29,7 +29,7 @@ const (
 	HeaderPrincipalType    = "X-Kacho-Principal-Type"
 	HeaderPrincipalID      = "X-Kacho-Principal-Id"
 	HeaderPrincipalDisplay = "X-Kacho-Principal-Display-Name"
-	HeaderTokenACR         = "X-Kacho-Token-Acr"
+	HeaderTokenACR         = "X-Kacho-Token-Acr" // #nosec G101 -- HTTP header name (token ACR claim), not a credential
 )
 
 // Grpc-Metadata-prefixed HTTP header names (grpc-gateway → gRPC metadata bridge).
@@ -46,7 +46,7 @@ const (
 	MetaPrincipalType    = "x-kacho-principal-type"
 	MetaPrincipalID      = "x-kacho-principal-id"
 	MetaPrincipalDisplay = "x-kacho-principal-display-name"
-	MetaTokenACR         = "x-kacho-token-acr"
+	MetaTokenACR         = "x-kacho-token-acr" // #nosec G101 -- gRPC metadata key name (token ACR claim), not a credential
 )
 
 // Lowercase prefixes used to strip forgeable client-supplied identity
