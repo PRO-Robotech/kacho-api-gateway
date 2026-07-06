@@ -81,22 +81,20 @@ func TestDecisionCache_RevocationWinsUnderConcurrency(t *testing.T) {
 	const key = "user:victim|iam.projects.get|project|prj1|"
 
 	var wg sync.WaitGroup
-	stop := make(chan struct{})
 
 	// Writers: simulate in-flight Checks that read allow=true and race to put.
+	// A bounded iteration count (not a wall-clock window) makes termination
+	// deterministic while still forcing writer/invalidator interleaving under
+	// -race — no time.Sleep to make the contention timing-dependent.
+	const writerIters = 4000
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					gen := c.generation()
-					if _, ok := c.get(key); !ok {
-						c.putIfGen(key, decisionCacheEntry{allowed: true}, gen)
-					}
+			for j := 0; j < writerIters; j++ {
+				gen := c.generation()
+				if _, ok := c.get(key); !ok {
+					c.putIfGen(key, decisionCacheEntry{allowed: true}, gen)
 				}
 			}
 		}()
@@ -108,18 +106,11 @@ func TestDecisionCache_RevocationWinsUnderConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 500; j++ {
-				select {
-				case <-stop:
-					return
-				default:
-					c.InvalidateSubject(subject)
-				}
+				c.InvalidateSubject(subject)
 			}
 		}()
 	}
 
-	time.Sleep(50 * time.Millisecond)
-	close(stop)
 	wg.Wait()
 
 	// Final revocation — nothing computed before this instant may survive it.

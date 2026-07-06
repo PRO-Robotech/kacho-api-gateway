@@ -64,11 +64,15 @@ func TestAuthz_GRPC_Unary_UnavailableError_Redacted(t *testing.T) {
 func TestAuthz_GRPC_Stream_UnavailableError_Redacted(t *testing.T) {
 	var logbuf bytes.Buffer
 	checker := &fakeChecker{returnErr: errors.New(backendDetail)}
-	mw := buildAuthzMiddleware(t, buildCatalog(t, getEntry), checker, captureLogger(&logbuf))
+	// A wildcard/non-concrete scope entry so the Check actually runs on the
+	// stream path (a concrete-scope entry would fail closed before the checker —
+	// see TestAuthz_Stream_ConcreteScope_FailClosed); this test exercises the
+	// checker-error redaction, which requires reaching the checker.
+	mw := buildAuthzMiddleware(t, buildCatalog(t, streamWildcardEntry), checker, captureLogger(&logbuf))
 
 	ss := &fakeServerStream{ctx: withTokenMD("usr_x", "user")}
 	err := mw.Stream()(nil, ss,
-		&grpc.StreamServerInfo{FullMethod: "/kacho.cloud.vpc.v1.NetworkService/Get"},
+		&grpc.StreamServerInfo{FullMethod: "/kacho.cloud.compute.v1.InternalWatchService/Watch"},
 		func(srv any, ss grpc.ServerStream) error { return nil })
 
 	require.Error(t, err)

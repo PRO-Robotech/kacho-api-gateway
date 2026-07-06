@@ -358,6 +358,7 @@ func (m *AuthzMiddleware) Stream() grpc.StreamServerInterceptor {
 			ProtoReq: nil, // stream requests aren't materialised yet
 			GRPCPeer: peerAddr(ss.Context()),
 			GRPCMeta: incomingMD(ss.Context()),
+			Stream:   true,
 		})
 		switch decision.outcome {
 		case outcomeAllow:
@@ -456,6 +457,12 @@ type decisionRequest struct {
 	HTTPReq  *http.Request
 	GRPCPeer string
 	GRPCMeta metadata.MD
+	// Stream marks the server-streaming path, where the client request message
+	// is not read before the RPC is gated (ProtoReq is therefore nil). It is set
+	// ONLY by the Stream interceptor so phaseResource can tell a genuinely
+	// unmaterialised stream apart from a unary call, and fail closed for a
+	// concrete-resource scope instead of collapsing to the wildcard scope.
+	Stream bool
 }
 
 type decisionOutcome int
@@ -748,11 +755,51 @@ func (m *AuthzMiddleware) phaseSubject(ctx context.Context, dr decisionRequest, 
 // scope + descriptor for the Check phase.
 func (m *AuthzMiddleware) phaseResource(dr decisionRequest, entry CatalogEntry, subj ResolvedSubject) (ResourceID, string, permissionDeniedDescriptor, decision, bool) {
 	var resourceID ResourceID
-	if dr.HTTPReq != nil {
+	switch {
+	case dr.HTTPReq != nil:
 		resourceID, _ = m.cfg.Resources.ExtractFromHTTP(dr.HTTPReq, dr.FQN, entry)
-	} else if dr.ProtoReq != nil {
+	case dr.ProtoReq != nil:
 		resourceID, _ = m.cfg.Resources.ExtractFromProto(dr.ProtoReq, entry)
-	} else {
+	default:
+		// Unmaterialised request. On the server-streaming path (dr.Stream) the
+		// RPC is gated ONCE before the stream runs, so the client message has not
+		// been read and no request field can be extracted. For a CONCRETE
+		// per-resource scope this means the scope id is unresolvable — defaulting
+		// to the wildcard "*" would collapse the FGA Check to `<type>:*` and
+		// authorize the caller for EVERY resource of that type. Fail closed: deny
+		// (Check does not run) rather than authorize against an over-broad
+		// wildcard scope. A future concrete-scope streaming RPC must resolve its
+		// scope from the first client message before it can be authorized; until
+		// then it is denied, which surfaces the requirement loudly instead of
+		// silently over-granting. Wildcard / subject / scope-polymorphic entries
+		// have no concrete id to resolve and legitimately keep "*" (the shape
+		// every real streaming RPC uses today).
+		if dr.Stream && isConcreteResourceScope(entry) {
+			resourceType := entry.ScopeExtractor.ObjectType
+			if resourceType == "" {
+				resourceType = "project"
+			}
+			descriptor := permissionDeniedDescriptor{
+				FQN:          dr.FQN,
+				Subject:      subj.FGA,
+				Action:       entry.Permission,
+				ResourceType: resourceType,
+				ResourceID:   "*",
+			}
+			m.metrics.RecordDeny()
+			m.cfg.Logger.Warn("authz stream scope unresolved — failing closed",
+				"fqn", dr.FQN,
+				"subject", subj.FGA,
+				"action", entry.Permission,
+				"resource_type", resourceType,
+			)
+			return resourceID, resourceType, descriptor, decision{
+				outcome:    outcomeDeny,
+				reasons:    []string{"streaming RPC with a concrete-resource scope cannot be authorized: scope id unresolvable on the unmaterialised stream path"},
+				descriptor: descriptor,
+				entry:      entry,
+			}, true
+		}
 		resourceID = ResourceID("*")
 	}
 	resourceType := entry.ScopeExtractor.ObjectType

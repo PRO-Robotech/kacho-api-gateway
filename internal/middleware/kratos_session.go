@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/PRO-Robotech/kacho-api-gateway/internal/lrucache"
 )
 
 // KratosWhoamiResult — извлеченные поля Kratos session.
@@ -37,23 +38,24 @@ type KratosClient struct {
 	BaseURL string // например http://kacho-umbrella-kratos-public.kacho.svc.cluster.local:80
 	HTTP    *http.Client
 
-	mu          sync.RWMutex
-	posCache    map[string]kratosCacheEntry // cookie-value → result
-	negCache    map[string]time.Time        // cookie-value → expiry
+	// cache — единый bounded TTL+LRU примитив (internal/lrucache), тот же, что у
+	// decision/introspection/replay-кэшей: eviction/cap-логика реализована и
+	// протестирована ровно один раз. Ключ — полный Cookie-header (контролируется
+	// клиентом), поэтому cap примитива обязателен: одного TTL-вытеснения мало —
+	// поток уникальных cookie в пределах TTL рос бы неограниченно. Positive и
+	// negative записи различаются полем kratosCacheEntry.active и живут в одном
+	// кэше с разными per-entry TTL (PutWithTTL).
+	cache       *lrucache.Cache[string, kratosCacheEntry]
 	positiveTTL time.Duration
 	negativeTTL time.Duration
-	maxEntries  int // hard cap (pos+neg) — bounds the attacker-controlled cookie key space
 }
 
-// kratosCacheMaxEntries — потолок суммарного числа записей кэша. Ключ — полный
-// Cookie-header (контролируется клиентом), поэтому одного TTL-вытеснения мало:
-// поток уникальных cookie в пределах TTL рос бы неограниченно. Жесткий cap
-// держит память ограниченной; промах просто перевыполняет whoami (fail-safe).
+// kratosCacheMaxEntries — потолок числа записей кэша (см. cache выше).
 const kratosCacheMaxEntries = 4096
 
 type kratosCacheEntry struct {
 	res    KratosWhoamiResult
-	expiry time.Time
+	active bool // true → positive (session valid); false → negative (fail-closed)
 }
 
 // NewKratosClient — endpoint обычно cluster-internal Kratos public service.
@@ -61,11 +63,9 @@ func NewKratosClient(baseURL string) *KratosClient {
 	return &KratosClient{
 		BaseURL:     strings.TrimRight(baseURL, "/"),
 		HTTP:        &http.Client{Timeout: 5 * time.Second},
-		posCache:    make(map[string]kratosCacheEntry, 64),
-		negCache:    make(map[string]time.Time, 64),
+		cache:       lrucache.New[string, kratosCacheEntry](kratosCacheMaxEntries, 30*time.Second, nil),
 		positiveTTL: 30 * time.Second,
 		negativeTTL: 5 * time.Second,
-		maxEntries:  kratosCacheMaxEntries,
 	}
 }
 
@@ -76,36 +76,23 @@ func (c *KratosClient) Whoami(ctx context.Context, cookieHeader string) KratosWh
 		return KratosWhoamiResult{}
 	}
 
-	now := time.Now()
-
-	// Cache check (positive).
-	c.mu.RLock()
-	if e, ok := c.posCache[cookieHeader]; ok && now.Before(e.expiry) {
-		c.mu.RUnlock()
-		return e.res
-	}
-	if exp, ok := c.negCache[cookieHeader]; ok && now.Before(exp) {
-		c.mu.RUnlock()
+	// Cache check — TTL/eviction/cap enforced inside the primitive; a negative
+	// entry carries active=false and short-circuits to the fail-closed result
+	// without a Kratos round-trip.
+	if e, ok := c.cache.Get(cookieHeader); ok {
+		if e.active {
+			return e.res
+		}
 		return KratosWhoamiResult{}
 	}
-	c.mu.RUnlock()
 
 	res := c.fetch(ctx, cookieHeader)
 
-	c.mu.Lock()
 	if res.Active {
-		c.posCache[cookieHeader] = kratosCacheEntry{res: res, expiry: now.Add(c.positiveTTL)}
+		c.cache.PutWithTTL(cookieHeader, kratosCacheEntry{res: res, active: true}, c.positiveTTL)
 	} else {
-		c.negCache[cookieHeader] = now.Add(c.negativeTTL)
+		c.cache.PutWithTTL(cookieHeader, kratosCacheEntry{active: false}, c.negativeTTL)
 	}
-	// Cleanup стайл (амортизируем O(1)) — выкидываем expired каждые ~256 записей.
-	if len(c.posCache)+len(c.negCache) > 256 {
-		c.evictLocked(now)
-	}
-	// Жесткий cap: TTL-вытеснения мало, если поток уникальных cookie приходит
-	// быстрее, чем истекают записи (контролируемый клиентом ключ).
-	c.enforceCapLocked()
-	c.mu.Unlock()
 	return res
 }
 
@@ -140,41 +127,6 @@ func (c *KratosClient) fetch(ctx context.Context, cookieHeader string) KratosWho
 		Email:       s.Identity.Traits.Email,
 		DisplayName: dn,
 		Active:      s.Active,
-	}
-}
-
-func (c *KratosClient) evictLocked(now time.Time) {
-	for k, e := range c.posCache {
-		if now.After(e.expiry) {
-			delete(c.posCache, k)
-		}
-	}
-	for k, exp := range c.negCache {
-		if now.After(exp) {
-			delete(c.negCache, k)
-		}
-	}
-}
-
-// enforceCapLocked держит суммарный размер кэша в пределах maxEntries. Сначала
-// выкидывает negative-записи (дешевые, TTL 5s), затем positive — пока не уложимся
-// в лимит. Вытесненный ключ просто перевыполнит whoami при следующем запросе
-// (fail-safe). Caller держит c.mu.
-func (c *KratosClient) enforceCapLocked() {
-	over := len(c.posCache) + len(c.negCache) - c.maxEntries
-	for k := range c.negCache {
-		if over <= 0 {
-			return
-		}
-		delete(c.negCache, k)
-		over--
-	}
-	for k := range c.posCache {
-		if over <= 0 {
-			return
-		}
-		delete(c.posCache, k)
-		over--
 	}
 }
 

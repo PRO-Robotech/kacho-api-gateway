@@ -26,19 +26,22 @@ import (
 func TestIdempotency_ConcurrentSameKey_SingleDownstream(t *testing.T) {
 	store := NewIdempotencyStore(time.Minute)
 
+	const n = 16
 	var calls int64
-	release := make(chan struct{})
+	start := make(chan struct{})      // released simultaneously → max contention at reserve()
+	release := make(chan struct{})    // holds the leader in-flight so a broken co-executor is observable
+	entered := make(chan struct{}, n) // handler-entry signal (buffered so no in-flight handler blocks)
 	h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Block until all goroutines are in-flight so a check-then-act
-		// implementation is guaranteed to double-execute.
+		// Signal handler entry, then block so a check-then-act implementation's
+		// second executor is guaranteed to also be in-flight (and thus counted).
+		entered <- struct{}{}
 		<-release
-		n := atomic.AddInt64(&calls, 1)
+		got := atomic.AddInt64(&calls, 1)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"op":"` + http.StatusText(int(n)) + `"}`))
+		_, _ = w.Write([]byte(`{"op":"` + http.StatusText(int(got)) + `"}`))
 	}))
 
-	const n = 16
 	var wg sync.WaitGroup
 	bodies := make([]string, n)
 	statuses := make([]int, n)
@@ -46,6 +49,7 @@ func TestIdempotency_ConcurrentSameKey_SingleDownstream(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			<-start // all goroutines contend at reserve() at once
 			r := httptest.NewRequest(http.MethodPost, "/compute/v1/instances", nil)
 			r.Header.Set("Idempotency-Key", "same-key")
 			r.Header.Set("X-Kacho-Principal-Id", "user-A")
@@ -55,8 +59,12 @@ func TestIdempotency_ConcurrentSameKey_SingleDownstream(t *testing.T) {
 			statuses[idx] = rr.Code
 		}(i)
 	}
-	// Give goroutines time to reach the reservation point, then release.
-	time.Sleep(30 * time.Millisecond)
+	// Deterministic barrier (no time.Sleep): release all contenders at once, wait
+	// until a handler is confirmed in-flight (the single-flight leader holds the
+	// reservation), then release it. A broken single-flight admits >1 handler
+	// here, and each is held on `release` until counted.
+	close(start)
+	<-entered
 	close(release)
 	wg.Wait()
 
@@ -83,12 +91,16 @@ func TestIdempotency_ConcurrentSameKey_SingleDownstream(t *testing.T) {
 func TestIdempotency_LeaderPanic_FollowersWakeAndReservationReleased(t *testing.T) {
 	store := NewIdempotencyStore(time.Minute)
 
+	const n = 16
 	var panicMode atomic.Bool
 	panicMode.Store(true)
+	start := make(chan struct{})
 	release := make(chan struct{})
+	entered := make(chan struct{}, n)
 	h := HTTPIdempotency(store)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if panicMode.Load() {
-			<-release // hold the leader until all followers are parked on the flight
+			entered <- struct{}{}
+			<-release // hold the leader until it is confirmed in-flight, then panic
 			panic("downstream boom")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -96,12 +108,12 @@ func TestIdempotency_LeaderPanic_FollowersWakeAndReservationReleased(t *testing.
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 
-	const n = 16
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			<-start
 			// The leader (and any follower that falls through) re-panics; each
 			// goroutine recovers its own, mimicking net/http's per-request recover.
 			defer func() { _ = recover() }()
@@ -112,8 +124,11 @@ func TestIdempotency_LeaderPanic_FollowersWakeAndReservationReleased(t *testing.
 		}()
 	}
 
-	// Let all followers park on the leader's flight, then release the leader to panic.
-	time.Sleep(30 * time.Millisecond)
+	// Deterministic barrier (no time.Sleep): release contenders at once, wait for
+	// the leader to be confirmed in-flight (followers park on its flight), then
+	// release it to panic so the abortLeader wake-followers path is exercised.
+	close(start)
+	<-entered
 	close(release)
 
 	done := make(chan struct{})
