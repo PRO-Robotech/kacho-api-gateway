@@ -4,7 +4,6 @@
 package opsproxy_test
 
 import (
-	"context"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -25,7 +24,10 @@ func TestOpsProxy_Get_NewFormatRegistry(t *testing.T) {
 
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"registry": registryConn})
 
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	// Routing probe: owner-less op with the authorized internal system caller
+	// (ownership semantics are covered by the dedicated OwnershipCheck tests).
+	ctx := withPrincipalMD("bootstrap", "system")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
 	if err != nil {
 		t.Fatalf("Get rop…: %v", err)
 	}
@@ -34,7 +36,7 @@ func TestOpsProxy_Get_NewFormatRegistry(t *testing.T) {
 	}
 
 	// Cancel должен ходить туда же.
-	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+	if _, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
 		t.Fatalf("Cancel rop…: %v", err)
 	}
 }

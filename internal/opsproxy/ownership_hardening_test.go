@@ -88,6 +88,57 @@ func TestOpsProxy_Get_OwnershipCheck_AllowsSystemCallerReadingSystemOwnedOp(t *t
 	}
 }
 
+// TestOpsProxy_Cancel_OwnershipCheck_DeniesTenantCancelingOwnerlessOp — an
+// operation with no recorded owner (empty principal_id: a legacy pre-owner-
+// tracking row) is not world-cancelable on the public surface. The real owner is
+// unknown, so a tenant caller must fail closed (CWE-639); only the internal
+// system caller may act on an owner-less operation. This is strictly worse than
+// a system-owned op (which is at least attributable), so it must be denied at
+// least as strongly — closing the last open branch in checkOperationOwnership.
+func TestOpsProxy_Cancel_OwnershipCheck_DeniesTenantCancelingOwnerlessOp(t *testing.T) {
+	id := "enp0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id: id,
+		// PrincipalType / PrincipalId absent (legacy, owner-less)
+	}
+	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
+
+	ctx := withPrincipalMD("usr_tenant", "user")
+	_, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id})
+	if err == nil {
+		t.Fatal("expected PermissionDenied for tenant canceling an owner-less operation")
+	}
+	st, _ := status.FromError(err)
+	if st.Code() != codes.PermissionDenied {
+		t.Errorf("expected PERMISSION_DENIED, got %s", st.Code())
+	}
+}
+
+// TestOpsProxy_Get_OwnershipCheck_AllowsSystemCallerReadingOwnerlessOp — the
+// fail-closed hardening for owner-less operations closes only the tenant path:
+// an internal system/bootstrap caller (worker / cross-service reconcile) may
+// still read an operation that has no recorded owner. Guards that the reordered
+// checkOperationOwnership does not deny the internal caller.
+func TestOpsProxy_Get_OwnershipCheck_AllowsSystemCallerReadingOwnerlessOp(t *testing.T) {
+	id := "iop0123456789abcdefg"
+	op := &operationpb.Operation{
+		Id: id,
+		// PrincipalType / PrincipalId absent (legacy, owner-less)
+	}
+	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
+	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
+
+	ctx := withPrincipalMD("bootstrap", "system")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err != nil {
+		t.Fatalf("system caller must read an owner-less op: %v", err)
+	}
+	if resp.Id != id {
+		t.Errorf("expected %q, got %q", id, resp.Id)
+	}
+}
+
 // TestOpsProxy_Get_OwnershipCheck_DeniesTypeMismatch — the ownership guard must
 // compare principal_type as well as principal_id (defense-in-depth against an id
 // collision across principal types). A service_account whose id equals a user's

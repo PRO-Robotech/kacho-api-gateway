@@ -115,7 +115,6 @@ func verifiedTokenFromCtxOrHTTP(ctx context.Context, r *http.Request) (*Verified
 		scope string
 		sub   string
 		pType string
-		extID string
 	)
 	if r != nil {
 		acr = r.Header.Get(principalmeta.HeaderTokenACR)
@@ -150,9 +149,6 @@ func verifiedTokenFromCtxOrHTTP(ctx context.Context, r *http.Request) (*Verified
 	extClaims := map[string]any{
 		"kacho_principal_type": defaultIfEmptyStr(pType, "user"),
 		"kacho_principal_id":   sub,
-	}
-	if extID != "" {
-		extClaims["kacho_external_id"] = extID
 	}
 	return &VerifiedToken{
 		Subject:   sub,

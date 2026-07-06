@@ -71,7 +71,9 @@ func TestOpsProxy_Get_RoutesToCorrectBackend(t *testing.T) {
 		"vpc": vpcConn,
 	})
 
-	ctx := context.Background()
+	// Routing probe: owner-less op with the authorized internal system caller
+	// (ownership semantics are covered by the dedicated OwnershipCheck tests).
+	ctx := withPrincipalMD("bootstrap", "system")
 	// vpc_ legacy prefix → vpc backend
 	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: "vpc_def456"})
 	if err != nil {
@@ -151,7 +153,8 @@ func TestOpsProxy_Get_NewFormatVPC(t *testing.T) {
 
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	// Routing probe: owner-less op with the authorized internal system caller.
+	resp, err := proxy.Get(withPrincipalMD("bootstrap", "system"), &operationpb.GetOperationRequest{OperationId: id})
 	if err != nil {
 		t.Fatalf("Get enp…: %v", err)
 	}
@@ -170,7 +173,9 @@ func TestOpsProxy_Get_NewFormatNLB(t *testing.T) {
 
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"loadbalancer": nlbConn})
 
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	// Routing probe: owner-less op with the authorized internal system caller.
+	ctx := withPrincipalMD("bootstrap", "system")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
 	if err != nil {
 		t.Fatalf("Get nlb…: %v", err)
 	}
@@ -179,7 +184,7 @@ func TestOpsProxy_Get_NewFormatNLB(t *testing.T) {
 	}
 
 	// Cancel должен ходить туда же.
-	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+	if _, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
 		t.Fatalf("Cancel nlb…: %v", err)
 	}
 }
@@ -193,7 +198,9 @@ func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {
 
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"compute": computeConn})
 
-	resp, err := proxy.Get(context.Background(), &operationpb.GetOperationRequest{OperationId: id})
+	// Routing probe: owner-less op with the authorized internal system caller.
+	ctx := withPrincipalMD("bootstrap", "system")
+	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
 	if err != nil {
 		t.Fatalf("Get epd…: %v", err)
 	}
@@ -202,7 +209,7 @@ func TestOpsProxy_Get_NewFormatCompute(t *testing.T) {
 	}
 
 	// Cancel должен ходить туда же.
-	if _, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
+	if _, err := proxy.Cancel(ctx, &operationpb.CancelOperationRequest{OperationId: id}); err != nil {
 		t.Fatalf("Cancel epd…: %v", err)
 	}
 }
@@ -253,7 +260,8 @@ func TestOpsProxy_Cancel_RoutesToCorrectBackend(t *testing.T) {
 	vpcConn := setupMockBackend(t, map[string]*operationpb.Operation{"vpc_op1": op})
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"vpc": vpcConn})
 
-	resp, err := proxy.Cancel(context.Background(), &operationpb.CancelOperationRequest{OperationId: "vpc_op1"})
+	// Routing probe: owner-less op with the authorized internal system caller.
+	resp, err := proxy.Cancel(withPrincipalMD("bootstrap", "system"), &operationpb.CancelOperationRequest{OperationId: "vpc_op1"})
 	if err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
@@ -339,24 +347,30 @@ func TestOpsProxy_Get_OwnershipCheck_AllowsBootstrap(t *testing.T) {
 	}
 }
 
-// TestOpsProxy_Get_OwnershipCheck_LegacyNoPrincipal — операция без principal_id
-// доступна без ownership-check (graceful degradation).
-func TestOpsProxy_Get_OwnershipCheck_LegacyNoPrincipal(t *testing.T) {
+// TestOpsProxy_Get_OwnershipCheck_DeniesTenantReadingOwnerlessOp — операция без
+// записанного owner'а (пустой principal_id: legacy pre-owner-tracking строка) НЕ
+// world-readable на публичной поверхности. Реальный owner неизвестен, поэтому
+// tenant-caller получает PermissionDenied (fail-closed, defense-in-depth против
+// cross-tenant BOLA — CWE-639). Внутренний system-caller по-прежнему её читает
+// (см. TestOpsProxy_Get_OwnershipCheck_AllowsSystemCallerReadingOwnerlessOp в
+// ownership_hardening_test.go).
+func TestOpsProxy_Get_OwnershipCheck_DeniesTenantReadingOwnerlessOp(t *testing.T) {
 	id := "iop0123456789abcdefg"
 	op := &operationpb.Operation{
 		Id: id,
-		// PrincipalType / PrincipalId отсутствуют (legacy op)
+		// PrincipalType / PrincipalId отсутствуют (legacy op без owner'а)
 	}
 	iamConn := setupMockBackend(t, map[string]*operationpb.Operation{id: op})
 	proxy := opsproxy.New(map[string]*grpc.ClientConn{"iam": iamConn})
 
 	ctx := withPrincipalMD("usr_anyone", "user")
-	resp, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
-	if err != nil {
-		t.Fatalf("Get legacy op: %v", err)
+	_, err := proxy.Get(ctx, &operationpb.GetOperationRequest{OperationId: id})
+	if err == nil {
+		t.Fatal("ожидали PermissionDenied для tenant, читающего операцию без owner'а")
 	}
-	if resp.Id != id {
-		t.Errorf("ожидали %q, получили %q", id, resp.Id)
+	st, _ := status.FromError(err)
+	if st.Code() != codes.PermissionDenied {
+		t.Errorf("ожидали PERMISSION_DENIED, получили %s", st.Code())
 	}
 }
 

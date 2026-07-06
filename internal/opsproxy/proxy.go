@@ -190,37 +190,45 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 // checkOperationOwnership проверяет что principal в ctx совпадает с
 // principal_type/principal_id, записанными в Operation при создании.
 //
-// Логика (fail-closed на публичной поверхности):
-//   - Если op не содержит principal_id (legacy операции без записанного owner'а)
-//     — пропускаем проверку (graceful degradation для старых записей в БД).
+// Логика (fail-closed на публичной поверхности — порядок важен: caller-identity
+// проверяется ПЕРЕД owner-полями операции, чтобы owner-less операция не стала
+// world-readable, минуя anonymous/tenant-гейты):
 //   - Если principal в ctx не извлекается (анонимный) — PermissionDenied.
 //     (Каталог уже требует аутентификацию для OperationService через <exempt>,
 //     поэтому этот case теоретически не должен дойти сюда, но мы fail-closed.)
 //   - Внутренний system/bootstrap caller (воркер) — пропускаем: он может читать
-//     любую операцию (cross-service polling / реконсайл).
+//     любую операцию (cross-service polling / реконсайл), включая owner-less.
+//   - С этого места caller — tenant. Операция без записанного owner'а (nil op или
+//     пустой principal_id: legacy pre-owner-tracking строка) НЕ world-readable —
+//     реальный owner неизвестен, поэтому tenant'у fail-closed (defense-in-depth
+//     против cross-tenant BOLA — CWE-639). Внутренний system-caller (обработан
+//     выше) её по-прежнему читает. Owner-less строка строго менее атрибутируема,
+//     чем system-owned, поэтому денаим её как минимум так же строго.
 //   - Операция, owner которой — system/bootstrap (backend без mounted
 //     UnaryPrincipalExtract записывает SystemPrincipal()={type:"system",
 //     id:"bootstrap"} для КАЖДОЙ Operation, т.к. corelib operations.Repo.Create
 //     fall-back'ается на SystemPrincipal при отсутствии ctx-Principal): реальный
 //     tenant-owner не известен, поэтому она НЕ world-readable — только внутренний
 //     system-caller (обработан выше) может её прочитать. Tenant-caller →
-//     PermissionDenied (defense-in-depth против cross-tenant BOLA — CWE-639).
+//     PermissionDenied.
 //   - Tenant owner: и principal_id, И principal_type из ctx должны совпадать с
 //     записанными в Operation (type-match защищает от коллизии id между
 //     principal-типами, напр. user vs service_account — CWE-863).
 func checkOperationOwnership(ctx context.Context, op *operationpb.Operation) error {
-	if op == nil || op.GetPrincipalId() == "" {
-		// Операция без записанного owner'а (legacy) — пропускаем.
-		return nil
-	}
 	callerID, callerType := principalFromContext(ctx)
 	if callerID == "" {
 		// Анонимный caller — не должен читать операции.
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
-	// system/bootstrap — внутренний воркер, не tenant. Пропускаем.
+	// system/bootstrap — внутренний воркер, не tenant. Пропускаем: он читает
+	// любую операцию, включая owner-less legacy-строки.
 	if callerType == "system" && callerID == "bootstrap" {
 		return nil
+	}
+	// Далее caller — tenant. Операция без записанного owner'а не world-readable:
+	// реальный owner неизвестен → fail-closed (CWE-639).
+	if op == nil || op.GetPrincipalId() == "" {
+		return status.Error(codes.PermissionDenied, "permission denied")
 	}
 	// Операция с system/bootstrap owner'ом читаема только внутренним
 	// system-caller'ом (обработан выше) — tenant'у fail-closed.
