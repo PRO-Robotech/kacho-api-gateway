@@ -209,6 +209,20 @@ default `false`) is enabled, nor that the external TLS listener is configured
 forgets the mTLS overlay boots and dials every backend (incl. `iam:9091` /
 `AuthorizeService`) over insecure gRPC with no startup error.
 
+**Identity-trust corollary (sec-hardening-r8b).** A follow-up audit sharpened the
+concern: the gateway→backend hops carry the gateway-derived trusted identity
+headers `x-kacho-principal-*` and `x-kacho-token-acr`
+(`internal/restmux/mux.go buildPrincipalMetadata`), and iam trusts the forwarded
+`acr` floor *only because* it arrives on the verified gateway edge. If that hop
+runs plaintext, a workload on the pod network could sniff/inject those headers and
+impersonate an arbitrary principal or forge a satisfied ACR floor. This does not
+change the disposition: the trust assumption is discharged by the **transport
+security of the hop**, which in the shipped profile is provided by the service
+mesh (sidecar mTLS) — so header injection on the wire is not possible even with
+app-level `MTLS_IAM_ENABLE=false`. A mesh-less deployment MUST enable the per-edge
+flag (see Compensating controls) precisely so the identity headers are not
+forwarded over an unauthenticated hop.
+
 **Gateway state.** Backend-dial transport is a per-edge overlay
 (`cmd/api-gateway/mtls_config.go`): each edge (vpc / compute / iam / nlb / geo /
 registry) is independently enabled via its `MTLS_<EDGE>_ENABLE` flag. The build is
@@ -246,3 +260,113 @@ instead of over-constraining the prod profile).
 
 Rubric reference: security.md #1; CWE-319 / CWE-1188. Contract impact: none — no
 wire/API/DB change; behavior governed by existing per-edge env knobs.
+
+## 7. Internal admin REST listener (`:8081`) has no app-level transport auth (mesh + NetworkPolicy isolated)
+
+**Rule (security.md #1).** Internal listeners are not a trusted zone: every
+listener — public AND internal — should enforce mTLS transport plus a per-RPC
+authorization decision. An audit noted that the dedicated cluster-internal admin
+REST listener (`KACHO_API_GATEWAY_INTERNAL_REST_ADDR`, default `:8081`) — the only
+listener that serves `Internal*` REST (addressPools, `:internal` infra-sensitive
+Network projections, InternalRegistry/Cluster/Operations,
+`InternalUserService.UpsertFromIdentity`) — terminates plaintext HTTP: its origin
+is marked purely by listener wrapping (`listenerorigin.InternalConnContext`) and
+`<exempt>` Internal RPCs are admitted on it without authN. Unlike the internal
+**gRPC** listener (`internal_grpc_security.go`: mandatory mTLS + SPIFFE allow-list
++ production guard), it has no app-level transport authentication.
+
+**Why the internal gRPC listener enforces app-level mTLS but this REST listener
+does not.** The asymmetry is deliberate and identical to the one in §6. The
+internal gRPC listener makes an app-level **SPIFFE caller allow-list** decision
+(only the iam push-drainer identity may flush the authz decision-cache) — that
+requires the app itself to see the verified client cert, which a mesh cannot
+decide for it, so app-terminated mTLS there is functionally required. The internal
+REST listener makes **no such per-caller cert decision**: it is an admin-plane
+surface reached by the UI / admin-tooling / `kubectl port-forward`, where
+distributing and pinning client certs to browsers and operators is impractical.
+Its transport security is therefore provided the same way as every other
+backend hop in the shipped profile — by the **service mesh** (sidecar mTLS) — plus
+**NetworkPolicy** restricting who can reach `:8081` at all.
+
+**Compensating controls (defence-in-depth, not network-only).**
+
+- The listener shares the one `httpSrv` handler chain, so every request on it
+  still traverses `authInterceptor.HTTP` → DPoP → `authzMW.HTTP`. Non-exempt
+  `Internal*` REST calls are subject to the same per-RPC authz `Check` as any
+  other request; only the small `phaseInternalOriginExempt` set (identity
+  bootstrap RPCs that necessarily run before a principal exists) is admitted
+  without authN, and those are admitted *only* on the internal-origin-marked
+  listener — never on the external edge (fail-closed origin default).
+- The infra-sensitive Network `:internal` projections and admin `Internal*`
+  surfaces are unreachable from the external listener regardless of NetworkPolicy
+  (origin marker fail-closes to external → 404), so a NetworkPolicy miss exposes
+  them only to in-cluster peers that can already reach `:8081`, not the internet.
+
+**Why not add app-level mTLS termination here now.** Standing up a second
+TLS-terminating `http.Server` (separate `tls.Config` with
+`RequireAndVerifyClientCert`) for the admin REST surface hard-codes the
+app-terminated-mTLS topology and breaks the mesh profile and the port-forward
+admin workflow — the same over-constraint §6 documents for backend dials.
+Promoting the internal admin surfaces to app-level mTLS is tracked for the release
+that lands the mesh-vs-app transport-policy signal in `kacho-deploy` (so the guard
+can tell "mesh handles it" from "misconfigured").
+
+Rubric reference: security.md #1/#6; CWE-306. Contract impact: none — no
+wire/API/DB change; posture governed by mesh + NetworkPolicy + the existing
+origin-marker fail-closed default.
+
+## 8. Resource-id extractor fails closed to the wildcard scope (no error channel)
+
+**Rule (CWE-390 / observability).** An audit noted that `phaseResource`
+(`internal/middleware/authz.go`) calls `Resources.ExtractFromHTTP(...)` /
+`ExtractFromProto(...)` discarding the second return (`resourceID, _ = …`), so an
+extraction miss is neither logged nor distinguished and could surface to operators
+as an opaque `PermissionDenied`.
+
+**Gateway state (why this is by design, not a dropped error).** The extractor's
+second return is an `ok bool` documented as "no error", **not** an error value —
+and it is `true` on every code path (`resource_extractor.go`). Extraction never
+*fails*: a named field that is absent, empty, or on a non-proto request resolves
+to the FGA wildcard `"*"` (List/Search scope), which is the intended fail-closed
+result — a wildcard on a concrete-resource RPC is denied at the FGA `Check` (no
+path), never silently allowed. There is deliberately no empty-id path: the only
+branch that could once return `""` was the stdlib-reflect fallback for non-proto
+requests, removed in sec-hardening-r8b (the production authz path always hands the
+extractor a `proto.Message`), so `resourceID` is now always either a concrete id
+or `"*"`.
+
+**Why no extra logging is added.** A wildcard result is indistinguishable from a
+legitimate List/Search RPC (which is *supposed* to scope to `"*"`), so logging
+"extraction produced a wildcard" would fire on every List call — noise, not
+signal. The one genuinely diagnosable input error — a syntactically **malformed**
+concrete id — is already logged and surfaced as `InvalidArgument`/400 by the
+malformed-id short-circuit (`authz.go`, `corevalidate.ResourceID`), before the FGA
+`Check`. The remaining "wildcard → deny" path is a correct authz outcome, not a
+maskable failure.
+
+Rubric reference: CWE-390. Contract impact: none — no wire/API/DB change.
+
+## 9. `authz.go` / `auth.go` are single large same-package files (not split by concern)
+
+**Rule (Go clean-code / project-rule #11).** An audit flagged
+`internal/middleware/authz.go` (~950 LOC) and `internal/middleware/auth.go`
+(~780 LOC) as oversized multi-responsibility files (HTTP + gRPC unary/stream
+interceptors, catalog lookup, subject resolution, resource scoping, caching and
+Check dispatch each), on the highest-blast-radius security decision path.
+
+**Why this is not treated as a defect.** The two files are already decomposed
+*internally* into small, single-purpose phase functions
+(`phaseCatalog` → `phaseSubject` → `phaseResource` → `phaseCheck`, plus the
+HTTP/gRPC entry adapters), so the cognitive unit is the phase, not the file. The
+audit's own proposed fix is a pure **file-move** (`authz_phases.go` /
+`authz_http.go` / `authz_grpc.go`) with no behavior change and identical exported
+`AuthzMiddleware` API. On the single most security-sensitive code path, a large
+mechanical churn that touches every line's location — inflating the review diff
+and colliding with other in-flight security branches — carries more regression
+and review-miss risk than the maintainability signal it addresses, for zero
+behavioral benefit. The decomposition that matters (per-phase functions, each unit
+testable) is already present. A physical split is revisited if these files grow a
+genuinely new concern rather than another phase of the existing pipeline.
+
+Rubric reference: project-rule #11; CWE-1121. Contract impact: none — no
+behavior/wire/API/DB change. (Confidence of the original finding: low.)

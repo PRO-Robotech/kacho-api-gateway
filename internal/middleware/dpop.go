@@ -147,7 +147,7 @@ func (v *DPoPValidator) Validate(token *VerifiedToken, req DPoPRequest) error {
 	}
 
 	// 1. Split + parse header to extract embedded jwk.
-	header, _, _, err := splitJWT(req.DPoPHeader)
+	header, err := splitJWT(req.DPoPHeader)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDPoPInvalidHeader, err)
 	}

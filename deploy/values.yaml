@@ -80,6 +80,15 @@ oidc:
   #   optional: true
   clientIdSecretRef: {}
   redirectUri: ""
+  # Confidential client secret. Prefer clientSecretSecretRef (k8s Secret) over the
+  # inline clientSecret so the secret is never rendered into the PodSpec / Helm
+  # release (CWE-522). When set it overrides clientSecret. Optional=true → pod
+  # starts even if the Secret is not yet created (post-install Job applies it).
+  # clientSecretSecretRef:
+  #   name: kacho-iam-oidc-client
+  #   key: client_secret
+  #   optional: true
+  clientSecretSecretRef: {}
   clientSecret: ""
 
 # AuthN — auth-interceptor configuration.
@@ -99,6 +108,16 @@ oidc:
 # config default (mode=dev, empty devSecret) applies — identical to the
 # behaviour before this block existed, so prod overlays that omit `authn`
 # are unaffected. The dev overlay (values.dev.yaml) sets this explicitly.
+#
+# Prefer devSecretSecretRef (k8s Secret) over the inline devSecret so the HMAC
+# signing key is never rendered into the PodSpec / Helm release (CWE-522). When
+# set it overrides devSecret. Example:
+#   authn:
+#     mode: dev
+#     devSecretSecretRef:
+#       name: kacho-api-gateway-authn
+#       key: dev_secret
+#       optional: true
 authn: {}
 
 # Hydra — OAuth2/OIDC token verification.

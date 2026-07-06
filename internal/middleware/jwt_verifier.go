@@ -241,7 +241,7 @@ func (v *JWTVerifier) Verify(ctx context.Context, token string) (*VerifiedToken,
 
 	// 1. Parse header without verifying signature — we need kid + alg to
 	//    select the key.
-	header, payload, _, err := splitJWT(token)
+	header, err := splitJWT(token)
 	if err != nil {
 		return nil, fmt.Errorf("invalid jwt structure: %w", err)
 	}
@@ -363,26 +363,30 @@ func (v *JWTVerifier) Verify(ctx context.Context, token string) (*VerifiedToken,
 		out.Cnf.IsBearer = true
 	}
 
-	_ = payload // captured but not re-decoded — we use map claims above
 	return out, nil
 }
 
-// splitJWT decodes the three base64url segments of a compact JWS.
-func splitJWT(token string) (header, payload, sig []byte, err error) {
+// splitJWT decodes the header segment of a compact JWS and validates that the
+// payload + signature segments are well-formed base64url. Only the header bytes
+// are returned: callers need it to select the key (kid/alg), while the payload
+// claims and signature are decoded+verified by the jwt library (JWT path) or the
+// DPoP proof verifier. Returning parallel payload/sig copies here would only
+// invite a decode/enforcement mismatch, so they are validated then dropped.
+func splitJWT(token string) (header []byte, err error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, nil, nil, fmt.Errorf("jwt must have 3 parts, got %d", len(parts))
+		return nil, fmt.Errorf("jwt must have 3 parts, got %d", len(parts))
 	}
 	if header, err = base64.RawURLEncoding.DecodeString(parts[0]); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode header: %w", err)
+		return nil, fmt.Errorf("decode header: %w", err)
 	}
-	if payload, err = base64.RawURLEncoding.DecodeString(parts[1]); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode payload: %w", err)
+	if _, err = base64.RawURLEncoding.DecodeString(parts[1]); err != nil {
+		return nil, fmt.Errorf("decode payload: %w", err)
 	}
-	if sig, err = base64.RawURLEncoding.DecodeString(parts[2]); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode signature: %w", err)
+	if _, err = base64.RawURLEncoding.DecodeString(parts[2]); err != nil {
+		return nil, fmt.Errorf("decode signature: %w", err)
 	}
-	return header, payload, sig, nil
+	return header, nil
 }
 
 func extractAudience(claims jwt.MapClaims) ([]string, error) {
