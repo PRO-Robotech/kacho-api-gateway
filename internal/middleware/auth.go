@@ -7,6 +7,10 @@
 //
 // Две стратегии валидации Bearer, выбираются по `alg` в JWT-хедере:
 //   - **HMAC-dev** (HS256, `KACHO_API_GATEWAY_AUTHN_DEV_SECRET`) — dev/e2e токены.
+//     Работает **только в mode=dev**: в production / production-strict эта
+//     симметричная стратегия ОТКЛЮЧЕНА (SEC — symmetric-key principal forgery,
+//     CWE-347), даже если dev-secret задан. Валидно-подписанный HS256 токен в
+//     prod → reject Unauthenticated (единственная принятая стратегия — Hydra JWKS).
 //   - **Hydra JWKS** (RS256/ES256/EdDSA, `WithVerifier`) — реальные login-токены;
 //     principal берется из верифицированных `kacho_principal_*` claims (top-level
 //     или `ext_claims`), SubjectLookuper — fallback только при их отсутствии.
@@ -483,6 +487,19 @@ func saFromSPIFFE(uri string) (sa string, matched bool) {
 }
 
 func (a *AuthInterceptor) validateJWT(tokenStr string) (jwt.MapClaims, error) {
+	// SEC (sec-hardening-r8): the symmetric HMAC-dev token path is a dev/e2e
+	// affordance ONLY. In production / production-strict it MUST be refused
+	// wholesale — a validly-HS256-signed token (an attacker who learned or
+	// guessed KACHO_API_GATEWAY_AUTHN_DEV_SECRET) would otherwise yield a real
+	// principal, and a `kacho_principal_type=service_account` claim is injected
+	// as a service_account with NO IAM lookup (symmetric-key principal forgery,
+	// CWE-347). The only accepted Bearer strategy in prod is the asymmetric JWKS
+	// (Hydra) verifier, which runs BEFORE this path for RS256/ES256/EdDSA tokens.
+	// Fail closed regardless of whether a dev-secret happens to be configured
+	// (defense-in-depth alongside the fatal startup guard in cmd/api-gateway).
+	if a.mode != AuthModeDev {
+		return nil, fmt.Errorf("HMAC-dev token path disabled in %q mode", a.mode)
+	}
 	if len(a.devSecret) == 0 {
 		// HMAC-dev path requires a configured dev-secret. Hydra RS256 tokens are
 		// validated by the JWKS verifier branch BEFORE reaching here, so

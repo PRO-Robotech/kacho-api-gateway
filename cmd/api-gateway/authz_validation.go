@@ -23,6 +23,11 @@ type AuthzMiddlewareConfig struct {
 	Enabled   bool
 	FailOpen  bool
 	AuthNMode string // "dev" | "production" | "production-strict"
+	// DevSecretSet reports whether KACHO_API_GATEWAY_AUTHN_DEV_SECRET is non-empty.
+	// A dev secret in a production-class env is a fatal misconfig: the symmetric
+	// HMAC-dev token path yields a real principal / forges a service_account with
+	// no IAM lookup (CWE-347). populated from `cfg.AuthNDevSecret != ""`.
+	DevSecretSet bool
 }
 
 // validateProductionAuthzConfig refuses to start when the deploy environment is
@@ -60,6 +65,14 @@ func validateProductionAuthzConfig(env string, cfg AuthzMiddlewareConfig) error 
 	default:
 		problems = append(problems, fmt.Sprintf(
 			"authn.mode=%q (must be production or production-strict in prod)", cfg.AuthNMode))
+	}
+	if cfg.DevSecretSet {
+		// SEC (sec-hardening-r8): the HMAC-dev symmetric token path is a dev/e2e
+		// affordance. A dev secret in a production-class env lets a validly-
+		// HS256-signed token forge a principal (a service_account with NO IAM
+		// lookup) — symmetric-key principal forgery (CWE-347). Refuse to boot.
+		problems = append(problems,
+			"authn.devSecret set (KACHO_API_GATEWAY_AUTHN_DEV_SECRET must be empty in prod — symmetric-key principal forgery)")
 	}
 	if len(problems) == 0 {
 		return nil

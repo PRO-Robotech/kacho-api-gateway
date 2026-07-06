@@ -293,9 +293,10 @@ func main() {
 		// surfaced via the WARN log below.
 		appEnv := cfg.AppEnv
 		if vErr := validateProductionAuthzConfig(appEnv, AuthzMiddlewareConfig{
-			Enabled:   cfg.AuthZEnabled,
-			FailOpen:  cfg.AuthZFailOpen,
-			AuthNMode: cfg.AuthNMode,
+			Enabled:      cfg.AuthZEnabled,
+			FailOpen:     cfg.AuthZFailOpen,
+			AuthNMode:    cfg.AuthNMode,
+			DevSecretSet: cfg.AuthNDevSecret != "",
 		}); vErr != nil {
 			log.Fatalf("authz config startup-validation: %v", vErr)
 		}
