@@ -8,7 +8,7 @@
 // grant can execute its put() AFTER an InvalidateSubject()/Invalidate() has
 // already run and found nothing to remove — re-populating a stale allow=true
 // entry that then services requests for the whole TTL, defeating the
-// near-immediate revocation SLA (project-rule #10 / #12; CWE-362 + CWE-613).
+// near-immediate revocation SLA (CWE-362 + CWE-613).
 //
 // The fix is a monotonically-increasing generation counter bumped on every
 // Invalidate/InvalidateSubject; a request captures the generation at

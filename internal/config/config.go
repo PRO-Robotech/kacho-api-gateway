@@ -50,7 +50,7 @@ type Config struct {
 	// `:internal` projections, InternalRegistry/Cluster/Operations admin) are
 	// served. Every other listener — the plaintext cmux listener the ingress
 	// targets AND the external TLS listener — is external (fail-closed) and 404s
-	// Internal* REST (project-rule #6). The ingress MUST NOT target this port;
+	// Internal* REST. The ingress MUST NOT target this port;
 	// admin-UI / port-forward / cluster-internal tooling reach it via the
 	// dedicated `internal-rest` Service port. Empty → the internal REST listener
 	// is disabled (Internal* REST unreachable via the gateway entirely).
@@ -87,7 +87,7 @@ type Config struct {
 	// InternalResourceLifecycleService.Subscribe — gRPC server-streaming для
 	// подписки на CREATED/UPDATED/DELETED события (data-plane consumer'ы дозваниваются
 	// напрямую). Регистрируется в REST mux pro-forma (как iam InternalUserService),
-	// реальный трафик идет через gRPC-direct. См. запрет #6.
+	// реальный трафик идет через gRPC-direct. Internal-only, cluster-internal listener.
 	NLBInternalAddr string `envconfig:"KACHO_API_GATEWAY_NLB_INTERNAL_GRPC" default:"kacho-nlb.kacho.svc.cluster.local:9091"`
 
 	// GeoAddr — public gRPC backend of kacho-geo (RegionService/ZoneService read).
@@ -102,7 +102,7 @@ type Config struct {
 
 	// GeoInternalAddr — admin-only internal-port (9091) of kacho-geo backend.
 	// Routes InternalRegionService/InternalZoneService admin-CRUD endpoints
-	// (kacho-only). Cluster-internal listener only (запрет #6).
+	// (kacho-only). Cluster-internal listener only.
 	// Separate Service "kacho-geo-internal" (mirrors kacho-iam-internal).
 	GeoInternalAddr string `envconfig:"KACHO_API_GATEWAY_GEO_INTERNAL_GRPC" default:"kacho-geo-internal.kacho.svc.cluster.local:9091"`
 
@@ -116,7 +116,7 @@ type Config struct {
 	// RegistryInternalAddr — admin-only internal-port (9091) of kacho-registry
 	// backend. Routes InternalRegistryService (TriggerGarbageCollection/
 	// GetRegistryStats) — GC zot-стора + инфра-статистика namespace. Cluster-internal
-	// listener only (запрет #6). Same host, internal port (mirrors iam/nlb).
+	// listener only. Same host, internal port (mirrors iam/nlb).
 	RegistryInternalAddr string `envconfig:"KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC" default:"kacho-registry.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises through
@@ -164,7 +164,7 @@ type Config struct {
 	//
 	// The dedicated internal listener (InternalGRPCAddr) hosts
 	// InternalAuthzCacheService.InvalidateSubject, invoked by the kacho-iam
-	// subject_change push-drainer. Under security.md invariant #1/#4 the internal
+	// subject_change push-drainer. The internal
 	// perimeter is NOT trusted: mTLS + per-RPC authorization are mandatory.
 	//
 	// Backward-compat default = OFF (insecure listener — local/dev stands only).

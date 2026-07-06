@@ -51,7 +51,7 @@ func (c *decisionCache) generation() uint64 { return c.c.Generation() }
 // between, the (potentially stale, pre-revocation) write is discarded — closing
 // the write-after-invalidate race where a Check computed against a pre-revocation
 // grant would otherwise re-populate a just-flushed allow=true entry and survive
-// for the whole TTL (CWE-362 + CWE-613; project-rule #10).
+// for the whole TTL (CWE-362 + CWE-613).
 func (c *decisionCache) putIfGen(key string, v decisionCacheEntry, gen uint64) {
 	c.c.PutIfGen(key, v, gen)
 }
@@ -61,7 +61,7 @@ func (c *decisionCache) putIfGen(key string, v decisionCacheEntry, gen uint64) {
 func (c *decisionCache) Invalidate() { c.c.Invalidate() }
 
 // InvalidateSubject removes cache entries for the given FGA subject prefix
-// ("user:usr_abc"). Subject is matched verbatim against the key prefix used at
+// ("user:usr_abc"). Subject is matched exactly against the key prefix used at
 // insert time. Bumps the generation so an in-flight Check for this subject that
 // snapshotted the pre-revocation generation has its putIfGen dropped even when
 // zero entries currently match.

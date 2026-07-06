@@ -61,7 +61,7 @@ type CallerVerifier interface {
 // LogoutHandler — POST /oauth/logout
 //
 //  1. Parse access_token from `Authorization: Bearer|DPoP <token>` OR form-encoded
-//     `token` parameter (RFC 7009 §2.1).
+//     `token` parameter (RFC 7009 section 2.1).
 //  2. Authenticate the caller by verifying that token (JWKS signature, issuer,
 //     audience, expiry). A presented-but-invalid token is a hard 401; the
 //     subject/jti are taken ONLY from the validated token. A request that asks

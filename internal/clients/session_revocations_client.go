@@ -32,7 +32,7 @@ func NewSessionRevocationsAdapter(cc grpc.ClientConnInterface) *SessionRevocatio
 }
 
 // Revoke invokes InternalSessionRevocationsService.Revoke and discards the
-// Operation envelope. Returns the underlying gRPC error verbatim — the
+// Operation envelope. Returns the underlying gRPC error unchanged — the
 // handler caller is responsible for mapping it to a user-visible warning.
 func (a *SessionRevocationsAdapter) Revoke(ctx context.Context, in *iamv1.RevokeRequest) error {
 	_, err := a.client.Revoke(ctx, in)

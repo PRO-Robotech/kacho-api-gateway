@@ -3,7 +3,7 @@
 
 // dpop_replay_cache.go — LRU+TTL store for seen DPoP `jti` values.
 //
-// RFC 9449 §11.1 requires the resource server to reject a DPoP proof whose
+// RFC 9449 section 11.1 requires the resource server to reject a DPoP proof whose
 // `jti` has been seen in a window comparable to `iat`-freshness. We implement
 // a per-pod LRU (default capacity 100k, entry TTL 120s = 2× iat-freshness
 // window) over the shared internal/lrucache primitive. Multi-pod distributed
@@ -65,8 +65,8 @@ func NewDPoPReplayCache(cfg DPoPReplayCacheConfig) *DPoPReplayCache {
 // lock hold (lrucache.AddIfAbsent), NOT a check-then-act Peek+Put pair: this is
 // the in-memory analogue of an atomic CAS `INSERT … ON CONFLICT` and closes the
 // TOCTOU window that would otherwise let concurrent replays of one captured
-// proof (identical jti) all pass replay detection (project-rule #10; RFC 9449
-// §11.1). An already-present jti is not kept warm — a replay must not extend its
+// proof (identical jti) all pass replay detection (RFC 9449
+// section 11.1). An already-present jti is not kept warm — a replay must not extend its
 // own entry's lifetime (AddIfAbsent does not refresh recency on a losing add).
 //
 // Thread-safe under concurrent goroutines; concurrent Adds of the same jti

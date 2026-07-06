@@ -34,7 +34,7 @@
 //	jti                 string                          — from token.JTI (for replay-trace correlation)
 //	subject_kind        string ("user"/"service_account"/"workload"/"external")
 //
-// Unknown ext_claims keys pass through verbatim under `ext_*` prefix; the
+// Unknown ext_claims keys pass through unchanged under `ext_*` prefix; the
 // FGA Conditions whitelist means tenant-supplied junk never
 // participates in actual condition evaluation.
 package middleware

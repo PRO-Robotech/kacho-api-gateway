@@ -5,7 +5,7 @@
 // (external edge vs cluster-internal admin listener) through the request
 // context, so downstream HTTP handlers / middleware can enforce
 // Internal-vs-external isolation: Internal* methods must never be reachable from
-// the external edge (project-rule #6).
+// the external edge.
 //
 // # Fail-closed origin model (inverted 2026-07-05, sec-hardening-r3)
 //

@@ -68,7 +68,7 @@ type AuthzCheckInput struct {
 	Subject string
 	Action  string
 	// RequiredRelation — explicit FGA relation from the catalog. When
-	// non-empty, IAM honors this verbatim instead of
+	// non-empty, IAM honors this as-is instead of
 	// deriving from action verb. Required for admin-only RPCs whose
 	// `*.list`/`*.get` verb would resolve to `viewer` and slip through
 	// the `cluster.viewer = user:*` cascade.
@@ -501,7 +501,7 @@ type decision struct {
 	checkErr   error
 	entry      CatalogEntry
 	// invalidArgID — the malformed resource id, set only for
-	// outcomeInvalidArgument. Surfaced verbatim in the 400 message.
+	// outcomeInvalidArgument. Surfaced unchanged in the 400 message.
 	invalidArgID string
 }
 
