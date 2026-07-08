@@ -111,6 +111,34 @@ func TestPermissionCatalog_EmbeddedAsset_Loads(t *testing.T) {
 	assert.Equal(t, "viewer", entry.RequiredRelation)
 }
 
+// TestPermissionCatalog_RegistryV1Present_EntryFloor — hermetic regression
+// guard for the stale-permission-catalog prod bug: a stale
+// `make sync-permission-catalog` shipped an embedded catalog that had dropped
+// the registry.v1 RPCs, so those methods hit "no entry for method" → denied.
+// The generic embed test's floor (>=240) sits well below the buggy value and
+// therefore cannot catch a re-regression. This test pins the actual floor
+// (389 entries) AND asserts registry.v1 RPCs are present, so any drop of the
+// registry surface or a shrink of the catalog fails CI without Postgres.
+func TestPermissionCatalog_RegistryV1Present_EntryFloor(t *testing.T) {
+	c, err := middleware.LoadEmbeddedPermissionCatalog("")
+	require.NoError(t, err)
+
+	assert.GreaterOrEqual(t, c.Size(), 389,
+		"embedded catalog shrank below the known floor — stale `make sync-permission-catalog`?")
+
+	// registry.v1 methods MUST be present (the regressed surface).
+	for _, want := range []struct{ fqn, perm string }{
+		{"kacho.cloud.registry.v1.RegistryService/List", "<exempt>"},
+		{"kacho.cloud.registry.v1.RegistryService/Get", "registry.registries.get"},
+		{"kacho.cloud.registry.v1.RegistryService/Create", "registry.registries.create"},
+		{"kacho.cloud.registry.v1.RegistryService/Delete", "registry.registries.delete"},
+	} {
+		entry, ok := c.Lookup(want.fqn)
+		require.True(t, ok, "registry.v1 RPC missing from embedded catalog (stale sync?): %s", want.fqn)
+		assert.Equal(t, want.perm, entry.Permission, "permission drift on %s", want.fqn)
+	}
+}
+
 func TestPermissionCatalog_LoadFromFile_Reload(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "catalog.json")

@@ -34,9 +34,11 @@
 //	jti                 string                          — from token.JTI (for replay-trace correlation)
 //	subject_kind        string ("user"/"service_account"/"workload"/"external")
 //
-// Unknown ext_claims keys pass through unchanged under `ext_*` prefix; the
-// FGA Conditions whitelist means tenant-supplied junk never
-// participates in actual condition evaluation.
+// Beyond the reserved keys above, any remaining `kacho_*`-prefixed ext_claims
+// are forwarded verbatim under their ORIGINAL key name (no prefix rewrite), so
+// future Conditions can read them without an extractor change. Non-`kacho_*`
+// ext_claims keys are dropped entirely. The FGA Conditions whitelist means
+// tenant-supplied junk never participates in actual condition evaluation.
 package middleware
 
 import (
