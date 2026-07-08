@@ -14,7 +14,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /api-gateway ./cmd/api-gateway
 
 FROM mirror.gcr.io/library/alpine:3.20
-RUN apk add --no-cache ca-certificates
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=builder /api-gateway /usr/local/bin/api-gateway
 USER 65532
 ENTRYPOINT ["/usr/local/bin/api-gateway"]
