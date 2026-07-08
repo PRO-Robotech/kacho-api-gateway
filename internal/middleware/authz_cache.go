@@ -79,17 +79,28 @@ func (c *decisionCache) InvalidateSubject(subject string) int {
 func (c *decisionCache) Size() int { return c.c.Len() }
 
 // buildCacheKey — stable cache key over (subject, action, resource,
-// principal-binding context). Including `acr`/`mfa_at`/`client_ip` ensures
-// step-up changes invalidate naturally; excluding `current_time`/`jti`
-// avoids per-request cache busts.
+// principal-binding context). Including `acr`/`mfa_at`/`client_ip`/
+// `device_id`/`passkey_aaguid`/`device_attestation`/`amr_claims` ensures
+// step-up AND condition-input changes invalidate naturally; excluding
+// `current_time`/`jti`/`dpop_jkt`/`auth_time` avoids per-request cache busts
+// for fields that are either enforced independently (dpop_jkt/auth_time via
+// the DPoP-replay cache and mfa-staleness gate) or intentionally volatile
+// per-request (current_time/jti).
 func buildCacheKey(subject, action, resourceType, resourceID string, contextMap map[string]any) string {
 	// Use a canonical concatenation of the security-affecting context keys
 	// so equivalent contexts collide cleanly. We pick a subset to keep keys
 	// reasonable in length; full-context-hash would change on harmless
-	// fields and obliterate the cache.
+	// fields and obliterate the cache. The subset MUST cover every
+	// condition-context input actually consumed by an FGA Condition
+	// predicate (mfa_fresh, device_compliant, ...) that is not otherwise
+	// independently enforced — see context_extractor.go's reserved-keys
+	// doc-comment for the full input list and which ones are exempt.
 	parts := []string{subject, action, resourceType, resourceID}
 	if contextMap != nil {
-		keys := []string{"acr_value", "mfa_at", "client_ip", "device_id", "passkey_aaguid"}
+		keys := []string{
+			"acr_value", "mfa_at", "client_ip", "device_id", "passkey_aaguid",
+			"device_attestation", "amr_claims",
+		}
 		sort.Strings(keys) // deterministic
 		for _, k := range keys {
 			if v, ok := contextMap[k]; ok {
