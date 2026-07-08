@@ -19,15 +19,20 @@ type Poller interface {
 	PollSubjectChanges(ctx context.Context, since int64) (ids []int64, headID int64, err error)
 }
 
+// minPollTimeout floors the per-call PollSubjectChanges deadline so a fast poll
+// interval cannot make the deadline unreasonably tight.
+const minPollTimeout = 5 * time.Second
+
 // SubjectChangeWatcher polls IAM for subject-change events and flushes the
 // authz decision cache on this gateway replica when new events appear.
 type SubjectChangeWatcher struct {
-	poller   Poller
-	flush    func()
-	interval time.Duration
-	logger   *slog.Logger
-	cursor   int64
-	primed   bool
+	poller      Poller
+	flush       func()
+	interval    time.Duration
+	pollTimeout time.Duration
+	logger      *slog.Logger
+	cursor      int64
+	primed      bool
 }
 
 // New constructs a SubjectChangeWatcher. interval ≤ 0 defaults to 2s.
@@ -35,7 +40,15 @@ func New(p Poller, flush func(), interval time.Duration, logger *slog.Logger) *S
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
-	return &SubjectChangeWatcher{poller: p, flush: flush, interval: interval, logger: logger}
+	// Bound a single PollSubjectChanges call: a hung iam handler must not stall
+	// the whole cross-replica invalidation loop forever. The deadline scales
+	// with the interval (a few ticks' worth) but never drops below a floor, so
+	// the loop self-recovers on the next tick instead of blocking indefinitely.
+	pollTimeout := interval * 4
+	if pollTimeout < minPollTimeout {
+		pollTimeout = minPollTimeout
+	}
+	return &SubjectChangeWatcher{poller: p, flush: flush, interval: interval, pollTimeout: pollTimeout, logger: logger}
 }
 
 // Run blocks until ctx is cancelled. Call in a goroutine.
@@ -53,7 +66,10 @@ func (w *SubjectChangeWatcher) Run(ctx context.Context) {
 }
 
 func (w *SubjectChangeWatcher) tick(ctx context.Context) {
-	ids, headID, err := w.poller.PollSubjectChanges(ctx, w.cursor)
+	// Per-call deadline: a stalled iam handler must not wedge the loop forever.
+	pollCtx, cancel := context.WithTimeout(ctx, w.pollTimeout)
+	defer cancel()
+	ids, headID, err := w.poller.PollSubjectChanges(pollCtx, w.cursor)
 	if err != nil {
 		w.logger.Warn("subject-change poll failed", "err", err)
 		return

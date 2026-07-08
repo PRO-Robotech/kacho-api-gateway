@@ -69,6 +69,43 @@ func (f *fakePoller) sinceAt(n int) int64 {
 	return f.sinces[n]
 }
 
+// deadlinePoller records whether the ctx it was handed carries a deadline.
+type deadlinePoller struct {
+	seen chan bool // receives ctx.Deadline() ok on the first call
+	once sync.Once
+}
+
+func (d *deadlinePoller) PollSubjectChanges(ctx context.Context, since int64) ([]int64, int64, error) {
+	_, ok := ctx.Deadline()
+	d.once.Do(func() { d.seen <- ok })
+	return nil, 0, nil
+}
+
+// TestSubjectChangeWatcher_PollHasPerCallDeadline verifies that each
+// PollSubjectChanges call is bounded by a per-call deadline, so a hung iam
+// handler cannot stall the whole cross-replica invalidation loop forever.
+func TestSubjectChangeWatcher_PollHasPerCallDeadline(t *testing.T) {
+	seen := make(chan bool, 1)
+	p := &deadlinePoller{seen: seen}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Parent ctx has NO deadline — any deadline observed by the poller must come
+	// from the watcher's per-call context.WithTimeout.
+	w := watcher.New(p, func() {}, 5*time.Millisecond, slog.Default())
+	go w.Run(ctx)
+
+	select {
+	case ok := <-seen:
+		if !ok {
+			t.Fatal("PollSubjectChanges was called without a per-call deadline")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("poller was not called within timeout")
+	}
+	cancel()
+}
+
 // TestSubjectChangeWatcher_PrimingTickDoesNotFlush verifies:
 //   - The FIRST (priming) tick — even if non-empty — does NOT flush.
 //   - A LATER non-empty tick DOES flush (exactly once for a single non-empty batch).

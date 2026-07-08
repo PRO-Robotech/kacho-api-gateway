@@ -12,9 +12,12 @@
 //     layer; subject-injection is unavailable.
 //   - Health probes are infrastructure-internal — gating them would let an
 //     authz outage cascade into rolling-restart loops.
-//   - OperationService.Get + List are intentionally cheap reads that the
-//     client polls many times; the catalog gates them at the resource-id
-//     level inside the IAM service itself rather than at the gateway edge.
+//
+// NOTE: OperationService.Get/List are deliberately NOT on this allow-list.
+// They are frequently polled but still require authentication — handled via
+// the catalog "<exempt>" path (authenticate, skip the FGA Check), never a
+// blanket per-RPC AuthZ bypass at the gateway edge (see the OperationService
+// comment in DefaultPublicAllowlist below).
 //
 // The list is intentionally short — every entry is a known-public RPC. Any
 // additional bypass MUST go through the `authz_overrides.yaml` mechanism
