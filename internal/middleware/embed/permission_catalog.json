@@ -2651,10 +2651,10 @@
   {
     "fqn": "kacho.cloud.loadbalancer.v1.InternalLoadBalancerAnnounceService/GetAnnounceState",
     "permission": "loadbalancer.networkLoadBalancers.getAnnounceState",
-    "required_relation": "v_get",
+    "required_relation": "system_viewer",
     "scope_extractor": {
-      "object_type": "lb_network_load_balancer",
-      "from_request_field": "network_load_balancer_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
@@ -2965,10 +2965,10 @@
   {
     "fqn": "kacho.cloud.registry.v1.InternalRegistryService/GetRegistryStats",
     "permission": "registry.registries.getStats",
-    "required_relation": "v_get",
+    "required_relation": "system_viewer",
     "scope_extractor": {
-      "object_type": "registry_registry",
-      "from_request_field": "registry_id"
+      "object_type": "cluster",
+      "from_request_field": "*"
     },
     "required_acr_min": "2"
   },
