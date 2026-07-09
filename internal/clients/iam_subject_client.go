@@ -180,8 +180,10 @@ func (c *IAMSubjectClient) LookupOrUpsertFromKratos(ctx context.Context, identit
 		return middleware.Subject{}, fmt.Errorf("lazy-upsert: %w", uErr)
 	}
 	// Operation выполняется async; SubjectLookup может еще не видеть. Retry с
-	// инъектируемым sleeper'ом (детерминированно в тестах).
-	c.cache.InvalidateAll() // отбросить negative-cache, чтобы повтор не вернул то же NotFound
+	// инъектируемым sleeper'ом (детерминированно в тестах). Кэш НЕ сбрасываем:
+	// negative-cache не существует (LookupByExternalID кэширует только успех), а
+	// для только что созданного subject stale-записи быть не может — blanket-flush
+	// лишь выбил бы резолвы всех прочих пользователей на hot-path.
 	for i := 0; i < c.upsertRetries; i++ {
 		c.sleep(c.upsertBackoff)
 		if subj, err := c.LookupByExternalID(ctx, identityID); err == nil {

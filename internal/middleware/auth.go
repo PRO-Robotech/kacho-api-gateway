@@ -663,7 +663,7 @@ func (a *AuthInterceptor) tryKratosSession(r *http.Request) bool {
 	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalID, subj.ID)
 	r.Header.Set(principalmeta.HeaderGRPCMetaPrincipalDisplay, subj.DisplayName)
 	a.logger.Info("auth.HTTP: Principal injected (Kratos)",
-		"type", subj.Type, "id", subj.ID, "email", res.Email)
+		"type", subj.Type, "id", subj.ID, "identity_id", res.IdentityID)
 	return true
 }
 
