@@ -57,8 +57,8 @@ func main() {
 	defer cancel()
 
 	// SIGHUP — operator-driven reload signal for the permission catalog +
-	// authz overrides. The signal handler is wired up after the middleware
-	// is constructed (see `installAuthzSIGHUP` below).
+	// authz overrides. The signal handler is wired up after the authz
+	// middleware is constructed (see `installAuthzSIGHUP` below).
 	hupCh := make(chan os.Signal, 1)
 	signal.Notify(hupCh, syscall.SIGHUP)
 
@@ -741,20 +741,42 @@ func main() {
 		}
 	}()
 
-	// Drain hupCh — log + ignore so the channel doesn't fill up. Actual
-	// reload wiring is per-component (catalog / overrides) via the closures
-	// passed to installAuthzSIGHUP.
-	go func() {
-		for sig := range hupCh {
-			logger.Info("SIGHUP received; reloading authz config", "signal", sig)
-			// best-effort; failures keep previous-good config.
-			// (No-op when authz disabled.)
-		}
-	}()
+	// Wire SIGHUP → live reload of the authz permission catalog + overrides
+	// from their on-disk paths (ConfigMap staged rollout / emergency override).
+	installAuthzSIGHUP(hupCh, authzMW, logger)
 
 	if serveErr := cmuxer.Serve(); serveErr != nil {
 		logger.Error("cmux serve error", "error", serveErr)
 	}
+}
+
+// authzReloader is the narrow reload port the SIGHUP handler drives.
+// *middleware.AuthzMiddleware satisfies it.
+type authzReloader interface {
+	// Reload re-reads the authz config (permission catalog + overrides) from
+	// disk and returns any per-component failure; the previous-good config is
+	// preserved on failure.
+	Reload() error
+}
+
+// installAuthzSIGHUP drains SIGHUP notifications and, on each one, triggers a
+// live reload of the authz config (permission catalog + overrides) from the
+// on-disk paths remembered at startup — so an operator's ConfigMap edit
+// (emergency explicit-deny, catalog fix) applies without a pod restart.
+// Reload is best-effort: on failure the previous-good config is kept and the
+// loop keeps serving subsequent signals. Reload is a no-op when authz is
+// disabled or backed by the embedded asset (no on-disk path).
+func installAuthzSIGHUP(hupCh <-chan os.Signal, authz authzReloader, logger *slog.Logger) {
+	go func() {
+		for sig := range hupCh {
+			logger.Info("SIGHUP received; reloading authz config", "signal", sig.String())
+			if err := authz.Reload(); err != nil {
+				logger.Error("authz config reload failed; keeping previous-good config", "error", err)
+				continue
+			}
+			logger.Info("authz config reloaded")
+		}
+	}()
 }
 
 // stopGraceful runs GracefulStop bounded by timeout, then forces Stop() — so a
