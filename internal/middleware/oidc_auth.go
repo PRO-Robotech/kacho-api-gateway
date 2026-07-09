@@ -210,8 +210,16 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		form.Set("code_verifier", pk.Value)
 	}
 	tokenURL := strings.TrimRight(h.cfg.Issuer, "/") + "/oauth/v2/token"
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL,
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL,
 		strings.NewReader(form.Encode()))
+	if err != nil {
+		// A malformed Issuer (invalid scheme/control char) makes url.Parse fail and
+		// returns req==nil; guard here so the following Do does not deref nil and
+		// panic (mirrors the sibling fetchHydra build-req check).
+		h.logger.Error("oidc token exchange build request failed", "err", err)
+		http.Error(w, `{"error":"token exchange failed"}`, http.StatusBadGateway)
+		return
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := h.http.Do(req)
 	if err != nil {
@@ -221,7 +229,7 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		h.logger.Error("oidc token exchange non-200", "status", resp.StatusCode, "body", string(body))
 		http.Error(w, `{"error":"token exchange non-200"}`, http.StatusBadGateway)
 		return
