@@ -1,0 +1,166 @@
+---
+id: getting-started
+sidebar_position: 2
+title: Быстрый старт
+---
+
+import CodeBlock from '@theme/CodeBlock'
+import dedent from 'ts-dedent'
+
+# Быстрый старт
+
+Эта страница проводит клиента от нуля до первых запросов через гейтвей: как аутентифицироваться,
+как прочитать ресурс (sync), как запустить мутацию (async) и дождаться её завершения через
+`Operation`, и чем отличается публичная поверхность от cluster-internal. Все примеры — REST
+через `api-gateway`; gRPC-клиенты ходят на тот же порт.
+
+:::info Что нужно
+Доступный endpoint гейтвея и валидный Bearer-токен. В примерах порт локального стенда указан как
+`18080` — подставьте свой. Для сборки самого гейтвея из исходников см.
+[Развёртывание](/install/deploy).
+:::
+
+## 1. Получить токен
+
+Внешние запросы несут `Authorization: Bearer <token>`. Гейтвей проверяет токен **до** того, как
+запрос дойдёт до домена; невалидный или отсутствующий (в `production-strict`) → `401`.
+
+<table>
+  <thead><tr><th>Режим (<code>AUTHN&#95;MODE</code>)</th><th>Что принимает гейтвей</th></tr></thead>
+  <tbody>
+    <tr><td><code>dev</code></td><td>HMAC-JWT, подписанный dev-секретом (<code>KACHO&#95;API&#95;GATEWAY&#95;AUTHN&#95;DEV&#95;SECRET</code>); удобно для локальных probe. Без токена — anonymous (back-compat)</td></tr>
+    <tr><td><code>production</code></td><td>Bearer-JWT от Ory Hydra (RS256/ES256/EdDSA, проверка по JWKS) или session-cookie Ory Kratos для SPA</td></tr>
+    <tr><td><code>production-strict</code></td><td>То же, что <code>production</code>, но анонимный доступ запрещён полностью (fail-closed)</td></tr>
+  </tbody>
+</table>
+
+Реальный клиент получает JWT через OAuth2/OIDC-флоу Ory Hydra; UI работает по session-cookie
+Kratos. Детали проверки токена — [Аутентификация](/architecture/authn).
+
+<CodeBlock language="bash">
+  {dedent`
+    # Далее в примерах используется переменная окружения с токеном
+    export TOKEN="<your-bearer-jwt>"
+  `}
+</CodeBlock>
+
+## 2. Проверить, что гейтвей жив
+
+`/healthz` — liveness (всегда `200`, если процесс запущен). `/readyz` — readiness: `200`, если
+доступен критичный backend (`kacho-iam`, он фронтит AuthN/AuthZ), иначе `503`.
+
+<CodeBlock language="bash">
+  {dedent`
+    curl http://localhost:18080/healthz    # ok
+    curl http://localhost:18080/readyz     # ok, если iam доступен
+  `}
+</CodeBlock>
+
+## 3. Прочитать ресурс (sync)
+
+Чтение (`Get` / `List`) — синхронное: ответ сразу содержит ресурс. Пример — список проектов
+(домен IAM):
+
+<CodeBlock language="bash">
+  {dedent`
+    curl 'http://localhost:18080/iam/v1/projects' \\
+      -H "Authorization: Bearer $TOKEN"
+  `}
+</CodeBlock>
+
+Гейтвей маршрутизирует запрос в `kacho-iam` по domain-prefix пути (`/iam/v1/...`). Список —
+курсорный: ответ несёт `nextPageToken` (пустая строка — последняя страница).
+
+## 4. Запустить мутацию (async → Operation)
+
+Мутации (`Create` / `Update` / `Delete` и `:verb`-действия) — **асинхронные**: ответ содержит не
+сам ресурс, а объект `Operation`. Пример — создать сеть (домен VPC):
+
+<CodeBlock language="bash">
+  {dedent`
+    curl -X POST 'http://localhost:18080/vpc/v1/networks' \\
+      -H "Authorization: Bearer $TOKEN" \\
+      -H 'Content-Type: application/json' \\
+      -d '{ "projectId": "<project-id>", "name": "my-net" }'
+  `}
+</CodeBlock>
+
+<CodeBlock language="json">
+  {dedent`
+    {
+      "id": "enp7f2k9x0abcde12",
+      "description": "create network",
+      "createdAt": "2026-06-24T10:00:00Z",
+      "done": false
+    }
+  `}
+</CodeBlock>
+
+Поле `id` операции несёт 3-символьный domain-prefix (`enp…` — VPC, `epd…` — Compute, и т.д.).
+По нему гейтвей направит последующий поллинг во владеющий backend — см.
+[Operations](/api/operations).
+
+## 5. Дождаться завершения операции (поллинг)
+
+Watch-RPC не существует. Клиент **поллит** `OperationService.Get(id)` до `done=true`. Готовая
+операция несёт либо `response` (успех), либо `error` (`google.rpc.Status`).
+
+<CodeBlock language="bash">
+  {dedent`
+    curl 'http://localhost:18080/operation/v1/operations/enp7f2k9x0abcde12' \\
+      -H "Authorization: Bearer $TOKEN"
+  `}
+</CodeBlock>
+
+<CodeBlock language="json">
+  {dedent`
+    {
+      "id": "enp7f2k9x0abcde12",
+      "description": "create network",
+      "createdAt": "2026-06-24T10:00:00Z",
+      "done": true,
+      "response": { "@type": "type.googleapis.com/kacho.cloud.vpc.v1.Network", "id": "net...", "name": "my-net" }
+    }
+  `}
+</CodeBlock>
+
+:::tip Интервал поллинга
+Опрашивайте `Operation.Get` с интервалом 2–5 с (для in-flight) — платформа рассчитана на
+короткий полл, а не на «горячий» цикл. Список ресурсов после успешной мутации имеет смысл
+перечитывать с небольшим retry: authz-видимость нового ресурса устанавливается с задержкой
+(FGA-пропагация до ~2 с).
+:::
+
+## 6. Public vs cluster-internal
+
+Часть методов — административные (`Internal*`-сервисы): admin-CRUD Region/Zone, `AddressPool`,
+internal-проекции ресурсов. Они **не публикуются** на внешнем endpoint: на публичной поверхности
+их не существует (gRPC-роутер блокирует по суффиксу `Internal`, REST-диспетчер отвечает `404`).
+Их REST-проекция доступна только на **cluster-internal** listener (UI / admin-tooling /
+port-forward).
+
+<CodeBlock language="bash">
+  {dedent`
+    # Внешний endpoint: Internal*-путь не существует → 404
+    curl -i 'http://localhost:18080/geo/v1/regions' -X POST ...   # 404 на внешнем listener
+
+    # Cluster-internal mux (port-forward / admin-tooling) — тот же путь доступен
+    curl -X POST 'http://localhost:19091/geo/v1/regions' \\
+      -H "Authorization: Bearer $TOKEN" \\
+      -H 'Content-Type: application/json' \\
+      -d '{ "id": "region-2", "name": "Region 2" }'
+  `}
+</CodeBlock>
+
+Подробнее о разделении поверхностей — [Маршрутизация](/architecture/routing) и
+[Обзор API](/api/overview).
+
+## Дальше
+
+- Конвенции, домены, REST-пути, формат ошибок — [Обзор API](/api/overview).
+- Как проверяется токен (JWT / DPoP / mTLS / Kratos) — [Аутентификация](/architecture/authn).
+- Как принимается решение allow/deny — [Авторизация](/architecture/authz).
+- Внутреннее устройство (listeners, middleware, кэши, readiness) —
+  [Архитектура](/architecture/overview).
+- Конфигурация и развёртывание — [Конфигурация](/install/configuration),
+  [Развёртывание](/install/deploy).

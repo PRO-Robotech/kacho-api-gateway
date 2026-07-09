@@ -1,0 +1,165 @@
+---
+id: configuration
+sidebar_position: 2
+title: Конфигурация
+---
+
+import CodeBlock from '@theme/CodeBlock'
+import dedent from 'ts-dedent'
+
+# Конфигурация
+
+Kachō API Gateway конфигурируется через переменные окружения. Большинство — с префиксом
+**`KACHO_API_GATEWAY_`**; ключи AuthN-инфраструктуры (Hydra / JWKS / DPoP) — с префиксом
+`KACHO_` (общие для платформы). Эта страница перечисляет ключевые группы и даёт пример.
+
+:::warning Secure-by-default
+При `KACHO_APP_ENV=production` гейтвей **откажется стартовать**, если authz выключен
+(`AUTHZ_ENABLED=false`), включён fail-open (`AUTHZ_FAIL_OPEN=true`), AuthN не в production-режиме
+или internal gRPC-listener не защищён mTLS. Пустой/неустановленный `KACHO_APP_ENV` (дефолт)
+пропускает гейт — dev-режим для локальных стендов.
+:::
+
+## Listener'ы
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;LISTEN&#95;ADDR</code></td><td><code>:8080</code></td><td>cmux listener (gRPC + REST)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;TLS&#95;LISTEN&#95;ADDR</code></td><td><em>(пусто)</em></td><td>Внешний TLS-listener (пусто — выключен)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;TLS&#95;CERT&#95;FILE</code> / <code>&#95;TLS&#95;KEY&#95;FILE</code></td><td><em>(пусто)</em></td><td>PEM-сертификат / ключ внешнего TLS-listener</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;REST&#95;ADDR</code></td><td><code>:8081</code></td><td>Cluster-internal REST-mux (<code>Internal&#42;</code>-проекции)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;GRPC&#95;ADDR</code></td><td><code>:9091</code></td><td>Internal gRPC-listener (<code>InternalAuthzCacheService</code>)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;ADVERTISED&#95;ENDPOINT</code></td><td><code>api.kacho.local:443</code></td><td>Advertised-адрес периметра для endpoint-discovery</td></tr>
+    <tr><td><code>KACHO&#95;APP&#95;ENV</code></td><td><em>(пусто)</em></td><td><code>production</code> включает секьюрити-гейты старта</td></tr>
+  </tbody>
+</table>
+
+## Backend-адреса доменов
+
+Каждый домен — публичный (`:9090`) и internal (`:9091`) адрес.
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;IAM&#95;GRPC</code></td><td><code>iam.kacho.svc.cluster.local:9090</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;IAM&#95;INTERNAL&#95;GRPC</code></td><td><code>iam.kacho.svc.cluster.local:9091</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;VPC&#95;GRPC</code> / <code>&#95;VPC&#95;INTERNAL&#95;GRPC</code></td><td><code>vpc.kacho.svc.cluster.local:9090</code> / <code>:9091</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;COMPUTE&#95;GRPC</code> / <code>&#95;COMPUTE&#95;INTERNAL&#95;GRPC</code></td><td><code>compute.kacho.svc.cluster.local:9090</code> / <code>:9091</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;GEO&#95;GRPC</code> / <code>&#95;GEO&#95;INTERNAL&#95;GRPC</code></td><td><code>kacho-geo.kacho.svc.cluster.local:9090</code> / <code>kacho-geo-internal…:9091</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;NLB&#95;GRPC</code> / <code>&#95;NLB&#95;INTERNAL&#95;GRPC</code></td><td><code>kacho-nlb.kacho.svc.cluster.local:9090</code> / <code>:9091</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;REGISTRY&#95;GRPC</code> / <code>&#95;REGISTRY&#95;INTERNAL&#95;GRPC</code></td><td><code>kacho-registry.kacho.svc.cluster.local:9090</code> / <code>:9091</code></td></tr>
+  </tbody>
+</table>
+
+## Аутентификация (AuthN)
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHN&#95;MODE</code></td><td><code>dev</code></td><td><code>dev</code> · <code>production</code> · <code>production-strict</code></td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHN&#95;DEV&#95;SECRET</code></td><td><em>(пусто)</em></td><td>HMAC-секрет для dev-JWT (только режим <code>dev</code>)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHN&#95;ENABLE&#95;DPOP</code></td><td><code>false</code></td><td>Включить проверку DPoP-proof (RFC 9449)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;KRATOS&#95;PUBLIC&#95;URL</code></td><td>kratos-public svc</td><td>Ory Kratos public API для session-cookie SPA (<code>disabled</code> — выключить)</td></tr>
+    <tr><td><code>KACHO&#95;HYDRA&#95;ISSUER</code></td><td><em>(derived)</em></td><td>Issuer JWT (проверка <code>iss</code>)</td></tr>
+    <tr><td><code>KACHO&#95;HYDRA&#95;JWKS&#95;URL</code></td><td><em>(derived)</em></td><td>URL JWKS для проверки подписи</td></tr>
+    <tr><td><code>KACHO&#95;HYDRA&#95;INTROSPECTION&#95;URL</code> / <code>&#95;ADMIN&#95;URL</code></td><td><em>(пусто)</em></td><td>OAuth2-интроспекция / admin-API Hydra</td></tr>
+    <tr><td><code>KACHO&#95;JWKS&#95;CACHE&#95;TTL&#95;SECONDS</code></td><td><code>300</code></td><td>TTL кэша JWKS</td></tr>
+    <tr><td><code>KACHO&#95;JWT&#95;CLOCK&#95;SKEW&#95;SECONDS</code></td><td><code>30</code></td><td>Допуск на рассинхрон часов при проверке <code>exp</code>/<code>nbf</code></td></tr>
+    <tr><td><code>KACHO&#95;DPOP&#95;REPLAY&#95;CACHE&#95;SIZE</code> / <code>&#95;TTL&#95;SECONDS</code></td><td><code>100000</code> / <code>120</code></td><td>Размер / TTL anti-replay кэша <code>jti</code></td></tr>
+    <tr><td><code>KACHO&#95;DPOP&#95;IAT&#95;FRESHNESS&#95;SECONDS</code></td><td><code>60</code></td><td>Окно свежести DPoP-proof</td></tr>
+    <tr><td><code>KACHO&#95;INTROSPECTION&#95;CACHE&#95;TTL&#95;SECONDS</code> / <code>&#95;SIZE</code></td><td><code>5</code> / <code>10000</code></td><td>TTL / размер кэша интроспекции</td></tr>
+  </tbody>
+</table>
+
+OIDC UI-флоу настраивается ключами `KACHO_API_GATEWAY_OIDC_ISSUER` / `_EXTERNAL_ISSUER` /
+`_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI`. Детали проверки — [Аутентификация](/architecture/authn).
+
+## Авторизация (AuthZ)
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;ENABLED</code></td><td><code>false</code></td><td>Per-RPC authz-middleware (в production обязан быть <code>true</code>)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;FAIL&#95;OPEN</code></td><td><code>false</code></td><td>Разрешать при ошибке Check (запрещён в production)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;IAM&#95;AUTHORIZE&#95;URL</code></td><td><em>(пусто)</em></td><td>Адрес <code>AuthorizeService</code> в kacho-iam</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;CACHE&#95;TTL&#95;SECONDS</code> / <code>&#95;MAX&#95;ENTRIES</code></td><td><code>5</code> / <code>10000</code></td><td>TTL / размер кэша решений</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;CHECK&#95;TIMEOUT&#95;MS</code></td><td><code>200</code></td><td>Таймаут вызова <code>Check</code> (истёк → deny)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;PERMISSION&#95;CATALOG&#95;FILE</code></td><td><em>(встроен)</em></td><td>Переопределение файла permission-каталога</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;OVERRIDES&#95;FILE</code></td><td><em>(пусто)</em></td><td>Точечные override-правила authz</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;AUTHZ&#95;TRUSTED&#95;XFF</code> / <code>&#95;TRUSTED&#95;PROXY&#95;COUNT</code></td><td><code>true</code> / <code>1</code></td><td>Доверие <code>X-Forwarded-For</code> и число доверенных прокси</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;SUBJECT&#95;CHANGE&#95;POLL&#95;INTERVAL</code></td><td><code>2s</code></td><td>Интервал poll-watcher инвалидации кэша решений (safety-net)</td></tr>
+  </tbody>
+</table>
+
+Как принимается решение — [Авторизация](/architecture/authz).
+
+## mTLS к backend'ам (per-edge)
+
+Транспорт service→service — mTLS. Client-creds задаются общим набором файлов + per-domain флагом
+включения.
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;MTLS&#95;CLIENT&#95;CERT&#95;FILE</code> / <code>&#95;KEY&#95;FILE</code> / <code>&#95;CA&#95;FILE</code></td><td><em>(пусто)</em></td><td>Клиентский cert / key и CA для дозвона в backend'ы</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;MTLS&#95;&lt;DOMAIN&gt;&#95;ENABLE</code></td><td><code>false</code></td><td>Включить mTLS для ребра в домен (<code>VPC</code> / <code>COMPUTE</code> / <code>IAM</code> / <code>NLB</code> / <code>GEO</code> / <code>REGISTRY</code>)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;MTLS&#95;&lt;DOMAIN&gt;&#95;SERVER&#95;NAME</code></td><td><em>(пусто)</em></td><td>Ожидаемый SNI/SAN backend'а (per-domain)</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;HYBRID&#95;MTLS&#95;EXTERNAL</code></td><td><code>false</code></td><td>Гибридный режим внешнего mTLS-listener</td></tr>
+  </tbody>
+</table>
+
+## Internal gRPC-listener (mTLS)
+
+<table>
+  <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;GRPC&#95;MTLS&#95;ENABLE</code></td><td><code>false</code></td><td>mTLS на internal listener (<code>:9091</code>) — планируемое усиление</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;GRPC&#95;TLS&#95;CERT&#95;FILE</code> / <code>&#95;KEY&#95;FILE</code></td><td><em>(пусто)</em></td><td>Server-cert / key internal listener'а</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;GRPC&#95;ALLOWED&#95;SPIFFE</code></td><td><em>(пусто)</em></td><td>Allowlist SPIFFE-SAN клиентских сертификатов</td></tr>
+    <tr><td><code>KACHO&#95;API&#95;GATEWAY&#95;INTERNAL&#95;GRPC&#95;REFLECTION</code></td><td><code>false</code></td><td>gRPC reflection (только incident-debug)</td></tr>
+  </tbody>
+</table>
+
+Модель доверия internal listener'а — [Internal Authz Cache](/architecture/internal-cache).
+
+## Пример YAML
+
+<CodeBlock language="yaml" title="api-gateway.env.yaml">
+  {dedent`
+    KACHO_APP_ENV: production
+
+    KACHO_API_GATEWAY_LISTEN_ADDR: ":8080"
+    KACHO_API_GATEWAY_TLS_LISTEN_ADDR: ":443"
+    KACHO_API_GATEWAY_TLS_CERT_FILE: /tls/tls.crt
+    KACHO_API_GATEWAY_TLS_KEY_FILE: /tls/tls.key
+
+    # AuthN — production Hydra + DPoP
+    KACHO_API_GATEWAY_AUTHN_MODE: production-strict
+    KACHO_API_GATEWAY_AUTHN_ENABLE_DPOP: "true"
+    KACHO_HYDRA_ISSUER: https://auth.kacho.cloud/
+    KACHO_HYDRA_JWKS_URL: https://auth.kacho.cloud/.well-known/jwks.json
+
+    # AuthZ — включён, fail-closed
+    KACHO_API_GATEWAY_AUTHZ_ENABLED: "true"
+    KACHO_API_GATEWAY_AUTHZ_FAIL_OPEN: "false"
+    KACHO_API_GATEWAY_IAM_AUTHORIZE_URL: iam.kacho.svc.cluster.local:9091
+
+    # mTLS к backend'ам
+    KACHO_API_GATEWAY_MTLS_CLIENT_CERT_FILE: /mtls/client.crt
+    KACHO_API_GATEWAY_MTLS_CLIENT_KEY_FILE: /mtls/client.key
+    KACHO_API_GATEWAY_MTLS_CA_FILE: /mtls/ca.crt
+    KACHO_API_GATEWAY_MTLS_IAM_ENABLE: "true"
+    KACHO_API_GATEWAY_MTLS_VPC_ENABLE: "true"
+
+    # Internal listener mTLS (push-инвалидация от iam)
+    KACHO_API_GATEWAY_INTERNAL_GRPC_MTLS_ENABLE: "true"
+    KACHO_API_GATEWAY_INTERNAL_GRPC_ALLOWED_SPIFFE: spiffe://kacho.cloud/ns/kacho/sa/kacho-iam
+  `}
+</CodeBlock>
+
+:::tip Локальный dev
+Для локального запуска достаточно `KACHO_API_GATEWAY_AUTHN_MODE=dev` (остальное берёт дефолты):
+`KACHO_API_GATEWAY_AUTHN_MODE=dev bin/api-gateway`. Режим `dev` поднимает гейтвей без mTLS и без
+жёстких authz-гейтов. Сборка — в [Развёртывании](/install/deploy).
+:::
