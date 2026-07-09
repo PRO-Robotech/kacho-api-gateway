@@ -299,10 +299,13 @@ func splitAuthScheme(auth string) (token, scheme string) {
 }
 
 // absoluteRequestURL reconstructs the canonical URL the client used to address
-// this request. Behind an L7 LB / ingress, r.Host may differ from the
-// advertised public host — we prefer the api-gateway's configured domain
-// when r.Host doesn't already match. This mirrors the canonicalisation Hydra
-// performs when issuing the DPoP-bound token.
+// this request. The DPoP htu contract is client-must-match-server: the client
+// computed htu from the exact Host it sent, so we accept r.Host verbatim and
+// never substitute the configured apiDomain when it differs — doing so would
+// make the gateway-side htu diverge from the client's and 401 every DPoP-bound
+// request behind an ingress that forwards a Host header != apiDomain. apiDomain
+// is used only as a fallback to fill an empty r.Host. This mirrors the
+// canonicalisation canonicalHTU performs on both sides.
 func absoluteRequestURL(r *http.Request, apiDomain string) string {
 	scheme := "https"
 	// Strict canonicalisation — DPoP htu must equal the URL the client
