@@ -22,7 +22,12 @@ type MethodResolver = methodResolverInternal
 // on the gRPC server. Behaviour:
 //
 //  1. /kacho.cloud.<rest>   — passes through the allowlist + backend lookup.
-//  2. anything else — Unimplemented.
+//  2. anything else (blocked / Internal* / unknown method) — returns ok=false,
+//     which Handler (shimproxy.go) maps to codes.NotFound, NOT Unimplemented.
+//     NotFound is load-bearing: it makes Internal* and unknown methods
+//     indistinguishable from "method does not exist", so the external listener
+//     is not an existence-oracle for admin endpoints ("exists but unimplemented"
+//     would leak reconnaissance). Keep parity with the shimproxy.go contract.
 //
 // Маршрутизируются только нативные kacho.cloud.* сервисы; backends не
 // expose'ят посторонних сервисов.

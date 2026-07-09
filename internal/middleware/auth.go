@@ -344,7 +344,28 @@ func (a *AuthInterceptor) injectPrincipal(ctx context.Context, pType, pID, displ
 	p := operations.Principal{Type: pType, ID: pID, DisplayName: displayName}
 	ctx = operations.WithPrincipal(ctx, p)
 
-	// Inject в outgoing metadata, чтобы proxy-слой передал backend'у.
+	// Inject в INCOMING metadata: proxy-слой (opsproxy.Get/Cancel,
+	// shimproxy.Handler) пересобирает backend-outgoing из INCOMING через
+	// principalmeta.OutgoingFromIncoming, а opsproxy.checkOperationOwnership
+	// читает caller-principal тоже из INCOMING. Без записи в incoming
+	// gRPC-direct-путь молча роняет principal (клиент аутентифицирован, но hop
+	// форвардит анонима → ownership-check/backend видят анонимного caller'а).
+	// Incoming уже очищен от client-forgeable x-kacho-principal-* выше, так что
+	// это доверенный override, а не spoof. (REST-путь работает, потому что
+	// restmux выставляет principal как incoming — здесь достигается паритет.)
+	inMD, _ := metadata.FromIncomingContext(ctx)
+	if inMD == nil {
+		inMD = metadata.MD{}
+	} else {
+		inMD = inMD.Copy()
+	}
+	inMD.Set(a.mdKeyPrincipalType, pType)
+	inMD.Set(a.mdKeyPrincipalID, pID)
+	inMD.Set(a.mdKeyPrincipalDisplay, displayName)
+	ctx = metadata.NewIncomingContext(ctx, inMD)
+
+	// Inject в outgoing metadata — для нативного handler'а, который форвардит
+	// собственный outgoing-ctx напрямую (без OutgoingFromIncoming-пересборки).
 	md, _ := metadata.FromOutgoingContext(ctx)
 	if md == nil {
 		md = metadata.MD{}
