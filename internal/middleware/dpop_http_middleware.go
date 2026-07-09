@@ -41,6 +41,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/principalmeta"
 )
@@ -205,7 +206,7 @@ func (m *DPoPMiddleware) Wrap(next http.Handler) http.Handler {
 
 		// 3. Optional revocation check (cache + Hydra introspection).
 		if m.introspection != nil && verified.JTI != "" {
-			ctx, cancel := context.WithTimeout(r.Context(), 5*1e9 /* 5s */)
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			_, ierr := m.introspection.Introspect(ctx, verified.JTI, verified.Raw)
 			cancel()
 			if ierr != nil {
