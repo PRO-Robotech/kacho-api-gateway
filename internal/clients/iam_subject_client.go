@@ -53,6 +53,13 @@ type IAMSubjectClient struct {
 	cache    *cache.SubjectCache
 	logger   *slog.Logger
 
+	// callTimeout is the single per-call deadline every sibling RPC of this
+	// client derives from (LookupSubject / UpsertFromIdentity / Check). One
+	// configured source keeps behaviour uniform under IAM latency — per
+	// architecture.md: "все sibling-методы клиента обязаны применять один и тот
+	// же configured-timeout (не «часть — да, часть — нет»)".
+	callTimeout time.Duration
+
 	// sleep is the retry-backoff sleeper for the lazy Kratos upsert loop.
 	// Injectable so unit tests drive the eventual-consistency retry
 	// deterministically instead of burning real wall-clock time (the rest of the
@@ -96,6 +103,7 @@ func NewIAMSubjectClient(addr string, logger *slog.Logger, transportCreds grpc.D
 		userStub:      iamv1.NewInternalUserServiceClient(conn),
 		cache:         cache.NewSubjectCache(10_000, 30*time.Second, nil),
 		logger:        logger,
+		callTimeout:   5 * time.Second,
 		sleep:         time.Sleep,
 		upsertRetries: 5,
 		upsertBackoff: 200 * time.Millisecond,
@@ -111,7 +119,7 @@ func (c *IAMSubjectClient) LookupByExternalID(ctx context.Context, externalID st
 		return cached, nil
 	}
 
-	timeout, cancel := context.WithTimeout(ctx, 5*time.Second)
+	timeout, cancel := context.WithTimeout(ctx, c.callTimeout)
 	defer cancel()
 
 	resp, err := c.stub.LookupSubject(timeout, &iamv1.LookupSubjectRequest{
@@ -168,7 +176,7 @@ func (c *IAMSubjectClient) LookupOrUpsertFromKratos(ctx context.Context, identit
 	}
 	// Upsert (async — возвращает Operation, но операция выполняется быстро;
 	// для simplest path просто ждем короткий retry-loop).
-	upsertCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	upsertCtx, cancel := context.WithTimeout(ctx, c.callTimeout)
 	defer cancel()
 	_, uErr := c.userStub.UpsertFromIdentity(upsertCtx, &iamv1.UpsertFromIdentityRequest{
 		ExternalId:  identityID,
@@ -210,7 +218,7 @@ func (c *IAMSubjectClient) IsSystemAdmin(ctx context.Context, subject string) (b
 	if subject == "" {
 		return false, nil
 	}
-	timeout, cancel := context.WithTimeout(ctx, 3*time.Second)
+	timeout, cancel := context.WithTimeout(ctx, c.callTimeout)
 	defer cancel()
 	resp, err := c.stub.Check(timeout, &iamv1.CheckRequest{
 		SubjectId: subject,
