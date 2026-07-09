@@ -19,9 +19,11 @@
 // when a Postgres LISTEN/NOTIFY arrives. This is the primary path; the TTL
 // is a backstop for the case where the NOTIFY connection drops.
 //
-// The cache itself is a simple sync.Map + min-heap is unnecessary at this
-// scale; we use the same LRU pattern as dpop_replay_cache.go but track exp
-// on each entry.
+// The eviction/TTL/LRU mechanics live in the shared internal/lrucache
+// primitive (same as dpop_replay_cache.go and authz_cache.go); this file
+// carries only the introspection-specific policy: the exp-bounded per-entry
+// TTL clamp, negative caching, and the write-after-invalidate generation guard
+// wired through lrucache.PutIfGenWithTTL.
 package middleware
 
 import (

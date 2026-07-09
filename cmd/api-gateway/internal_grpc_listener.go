@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -74,7 +75,14 @@ func startInternalGRPCListener(
 			MaxConnectionIdle: 0, // never close idle conns (drainer is long-lived)
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             10, // ns is meaningless; left as zero-default below
+			// Permit the long-lived push-drainer to send frequent keepalive
+			// pings: an explicit small MinTime (well under any drainer ping
+			// interval — its client keepalive Time is 10s) keeps the server
+			// from counting the pings as too-frequent and issuing a GOAWAY,
+			// which the gRPC server default (5m MinTime) would do. Without an
+			// explicit KeepaliveEnforcementPolicy the field would NOT be the
+			// permissive posture — it is precisely this value that permits it.
+			MinTime:             time.Second,
 			PermitWithoutStream: true,
 		}),
 	}
