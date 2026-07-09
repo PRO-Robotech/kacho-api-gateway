@@ -40,6 +40,27 @@ func TestCache_TTLExpiry(t *testing.T) {
 	}
 }
 
+func TestCache_Len_ExcludesExpired(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	adv := func(d time.Duration) { mu.Lock(); now = now.Add(d); mu.Unlock() }
+
+	c := New[string, int](10, 50*time.Millisecond, clock)
+	c.Put("a", 1)
+	c.Put("b", 2)
+	if got := c.Len(); got != 2 {
+		t.Fatalf("Len()=%d, want 2 live", got)
+	}
+	// Both TTLs elapse but no Get/Peek touches them, so nothing is lazily
+	// evicted. Len() documents itself as reporting LIVE entries, so it must
+	// exclude the now-expired (but still-mapped) entries.
+	adv(51 * time.Millisecond)
+	if got := c.Len(); got != 0 {
+		t.Fatalf("Len()=%d after TTL, want 0 live", got)
+	}
+}
+
 func TestCache_LRUEviction(t *testing.T) {
 	c := New[string, int](2, time.Minute, nil)
 	c.Put("a", 1)

@@ -146,10 +146,9 @@ type JWKSCache struct {
 	// token verifications (they keep taking mu.RLock while a fetch is in flight).
 	fetchMu sync.Mutex
 
-	mu          sync.RWMutex
-	set         *JWKSet
-	fetchedAt   time.Time
-	lastFailErr error
+	mu        sync.RWMutex
+	set       *JWKSet
+	fetchedAt time.Time
 }
 
 // NewJWKSCache constructs a cache; first fetch is lazy on Get.
@@ -211,37 +210,31 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 	// derived from KACHO_API_DOMAIN), never request-derived — not an SSRF sink.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil) // #nosec G704 -- JWKS URL is operator config, not user input
 	if err != nil {
-		c.lastFailErr = fmt.Errorf("%w: build request: %v", ErrJWKSFetchFailed, err)
-		return c.lastFailErr
+		return fmt.Errorf("%w: build request: %v", ErrJWKSFetchFailed, err)
 	}
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.httpClient.Do(req) // #nosec G704 -- JWKS URL is operator config, not user input
 	if err != nil {
-		c.lastFailErr = fmt.Errorf("%w: %v", ErrJWKSUnreachable, err)
-		return c.lastFailErr
+		return fmt.Errorf("%w: %v", ErrJWKSUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		c.lastFailErr = fmt.Errorf("%w: status=%d body=%q", ErrJWKSFetchFailed, resp.StatusCode, string(body))
-		return c.lastFailErr
+		return fmt.Errorf("%w: status=%d body=%q", ErrJWKSFetchFailed, resp.StatusCode, string(body))
 	}
 	// Cap body to prevent DoS via massive JWKS document.
 	limited := io.LimitReader(resp.Body, 1<<20) // 1 MiB
 	var set JWKSet
 	if err := json.NewDecoder(limited).Decode(&set); err != nil {
-		c.lastFailErr = fmt.Errorf("%w: decode: %v", ErrJWKSFetchFailed, err)
-		return c.lastFailErr
+		return fmt.Errorf("%w: decode: %v", ErrJWKSFetchFailed, err)
 	}
 	if len(set.Keys) == 0 {
-		c.lastFailErr = fmt.Errorf("%w: empty key set", ErrJWKSFetchFailed)
-		return c.lastFailErr
+		return fmt.Errorf("%w: empty key set", ErrJWKSFetchFailed)
 	}
 	// Publish under the write lock — bounded to field assignment, no I/O.
 	c.mu.Lock()
 	c.set = &set
 	c.fetchedAt = time.Now()
-	c.lastFailErr = nil
 	c.mu.Unlock()
 	return nil
 }
