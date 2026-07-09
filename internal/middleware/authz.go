@@ -44,6 +44,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -255,6 +256,43 @@ func (m *AuthzMiddleware) InvalidateCache() {
 	if m.cache != nil {
 		m.cache.Invalidate()
 	}
+}
+
+// Reload re-reads the permission catalog and authz overrides from the on-disk
+// paths remembered at startup (LoadFromFile), then flushes the decision cache
+// so the next request re-evaluates against the fresh config. It is the reload
+// primitive the SIGHUP handler drives (ConfigMap staged rollout / emergency
+// override), so an operator's config edit applies without a pod restart.
+//
+// Components backed by the embedded asset (no file path — the default catalog,
+// an unset overrides file) are skipped: there is nothing on disk to re-read.
+// Individual reload failures preserve the previous-good config (see
+// LoadFromFile) and are returned joined; the caller keeps serving. No-op when
+// authz is disabled.
+func (m *AuthzMiddleware) Reload() error {
+	if m == nil || !m.cfg.Enabled {
+		return nil
+	}
+	var (
+		errs     []error
+		reloaded bool
+	)
+	if c := m.cfg.Catalog; c != nil && c.path.Load() != nil {
+		reloaded = true
+		if err := c.Reload(); err != nil {
+			errs = append(errs, fmt.Errorf("permission catalog: %w", err))
+		}
+	}
+	if o := m.cfg.Overrides; o != nil && o.path.Load() != nil {
+		reloaded = true
+		if err := o.Reload(); err != nil {
+			errs = append(errs, fmt.Errorf("authz overrides: %w", err))
+		}
+	}
+	if reloaded {
+		m.InvalidateCache()
+	}
+	return errors.Join(errs...)
 }
 
 // AsInvalidator returns a small port (Invalidator) over this middleware's

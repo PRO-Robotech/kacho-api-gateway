@@ -84,5 +84,7 @@ func (c *DPoPReplayCache) Add(jti string) error {
 // Len returns the current number of entries. Used by tests / observability.
 func (c *DPoPReplayCache) Len() int { return c.c.Len() }
 
-// Purge removes all entries. Used by tests and SIGHUP-driven reset (future).
+// Purge removes all entries. Used by tests. NOT wired to config reload:
+// dropping seen-proof state would re-open the replay window, so the replay
+// cache is intentionally excluded from the SIGHUP authz-config reload.
 func (c *DPoPReplayCache) Purge() { c.c.Invalidate() }
