@@ -239,7 +239,10 @@ func (h *OIDCHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		IDToken     string `json:"id_token"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tok); err != nil {
+	// Cap the token-exchange body to 1 MiB before decoding — a compromised IdP
+	// could otherwise force a multi-MB one-shot heap allocation. Mirrors the
+	// sibling non-200 reader above and the introspection/JWKS readers.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tok); err != nil {
 		http.Error(w, `{"error":"bad token response"}`, http.StatusBadGateway)
 		return
 	}
