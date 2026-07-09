@@ -1,0 +1,148 @@
+---
+id: operations
+sidebar_position: 2
+title: Operations
+---
+
+import { ApiOperation } from '@site/src/components/commonBlocks/ApiOperation'
+import CodeBlock from '@theme/CodeBlock'
+import dedent from 'ts-dedent'
+
+# Operations — async-мутации и их поллинг
+
+**Operation** — это долгоживущая (long-running) операция: любая мутация домена (`Create` /
+`Update` / `Delete` и `:verb`-действия) возвращает не ресурс, а `Operation`, и клиент дожидается
+её завершения поллингом. `OperationService` — **собственный** (native) сервис гейтвея: он не
+принадлежит одному домену, а обслуживается in-process и направляет каждый запрос во владеющий
+операцией backend по prefix её id.
+
+Бизнес-смысл: мутации control-plane асинхронны (создание сети, инстанса, балансировщика — не
+мгновенны), поэтому платформа отвечает сразу дескриптором операции, а клиент отслеживает её
+статус, не блокируясь. Единый `OperationService` избавляет клиента от знания, какой сервис
+исполняет операцию.
+
+## Модель Operation
+
+`Operation` (`kacho.cloud.operation.v1`) — плоское сообщение:
+
+<table>
+  <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>string</td><td>Идентификатор с 3-символьным domain-prefix (по нему маршрутизируется поллинг)</td></tr>
+    <tr><td><code>description</code></td><td>string</td><td>Человекочитаемое описание («create network»)</td></tr>
+    <tr><td><code>createdAt</code></td><td>timestamp</td><td>Момент постановки (RFC 3339, усечён до секунд)</td></tr>
+    <tr><td><code>done</code></td><td>bool</td><td><code>false</code> — in-flight; <code>true</code> — завершена</td></tr>
+    <tr><td><code>metadata</code></td><td>Any</td><td>Domain-специфичные метаданные операции</td></tr>
+    <tr><td><code>result</code></td><td>oneof</td><td><code>error</code> (<code>google.rpc.Status</code>) — провал, либо <code>response</code> (<code>Any</code>) — итоговый ресурс</td></tr>
+  </tbody>
+</table>
+
+Watch-RPC не существует — статус узнаётся только поллингом `Get`.
+
+## Маршрутизация по prefix id
+
+Id операции несёт 3-символьный prefix домена-владельца (конвенция Kachō). OpsProxy парсит prefix и
+выбирает backend; неизвестный prefix → `INVALID_ARGUMENT`.
+
+<table>
+  <thead><tr><th>Prefix</th><th>Backend</th><th>Домен / ресурсы</th></tr></thead>
+  <tbody>
+    <tr><td><code>enp</code></td><td>vpc</td><td>Network / RouteTable / SecurityGroup (vpc op-root)</td></tr>
+    <tr><td><code>e9b</code></td><td>vpc</td><td>Subnet / Address (вторичный vpc-prefix)</td></tr>
+    <tr><td><code>epd</code></td><td>compute</td><td>Instance / Disk / Image / Snapshot</td></tr>
+    <tr><td><code>iop</code></td><td>iam</td><td>Account / Project / User / SA / Group / Role / AccessBinding</td></tr>
+    <tr><td><code>nlb</code></td><td>loadbalancer</td><td>NetworkLoadBalancer / Listener / TargetGroup</td></tr>
+    <tr><td><code>rop</code></td><td>registry</td><td>Registry / DeleteTag</td></tr>
+  </tbody>
+</table>
+
+:::note Единый источник истины по prefix
+Таблица prefix → backend в гейтвее биндится на константы `kacho-corelib/ids` и защищена тестом:
+если домен/corelib поменяет prefix, тест падает, а не молча ломает маршрутизацию. Legacy-id формата
+`<service>_<uuid>` (из старых долгоживущих клиентов) всё ещё читаемы.
+:::
+
+## Методы
+
+`OperationService` — публичный native-сервис гейтвея на REST-префиксе `/operation/v1/`. Каждый
+вызов проходит те же AuthN/AuthZ, что и остальные RPC.
+
+### Get — статус операции
+
+<ApiOperation method="GET" endpoint="/operation/v1/operations/{id}">
+
+Возвращает текущее состояние операции. Клиент поллит его до `done=true`. Гейтвей направляет вызов
+в backend, владеющий операцией (по prefix id), с ограниченным per-call таймаутом (5 с) — зависший
+backend не «подвешивает» handler.
+
+<CodeBlock language="bash">
+  {dedent`
+    curl 'http://localhost:18080/operation/v1/operations/enp7f2k9x0abcde12' \\
+      -H "Authorization: Bearer $TOKEN"
+  `}
+</CodeBlock>
+
+<CodeBlock language="json">
+  {dedent`
+    {
+      "id": "enp7f2k9x0abcde12",
+      "description": "create network",
+      "createdAt": "2026-06-24T10:00:00Z",
+      "done": true,
+      "response": {
+        "@type": "type.googleapis.com/kacho.cloud.vpc.v1.Network",
+        "id": "net7f2k9x0abcde12",
+        "name": "my-net"
+      }
+    }
+  `}
+</CodeBlock>
+
+Если операция завершилась ошибкой, вместо `response` придёт `error` (`google.rpc.Status`):
+
+<CodeBlock language="json">
+  {dedent`
+    {
+      "id": "enp7f2k9x0abcde12",
+      "done": true,
+      "error": { "code": 9, "message": "network is not empty", "details": [] }
+    }
+  `}
+</CodeBlock>
+
+</ApiOperation>
+
+### Cancel — отменить операцию
+
+<ApiOperation method="POST" endpoint="/operation/v1/operations/{id}:cancel">
+
+Запрашивает отмену in-flight операции. Как и `Get`, направляется во владеющий backend по prefix id;
+фактическая семантика отмены — на стороне домена (best-effort). Уже завершённую операцию отменить
+нельзя.
+
+<CodeBlock language="bash">
+  {dedent`
+    curl -X POST 'http://localhost:18080/operation/v1/operations/enp7f2k9x0abcde12:cancel' \\
+      -H "Authorization: Bearer $TOKEN"
+  `}
+</CodeBlock>
+
+</ApiOperation>
+
+## Ошибки и граничные случаи
+
+<table>
+  <thead><tr><th>Ситуация</th><th>Код</th><th>Поведение</th></tr></thead>
+  <tbody>
+    <tr><td>Неизвестный 3-символьный prefix id</td><td><code>INVALID&#95;ARGUMENT</code></td><td>Ни один backend не владеет операцией — маршрутизация невозможна</td></tr>
+    <tr><td>Операция не найдена во владеющем backend</td><td><code>NOT&#95;FOUND</code></td><td>Ответ домена проксируется как есть</td></tr>
+    <tr><td>Backend-владелец недоступен</td><td><code>UNAVAILABLE</code></td><td>Per-call таймаут (5 с) истёк / backend не отвечает</td></tr>
+    <tr><td>Cancel завершённой операции</td><td><code>FAILED&#95;PRECONDITION</code></td><td>Отменять нечего (семантика домена)</td></tr>
+  </tbody>
+</table>
+
+:::tip Интервал поллинга
+Опрашивайте `Get` с интервалом 2–5 с. После успешной мутации перечитывайте список ресурсов с
+небольшим retry: authz-видимость нового ресурса устанавливается с задержкой FGA-пропагации
+(до ~2 с).
+:::

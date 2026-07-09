@@ -1,0 +1,155 @@
+---
+id: overview
+sidebar_position: 1
+title: Обзор API
+---
+
+import CodeBlock from '@theme/CodeBlock'
+import dedent from 'ts-dedent'
+
+# Обзор API
+
+Эта страница описывает **конвенции**, общие для всего API за гейтвеем: единый вход, домены и
+REST-пути, формат JSON, аутентификацию и авторизацию, async-`Operation`, формат ошибок, пагинацию
+и границу public-vs-internal. Гейтвей не задаёт модель ресурсов — он транслирует контракт доменов,
+поэтому конкретные поля и методы ресурса ищите в docs-site соответствующего сервиса.
+
+:::info Единый контракт — gRPC, REST — проекция
+Источник истины — Protocol Buffers в `kacho-proto` (домены `kacho.cloud.<domain>.v1`). REST-
+поверхность строится через **grpc-gateway**: каждый RPC аннотирован `google.api.http`. Семантика
+(коды ошибок, валидация) одинакова для gRPC и REST; примеры ниже — в REST-форме через гейтвей.
+:::
+
+:::tip Сначала — практика
+Если вы только знакомитесь с сервисом, начните с [Быстрого старта](/getting-started): токен, первый
+запрос, разбор async-операции. Эта страница — справочник по конвенциям, общим для всех доменов.
+:::
+
+## Единый вход и домены
+
+Клиент обращается к одному эндпоинту (gRPC и REST на порту `:8080`; `cmux` различает их по
+`Content-Type`). Гейтвей маршрутизирует запрос по domain-prefix пути / метода в нужный backend.
+
+<table>
+  <thead><tr><th>Домен</th><th>REST-префикс</th><th>gRPC-package</th><th>Ресурсы (публично)</th></tr></thead>
+  <tbody>
+    <tr><td>IAM</td><td><code>/iam/v1/</code></td><td><code>kacho.cloud.iam.v1</code></td><td>Account / Project / User / ServiceAccount / Group / Role / AccessBinding</td></tr>
+    <tr><td>VPC</td><td><code>/vpc/v1/</code></td><td><code>kacho.cloud.vpc.v1</code></td><td>Network / Subnet / SecurityGroup / RouteTable / Address / Gateway / NetworkInterface</td></tr>
+    <tr><td>Compute</td><td><code>/compute/v1/</code></td><td><code>kacho.cloud.compute.v1</code></td><td>Instance / Disk / Image / Snapshot / DiskType</td></tr>
+    <tr><td>Geography</td><td><code>/geo/v1/</code></td><td><code>kacho.cloud.geo.v1</code></td><td>Region / Zone</td></tr>
+    <tr><td>Load Balancer</td><td><code>/loadbalancer/v1/</code></td><td><code>kacho.cloud.loadbalancer.v1</code></td><td>NetworkLoadBalancer / Listener / TargetGroup</td></tr>
+    <tr><td>Registry</td><td><code>/registry/v1/</code></td><td><code>kacho.cloud.registry.v1</code></td><td>RegistryService (control-plane)</td></tr>
+    <tr><td>Operations</td><td><code>/operation/v1/</code></td><td><code>kacho.cloud.operation.v1</code></td><td><code>OperationService</code> (fan-out, native)</td></tr>
+  </tbody>
+</table>
+
+## REST-пути и методы
+
+Ресурсы доступны по единому шаблону `/<service>/v1/<resource>`; доп. действия — суффикс `:verb`.
+Стандартные методы:
+
+<table>
+  <thead><tr><th>Операция</th><th>HTTP</th><th>Шаблон пути</th><th>Тип</th></tr></thead>
+  <tbody>
+    <tr><td><code>Get</code></td><td><code>GET</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;/&#123;id&#125;</code></td><td>sync</td></tr>
+    <tr><td><code>List</code></td><td><code>GET</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;</code></td><td>sync</td></tr>
+    <tr><td><code>Create</code></td><td><code>POST</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;</code></td><td>async · Operation</td></tr>
+    <tr><td><code>Update</code></td><td><code>PATCH</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;/&#123;id&#125;</code></td><td>async · Operation</td></tr>
+    <tr><td><code>Delete</code></td><td><code>DELETE</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;/&#123;id&#125;</code></td><td>async · Operation</td></tr>
+    <tr><td>доп. действие</td><td><code>POST</code></td><td><code>/&lt;svc&gt;/v1/&lt;res&gt;/&#123;id&#125;:verb</code></td><td>async · Operation</td></tr>
+  </tbody>
+</table>
+
+:::note Исключение: reference-каталоги
+У некоторых admin-managed справочников (Region / Zone) мутации синхронны (возвращают ресурс, не
+`Operation`) — это catalog-паттерн домена Geography. Правило «мутация → Operation» — общее, но
+конкретную семантику метода смотрите в docs-site домена.
+:::
+
+## Формат JSON
+
+Тело запроса и ответа — **JSON с camelCase-ключами** (`projectId`, `zoneId`, `createdAt`). Это
+grpc-gateway-проекция proto-полей (`snake_case` в `.proto`). Enum сериализуется как строковая
+константа; временные метки — RFC 3339, усечённые до секунд (`2026-06-24T10:00:00Z`).
+
+## Аутентификация
+
+Внешние запросы несут `Authorization: Bearer <token>` (или session-cookie Kratos для SPA).
+Гейтвей проверяет токен **до** маршрутизации в домен; отсутствующий/невалидный → `UNAUTHENTICATED`
+(HTTP `401`). Транспорт service→service — mTLS. Детали — [Аутентификация](/architecture/authn).
+
+<CodeBlock language="bash">
+  {dedent`
+    curl 'http://localhost:18080/iam/v1/projects' \\
+      -H "Authorization: Bearer $TOKEN"
+  `}
+</CodeBlock>
+
+## Авторизация
+
+Каждый RPC проходит per-RPC `AuthorizeService.Check` (OpenFGA) по встроенному permission-каталогу;
+deny-by-default, fail-closed. Нет права → `PERMISSION_DENIED` (HTTP `403`); IAM недоступен → deny.
+Чувствительные операции требуют step-up по `acr`. Детали — [Авторизация](/architecture/authz).
+
+## Async-операции
+
+Мутации возвращают `Operation` (`kacho.cloud.operation.v1`): `id`, `description`, `createdAt`,
+`done`, `metadata`, и `oneof result { error | response }`. Клиент **поллит**
+`OperationService.Get(id)` до `done=true` — Watch-RPC нет. Гейтвей направляет поллинг во владеющий
+backend по prefix id. Подробнее — [Operations](/api/operations).
+
+## Формат ошибок
+
+Ошибки — в формате **`google.rpc.Status`** (`{code, message, details[]}`) единообразно для gRPC и
+REST. `code` — числовой gRPC-код (REST мапит его на HTTP-статус), `message` — стабильная
+формулировка, `details[]` — массив структурированных деталей.
+
+<CodeBlock language="json">
+  {dedent`
+    {
+      "code": 7,
+      "message": "permission denied",
+      "details": []
+    }
+  `}
+</CodeBlock>
+
+<table>
+  <thead><tr><th>gRPC-код</th><th>HTTP</th><th>Когда (на уровне гейтвея)</th></tr></thead>
+  <tbody>
+    <tr><td><code>UNAUTHENTICATED</code></td><td>401</td><td>Нет / невалиден токен (AuthN не прошёл)</td></tr>
+    <tr><td><code>PERMISSION&#95;DENIED</code></td><td>403</td><td>AuthZ-Check отказал; либо промах по permission-каталогу</td></tr>
+    <tr><td><code>NOT&#95;FOUND</code></td><td>404</td><td><code>Internal&#42;</code>-путь на внешнем listener; несуществующий ресурс (от домена)</td></tr>
+    <tr><td><code>INVALID&#95;ARGUMENT</code></td><td>400</td><td>Формат/валидация (напр. неизвестный prefix Operation-id)</td></tr>
+    <tr><td><code>UNIMPLEMENTED</code></td><td>501</td><td>Метод не в allowlist — как несуществующий</td></tr>
+    <tr><td><code>UNAVAILABLE</code></td><td>503</td><td>Backend домена / IAM недоступен (fail-closed)</td></tr>
+    <tr><td><em>прочие</em></td><td>—</td><td>Проксируются как есть от доменного backend (его собственные коды/тексты)</td></tr>
+  </tbody>
+</table>
+
+Гейтвей **не** переписывает ошибки доменов — коды и тексты приходят от backend; гейтвей добавляет
+только edge-ошибки (auth, routing).
+
+## Пагинация — cursor-based
+
+`List`-RPC доменов используют курсорную пагинацию: `pageSize` (0 → дефолт 50, максимум 1000) и
+`pageToken`; ответ несёт `nextPageToken` (пустая строка — последняя страница). `pageToken` —
+opaque, передавать как есть.
+
+## Public vs cluster-internal
+
+Публичная поверхность — только методы из allowlist; `Internal*`-сервисы (admin-CRUD Region/Zone,
+`AddressPool`, internal-проекции ресурсов) на внешнем endpoint не существуют (gRPC блокирует по
+суффиксу, REST отвечает `404`). Они доступны лишь на cluster-internal listener. Детали —
+[Маршрутизация](/architecture/routing).
+
+## Собственные (native) сервисы гейтвея
+
+<table>
+  <thead><tr><th>Сервис</th><th>Поверхность</th><th>Назначение</th></tr></thead>
+  <tbody>
+    <tr><td><code>OperationService</code></td><td>public</td><td><code>Get</code> / <code>Cancel</code> async-операций — fan-out по prefix id (<a href="/api/operations">Operations</a>)</td></tr>
+    <tr><td>health (<code>/healthz</code>, <code>/readyz</code>)</td><td>public</td><td>Liveness / readiness</td></tr>
+    <tr><td><code>InternalAuthzCacheService</code></td><td>cluster-internal (:9091)</td><td>Push-инвалидация authz-кэша (<a href="/api/internal-authz-cache">Internal Authz Cache</a>)</td></tr>
+  </tbody>
+</table>
