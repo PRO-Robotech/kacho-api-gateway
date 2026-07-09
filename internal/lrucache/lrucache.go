@@ -250,9 +250,20 @@ func (c *Cache[K, V]) InvalidateWhere(pred func(K) bool) int {
 	return removed
 }
 
-// Len returns the current number of live entries.
+// Len returns the current number of live entries. Entries whose TTL has
+// elapsed but which have not yet been lazily evicted (this cache has no
+// background GC — eviction happens on Get/Peek/AddIfAbsent of that key or under
+// capacity pressure) are NOT counted, so Len()==0 truthfully means "no live
+// entry" for the leak-detection / observability callers that read it.
 func (c *Cache[K, V]) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.items)
+	now := c.now()
+	n := 0
+	for _, el := range c.items {
+		if !now.After(el.Value.(*entry[K, V]).expiresAt) {
+			n++
+		}
+	}
+	return n
 }
