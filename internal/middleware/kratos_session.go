@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -112,8 +113,12 @@ func (c *KratosClient) fetch(ctx context.Context, cookieHeader string) KratosWho
 	if resp.StatusCode != http.StatusOK {
 		return KratosWhoamiResult{}
 	}
+	// Cap the body to 1 MiB before decoding — over the plaintext cluster-internal
+	// hop a compromised/MITM'd Kratos peer could otherwise return an oversized
+	// JSON scalar that json.Decode materialises whole in the heap on this hot
+	// per-request path. Mirrors the sibling introspection/JWKS readers.
 	var s kratosSession
-	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&s); err != nil {
 		return KratosWhoamiResult{}
 	}
 	dn := s.Identity.Traits.Email
