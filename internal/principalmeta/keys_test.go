@@ -22,6 +22,8 @@ func TestKeyForms_Consistent(t *testing.T) {
 		{principalmeta.HeaderPrincipalID, principalmeta.HeaderGRPCMetaPrincipalID, principalmeta.MetaPrincipalID},
 		{principalmeta.HeaderPrincipalDisplay, principalmeta.HeaderGRPCMetaPrincipalDisplay, principalmeta.MetaPrincipalDisplay},
 		{principalmeta.HeaderTokenACR, principalmeta.HeaderGRPCMetaTokenACR, principalmeta.MetaTokenACR},
+		{principalmeta.HeaderTokenJti, principalmeta.HeaderGRPCMetaTokenJti, principalmeta.MetaTokenJti},
+		{principalmeta.HeaderTokenScope, principalmeta.HeaderGRPCMetaTokenScope, principalmeta.MetaTokenScope},
 	}
 	for _, c := range cases {
 		// Grpc-Metadata- prefix.
@@ -36,6 +38,15 @@ func TestKeyForms_Consistent(t *testing.T) {
 		if got := http.CanonicalHeaderKey(c.header); got != c.header {
 			t.Errorf("header %q is not canonical (http.CanonicalHeaderKey → %q)", c.header, got)
 		}
+	}
+}
+
+// TestHeaderTokenExp_Canonical pins the audit-only exp header's wire value.
+// It has no Grpc-Metadata-/meta consumer form (producer-only, downstream
+// audit), so it is asserted on its own rather than in the three-form table.
+func TestHeaderTokenExp_Canonical(t *testing.T) {
+	if got := http.CanonicalHeaderKey(principalmeta.HeaderTokenExp); got != principalmeta.HeaderTokenExp {
+		t.Errorf("HeaderTokenExp %q is not canonical (http.CanonicalHeaderKey → %q)", principalmeta.HeaderTokenExp, got)
 	}
 }
 

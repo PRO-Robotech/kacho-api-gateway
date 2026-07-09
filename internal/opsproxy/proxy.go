@@ -28,6 +28,7 @@ package opsproxy
 import (
 	"context"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -55,6 +56,15 @@ const (
 	prefixOperationVPCSubnet = "e9b"
 	prefixOperationIAM       = "iop"
 )
+
+// backendCallTimeout bounds every OperationService.Get/Cancel call OpsProxy
+// makes to a backend. These are fast unary reads, so a short deadline matches
+// the sibling unary clients (IAMSubjectClient uses 3-5s). Without it the raw
+// request ctx carries no deadline and a wedged backend (half-open TCP, GC
+// pause, overload) pins the gateway handler goroutine + HTTP/2 stream
+// indefinitely — the exact hazard the "per-call deadline на КАЖДОМ внешнем
+// вызове" invariant (architecture.md) guards against.
+const backendCallTimeout = 5 * time.Second
 
 // prefixToBackend — карта 3-символьного Operation-id префикса в имя
 // backend-домена. Ключи биндятся на exported kacho-corelib константы
@@ -159,7 +169,9 @@ func (p *OpsProxy) Get(ctx context.Context, req *operationpb.GetOperationRequest
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Get(principalmeta.OutgoingFromIncoming(ctx), req)
+	callCtx, cancel := context.WithTimeout(principalmeta.OutgoingFromIncoming(ctx), backendCallTimeout)
+	defer cancel()
+	op, err := client.Get(callCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +189,9 @@ func (p *OpsProxy) Cancel(ctx context.Context, req *operationpb.CancelOperationR
 	if err != nil {
 		return nil, err
 	}
-	op, err := client.Cancel(principalmeta.OutgoingFromIncoming(ctx), req)
+	callCtx, cancel := context.WithTimeout(principalmeta.OutgoingFromIncoming(ctx), backendCallTimeout)
+	defer cancel()
+	op, err := client.Cancel(callCtx, req)
 	if err != nil {
 		return nil, err
 	}

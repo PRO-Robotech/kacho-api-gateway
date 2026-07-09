@@ -29,7 +29,10 @@ const (
 	HeaderPrincipalType    = "X-Kacho-Principal-Type"
 	HeaderPrincipalID      = "X-Kacho-Principal-Id"
 	HeaderPrincipalDisplay = "X-Kacho-Principal-Display-Name"
-	HeaderTokenACR         = "X-Kacho-Token-Acr" // #nosec G101 -- HTTP header name (token ACR claim), not a credential
+	HeaderTokenACR         = "X-Kacho-Token-Acr"   // #nosec G101 -- HTTP header name (token ACR claim), not a credential
+	HeaderTokenJti         = "X-Kacho-Token-Jti"   // #nosec G101 -- HTTP header name (token jti claim), not a credential
+	HeaderTokenScope       = "X-Kacho-Token-Scope" // #nosec G101 -- HTTP header name (token scope claim), not a credential
+	HeaderTokenExp         = "X-Kacho-Token-Exp"   // #nosec G101 -- HTTP header name (token exp claim), not a credential
 )
 
 // Grpc-Metadata-prefixed HTTP header names (grpc-gateway → gRPC metadata bridge).
@@ -38,6 +41,8 @@ const (
 	HeaderGRPCMetaPrincipalID      = "Grpc-Metadata-" + HeaderPrincipalID
 	HeaderGRPCMetaPrincipalDisplay = "Grpc-Metadata-" + HeaderPrincipalDisplay
 	HeaderGRPCMetaTokenACR         = "Grpc-Metadata-" + HeaderTokenACR
+	HeaderGRPCMetaTokenJti         = "Grpc-Metadata-" + HeaderTokenJti
+	HeaderGRPCMetaTokenScope       = "Grpc-Metadata-" + HeaderTokenScope
 )
 
 // Lowercase gRPC metadata keys (metadata.MD.Get/Append lowercases its argument;
@@ -46,7 +51,9 @@ const (
 	MetaPrincipalType    = "x-kacho-principal-type"
 	MetaPrincipalID      = "x-kacho-principal-id"
 	MetaPrincipalDisplay = "x-kacho-principal-display-name"
-	MetaTokenACR         = "x-kacho-token-acr" // #nosec G101 -- gRPC metadata key name (token ACR claim), not a credential
+	MetaTokenACR         = "x-kacho-token-acr"   // #nosec G101 -- gRPC metadata key name (token ACR claim), not a credential
+	MetaTokenJti         = "x-kacho-token-jti"   // #nosec G101 -- gRPC metadata key name (token jti claim), not a credential
+	MetaTokenScope       = "x-kacho-token-scope" // #nosec G101 -- gRPC metadata key name (token scope claim), not a credential
 )
 
 // Lowercase prefixes used to strip forgeable client-supplied identity
