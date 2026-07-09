@@ -59,6 +59,7 @@ func newTestClient(stub subjectLookupStub, user userUpsertStub) *IAMSubjectClien
 		userStub:      user,
 		cache:         cache.NewSubjectCache(1000, 30*time.Second, nil),
 		logger:        slog.Default(),
+		callTimeout:   5 * time.Second,
 		sleep:         func(time.Duration) {}, // deterministic: no real sleep
 		upsertRetries: 5,
 		upsertBackoff: 0,
@@ -181,6 +182,56 @@ func TestLookupOrUpsertFromKratos_NotFoundEmptyEmail(t *testing.T) {
 	}
 	if user.calls.Load() != 0 {
 		t.Fatalf("must NOT attempt upsert with empty email, got %d calls", user.calls.Load())
+	}
+}
+
+// deadlineCapturingStub records the ctx deadline observed by LookupSubject and
+// Check so a test can assert both sibling RPCs derive their per-call deadline
+// from the same configured timeout (architecture.md per-call-deadline invariant:
+// "все sibling-методы клиента обязаны применять один и тот же configured-timeout").
+type deadlineCapturingStub struct {
+	lookupBudget time.Duration
+	checkBudget  time.Duration
+}
+
+func (s *deadlineCapturingStub) LookupSubject(ctx context.Context, _ *iamv1.LookupSubjectRequest, _ ...grpc.CallOption) (*iamv1.LookupSubjectResponse, error) {
+	if dl, ok := ctx.Deadline(); ok {
+		s.lookupBudget = time.Until(dl)
+	}
+	return userResp("usr_1", "a@b.co", ""), nil
+}
+
+func (s *deadlineCapturingStub) Check(ctx context.Context, _ *iamv1.CheckRequest, _ ...grpc.CallOption) (*iamv1.CheckResponse, error) {
+	if dl, ok := ctx.Deadline(); ok {
+		s.checkBudget = time.Until(dl)
+	}
+	return &iamv1.CheckResponse{Allowed: true}, nil
+}
+
+// TestSiblingMethods_ShareSameCallTimeout — LookupByExternalID and IsSystemAdmin
+// are sibling methods of the same client and MUST apply the same per-call
+// deadline. Before the fix IsSystemAdmin hardcodes 3s while LookupByExternalID
+// hardcodes 5s → the budgets diverge and this FAILS.
+func TestSiblingMethods_ShareSameCallTimeout(t *testing.T) {
+	stub := &deadlineCapturingStub{}
+	c := newTestClient(stub, &fakeUserStub{})
+
+	if _, err := c.LookupByExternalID(context.Background(), "ext-1"); err != nil {
+		t.Fatalf("LookupByExternalID: unexpected err: %v", err)
+	}
+	if _, err := c.IsSystemAdmin(context.Background(), "user:usr_1"); err != nil {
+		t.Fatalf("IsSystemAdmin: unexpected err: %v", err)
+	}
+
+	if stub.lookupBudget == 0 || stub.checkBudget == 0 {
+		t.Fatalf("both RPCs must carry a per-call deadline, got lookup=%v check=%v",
+			stub.lookupBudget, stub.checkBudget)
+	}
+	// Same configured source ⇒ budgets differ only by the microseconds elapsed
+	// between the two WithTimeout calls, far below any hardcoded-divergence gap.
+	if diff := stub.lookupBudget - stub.checkBudget; diff > 500*time.Millisecond || diff < -500*time.Millisecond {
+		t.Fatalf("sibling methods must share one configured timeout; budgets diverge: lookup=%v check=%v (diff=%v)",
+			stub.lookupBudget, stub.checkBudget, diff)
 	}
 }
 
