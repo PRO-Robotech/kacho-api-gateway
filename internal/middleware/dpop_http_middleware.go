@@ -417,12 +417,12 @@ func injectVerifiedTokenHeaders(r *http.Request, t *VerifiedToken) {
 
 	// Bonus: expose ACR / scope / jti for downstream audit.
 	r.Header.Set(principalmeta.HeaderTokenACR, t.ACR)
-	r.Header.Set("X-Kacho-Token-Jti", t.JTI)
-	r.Header.Set("X-Kacho-Token-Scope", t.Scope)
+	r.Header.Set(principalmeta.HeaderTokenJti, t.JTI)
+	r.Header.Set(principalmeta.HeaderTokenScope, t.Scope)
 	r.Header.Set(principalmeta.HeaderGRPCMetaTokenACR, t.ACR)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Token-Jti", t.JTI)
-	r.Header.Set("Grpc-Metadata-X-Kacho-Token-Scope", t.Scope)
+	r.Header.Set(principalmeta.HeaderGRPCMetaTokenJti, t.JTI)
+	r.Header.Set(principalmeta.HeaderGRPCMetaTokenScope, t.Scope)
 	if !t.ExpiresAt.IsZero() {
-		r.Header.Set("X-Kacho-Token-Exp", fmt.Sprintf("%d", t.ExpiresAt.Unix()))
+		r.Header.Set(principalmeta.HeaderTokenExp, fmt.Sprintf("%d", t.ExpiresAt.Unix()))
 	}
 }
