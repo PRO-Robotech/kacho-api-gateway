@@ -141,6 +141,11 @@ type JWKSCache struct {
 	ttl        time.Duration
 	httpClient *http.Client
 
+	// fetchMu single-flights the HTTP fetch WITHOUT holding mu across the
+	// blocking round-trip, so a slow JWKS endpoint never stalls concurrent
+	// token verifications (they keep taking mu.RLock while a fetch is in flight).
+	fetchMu sync.Mutex
+
 	mu          sync.RWMutex
 	set         *JWKSet
 	fetchedAt   time.Time
@@ -189,10 +194,17 @@ func (c *JWKSCache) Resolve(ctx context.Context, kid string) (*JWK, error) {
 }
 
 func (c *JWKSCache) refresh(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Double-check: another goroutine may have refreshed while we were waiting.
-	if c.set != nil && time.Since(c.fetchedAt) < c.ttl {
+	// Serialize fetches on fetchMu (single-flight) but do NOT hold the RWMutex
+	// across the network I/O below — mu is taken only for the short double-check
+	// read and the final publish. This bounds the critical section on mu to a
+	// map assignment so concurrent verifications keep resolving during a fetch.
+	c.fetchMu.Lock()
+	defer c.fetchMu.Unlock()
+	// Double-check: another goroutine may have refreshed while we waited on fetchMu.
+	c.mu.RLock()
+	fresh := c.set != nil && time.Since(c.fetchedAt) < c.ttl
+	c.mu.RUnlock()
+	if fresh {
 		return nil
 	}
 	// c.url is the operator-configured JWKS endpoint (KACHO_HYDRA_JWKS_URL /
@@ -225,9 +237,12 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 		c.lastFailErr = fmt.Errorf("%w: empty key set", ErrJWKSFetchFailed)
 		return c.lastFailErr
 	}
+	// Publish under the write lock — bounded to field assignment, no I/O.
+	c.mu.Lock()
 	c.set = &set
 	c.fetchedAt = time.Now()
 	c.lastFailErr = nil
+	c.mu.Unlock()
 	return nil
 }
 
