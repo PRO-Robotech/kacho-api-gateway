@@ -12,7 +12,7 @@ import (
 )
 
 // Backends — карта «доменное имя → долгоживущий *grpc.ClientConn».
-// Ключи: "iam", "vpc", "compute", "geo", "loadbalancer".
+// Ключи: "iam", "vpc", "compute", "storage", "geo", "loadbalancer", "registry".
 type Backends map[string]*grpc.ClientConn
 
 // MethodResolver — re-export of local proxy MethodResolver type signature.

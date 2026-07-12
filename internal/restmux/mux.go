@@ -47,6 +47,12 @@
 //     (Geography Region/Zone — отдельный leaf-сервис geo.v1.)
 //   - compute.v1 admin (kacho-only): InternalDiskType — обслуживается
 //     internal-портом compute backend (9091).
+//   - storage.v1 (kacho-storage): Volume, Snapshot, DiskType — public RPC под
+//     /storage/v1/* (volumes/snapshots CRUD + diskTypes read).
+//   - storage.v1 admin (kacho-only): InternalVolume (Attach/Detach/
+//     ListAttachments/GetInternal — default unbound-route, gRPC-direct/internal
+//     REST only) + InternalDiskType (admin CRUD) — обслуживаются internal-портом
+//     storage backend (9091).
 //   - geo.v1: RegionService, ZoneService — public read под /geo/v1/regions,
 //     /geo/v1/zones (geoAddr). Geography — leaf-сервис kacho-geo; обслуживается
 //     ИСКЛЮЧИТЕЛЬНО geo.v1.
@@ -90,6 +96,8 @@ import (
 	operationpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/operation"
 	// kacho-registry (registry.v1) — public RPC под /registry/v1/*.
 	registrypb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/registry/v1"
+	// kacho-storage (storage.v1) — public RPC под /storage/v1/*.
+	storagepb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/storage/v1"
 	vpcpb "github.com/PRO-Robotech/kacho-proto/gen/go/kacho/cloud/vpc/v1"
 
 	"github.com/PRO-Robotech/kacho-api-gateway/internal/allowlist"
@@ -218,6 +226,8 @@ func isInternalPath(path string) bool {
 //	"geoInternal"          → kacho-geo-internal.kacho.svc.cluster.local:9091 (admin Region/Zone CRUD)
 //	"registry"             → kacho-registry.kacho.svc.cluster.local:9090 (RegistryService control-plane)
 //	"registryInternal"     → kacho-registry.kacho.svc.cluster.local:9091 (InternalRegistryService GC/stats admin)
+//	"storage"              → kacho-storage.kacho.svc.cluster.local:9090 (Volume/Snapshot/DiskType read)
+//	"storageInternal"      → kacho-storage.kacho.svc.cluster.local:9091 (InternalVolume attach/detach + InternalDiskType admin)
 //
 // conns — карта domain → *grpc.ClientConn (нужна для OpsProxy);
 // при nil — OperationService регистрируется через no-op Unimplemented (тесты).
@@ -323,7 +333,7 @@ func NewMux(
 
 	// lbAddr / lbInternalAddr обслуживают kacho-nlb (loadbalancer.v1).
 	// registryAddr / registryInternalAddr обслуживают kacho-registry (registry.v1).
-	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr, geoAddr, geoInternalAddr, registryAddr, registryInternalAddr string
+	var vpcAddr, vpcInternalAddr, computeAddr, computeInternalAddr, iamAddr, iamInternalAddr, lbAddr, lbInternalAddr, geoAddr, geoInternalAddr, registryAddr, registryInternalAddr, storageAddr, storageInternalAddr string
 	if addrs != nil {
 		vpcAddr = addrs["vpc"]
 		vpcInternalAddr = addrs["vpcInternal"]
@@ -337,6 +347,8 @@ func NewMux(
 		geoInternalAddr = addrs["geoInternal"]
 		registryAddr = addrs["registry"]
 		registryInternalAddr = addrs["registryInternal"]
+		storageAddr = addrs["storage"]
+		storageInternalAddr = addrs["storageInternal"]
 	}
 
 	// Регистрируем КАЖДЫЙ handler на ОБА mux'а (public + internal). Path-based
@@ -413,6 +425,44 @@ func NewMux(
 		if computeInternalAddr != "" {
 			if err := computepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, computeInternalAddr, optsFor("computeInternal")); err != nil {
 				return nil, fmt.Errorf("register compute InternalDiskTypeService: %w", err)
+			}
+		}
+
+		// --- storage.v1 (kacho-storage): Volume + Snapshot + DiskType (public) ---
+		// Public RPC под /storage/v1/*: volumes/snapshots CRUD (async Operation,
+		// sop-prefix) + diskTypes read-only. Регистрируется условно по storageAddr —
+		// backend еще может быть не задеплоен (поведение симметрично registry/geo/nlb).
+		if storageAddr != "" {
+			if err := storagepb.RegisterVolumeServiceHandlerFromEndpoint(ctx, mux, storageAddr, optsFor("storage")); err != nil {
+				return nil, fmt.Errorf("register storage VolumeService: %w", err)
+			}
+			if err := storagepb.RegisterSnapshotServiceHandlerFromEndpoint(ctx, mux, storageAddr, optsFor("storage")); err != nil {
+				return nil, fmt.Errorf("register storage SnapshotService: %w", err)
+			}
+			if err := storagepb.RegisterDiskTypeServiceHandlerFromEndpoint(ctx, mux, storageAddr, optsFor("storage")); err != nil {
+				return nil, fmt.Errorf("register storage DiskTypeService: %w", err)
+			}
+		}
+
+		// --- storage.v1 admin (InternalVolume + InternalDiskType) — kacho-only, internal-port (9091) ---
+		// InternalVolumeService (Attach/Detach/ListAttachments/GetInternal) — без
+		// google.api.http-аннотаций → grpc-gateway создает default unbound-route
+		// POST /kacho.cloud.storage.v1.InternalVolumeService/<Method> (аналог iam
+		// InternalUserService / registry InternalRegistryService). Несет placement/
+		// инфра-чувствительные поля (security.md) → доступно ТОЛЬКО через
+		// cluster-internal REST listener: dispatcher (isInternalPath →
+		// HasInternalSuffix) 404-ит эти пути на external TLS listener, а gRPC-роутер
+		// блокирует Internal* через HasInternalSuffix. Data-plane consumer'ы могут
+		// ходить напрямую gRPC до kacho-storage:9091.
+		// InternalDiskTypeService (admin CRUD справочника DiskType) — POST/PATCH/DELETE
+		// на /storage/v1/diskTypes (тот же collection-путь, что public read); гейтится
+		// authz-каталогом (required_relation system_admin), как compute InternalDiskType.
+		if storageInternalAddr != "" {
+			if err := storagepb.RegisterInternalVolumeServiceHandlerFromEndpoint(ctx, mux, storageInternalAddr, optsFor("storageInternal")); err != nil {
+				return nil, fmt.Errorf("register storage InternalVolumeService: %w", err)
+			}
+			if err := storagepb.RegisterInternalDiskTypeServiceHandlerFromEndpoint(ctx, mux, storageInternalAddr, optsFor("storageInternal")); err != nil {
+				return nil, fmt.Errorf("register storage InternalDiskTypeService: %w", err)
 			}
 		}
 

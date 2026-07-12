@@ -8,7 +8,7 @@ import "strings"
 // AllowedMethods — публичные RPC-пути, маршрутизируемые через api-gateway.
 // Методы *InternalService.* НИКОГДА не включаются (запрет #6): их REST-проекция
 // доступна только на cluster-internal listener (см. restmux/mux.go).
-// Активны: iam, vpc, compute, geo, loadbalancer, registry, operation.
+// Активны: iam, vpc, compute, storage, geo, loadbalancer, registry, operation.
 // loadbalancer (kacho-nlb) — NetworkLoadBalancer / Listener / TargetGroup
 // публичные методы добавлены ниже. registry (kacho-registry) — RegistryService
 // control-plane. InternalResourceLifecycleService (streaming, gRPC-direct only)
@@ -131,6 +131,28 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.compute.v1.DiskTypeService/List": {},
 	// compute.v1 — Geography (Region/Zone) НЕ публичная поверхность compute:
 	// выделена в leaf-сервис kacho-geo (см. geo.v1 ниже).
+
+	// storage.v1 — VolumeService (kacho-storage; Volume — block-storage ресурс,
+	// выделен из compute Disk). Read — sync; мутации — async Operation (sop-prefix).
+	"/kacho.cloud.storage.v1.VolumeService/Get":            {},
+	"/kacho.cloud.storage.v1.VolumeService/List":           {},
+	"/kacho.cloud.storage.v1.VolumeService/Create":         {},
+	"/kacho.cloud.storage.v1.VolumeService/Update":         {},
+	"/kacho.cloud.storage.v1.VolumeService/Delete":         {},
+	"/kacho.cloud.storage.v1.VolumeService/ListOperations": {},
+	// storage.v1 — SnapshotService (StorageSnapshot `snp`, отдельно от compute Snapshot)
+	"/kacho.cloud.storage.v1.SnapshotService/Get":    {},
+	"/kacho.cloud.storage.v1.SnapshotService/List":   {},
+	"/kacho.cloud.storage.v1.SnapshotService/Create": {},
+	"/kacho.cloud.storage.v1.SnapshotService/Update": {},
+	"/kacho.cloud.storage.v1.SnapshotService/Delete": {},
+	// storage.v1 — DiskTypeService (read-only справочник; admin-CRUD — через
+	// InternalDiskTypeService на :9091, НЕ в allowlist).
+	"/kacho.cloud.storage.v1.DiskTypeService/Get":  {},
+	"/kacho.cloud.storage.v1.DiskTypeService/List": {},
+	// storage.v1 — InternalVolumeService (Attach/Detach/ListAttachments/GetInternal,
+	// инфра-чувствительные placement-поля) и InternalDiskTypeService (admin CRUD) —
+	// НЕ в allowlist (HasInternalSuffix блокирует автоматически; ban #6). :9091 only.
 
 	// geo.v1 — RegionService (read-only справочник).
 	// Geography живет в leaf-сервисе kacho-geo; теперь единственный owner.

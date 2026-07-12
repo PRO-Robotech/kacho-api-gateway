@@ -107,6 +107,7 @@ func dialBackends(cfg config.Config) (proxy.Backends, func(), error) {
 // "loadbalancer" in BackendAddrs to match its proto package).
 // "geo"+"geoInternal" → "geo".
 // "registry"+"registryInternal" → "registry".
+// "storage"+"storageInternal" → "storage".
 func backendEdge(backendKey string) string {
 	switch backendKey {
 	case "vpc", "vpcInternal":
@@ -121,6 +122,8 @@ func backendEdge(backendKey string) string {
 		return "geo"
 	case "registry", "registryInternal":
 		return "registry"
+	case "storage", "storageInternal":
+		return "storage"
 	default:
 		// Unknown keys (e.g. "operation" self-loopback) have no cross-pod edge.
 		// They are never passed here in the production wiring; returning "" makes

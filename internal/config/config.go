@@ -34,6 +34,8 @@ import (
 //	KACHO_API_GATEWAY_GEO_INTERNAL_GRPC   — адрес backend kacho-geo internal-port (9091)
 //	KACHO_API_GATEWAY_REGISTRY_GRPC          — адрес backend kacho-registry (public, port 9090)
 //	KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC — адрес backend kacho-registry internal-port (9091)
+//	KACHO_API_GATEWAY_STORAGE_GRPC           — адрес backend kacho-storage (public, port 9090)
+//	KACHO_API_GATEWAY_STORAGE_INTERNAL_GRPC  — адрес backend kacho-storage internal-port (9091)
 //	KACHO_APP_ENV                            — deployment-env label (keys the prod authz guard)
 //	KACHO_API_GATEWAY_KRATOS_PUBLIC_URL      — Ory Kratos public API base ("disabled" turns it off)
 //	KACHO_API_GATEWAY_INTERNAL_GRPC_ADDR     — cluster-internal gRPC listener (default :9091)
@@ -118,6 +120,19 @@ type Config struct {
 	// GetRegistryStats) — GC zot-стора + инфра-статистика namespace. Cluster-internal
 	// listener only. Same host, internal port (mirrors iam/nlb).
 	RegistryInternalAddr string `envconfig:"KACHO_API_GATEWAY_REGISTRY_INTERNAL_GRPC" default:"kacho-registry.kacho.svc.cluster.local:9091"`
+
+	// StorageAddr — public gRPC backend of kacho-storage (VolumeService/
+	// SnapshotService/DiskTypeService). Public RPC под /storage/v1/*. При пустом
+	// значении storage-handlers не регистрируются (graceful — позволяет деплоить
+	// api-gateway до kacho-storage pod'a; симметрично registry/geo/nlb).
+	StorageAddr string `envconfig:"KACHO_API_GATEWAY_STORAGE_GRPC" default:"kacho-storage.kacho.svc.cluster.local:9090"`
+
+	// StorageInternalAddr — admin-only internal-port (9091) of kacho-storage
+	// backend. Routes InternalVolumeService (Attach/Detach/ListAttachments/
+	// GetInternal — placement/инфра-поля) + InternalDiskTypeService (admin CRUD
+	// справочника DiskType). Cluster-internal listener only. Same host, internal
+	// port (mirrors iam/nlb/registry).
+	StorageInternalAddr string `envconfig:"KACHO_API_GATEWAY_STORAGE_INTERNAL_GRPC" default:"kacho-storage.kacho.svc.cluster.local:9091"`
 
 	// AdvertisedEndpointAddr — host:port that the api-gateway advertises through
 	// the endpoint-discovery RPC. External clients dial this address. Defaults to
@@ -341,6 +356,7 @@ type Config struct {
 	MTLSNLBEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_ENABLE"      default:"false"`
 	MTLSGeoEnable      bool `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_ENABLE"      default:"false"`
 	MTLSRegistryEnable bool `envconfig:"KACHO_API_GATEWAY_MTLS_REGISTRY_ENABLE" default:"false"`
+	MTLSStorageEnable  bool `envconfig:"KACHO_API_GATEWAY_MTLS_STORAGE_ENABLE"  default:"false"`
 
 	// Per-edge SNI/server-name overrides. Empty ⇒ derive from the dial-addr host.
 	MTLSVPCServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_VPC_SERVER_NAME"      default:""`
@@ -349,6 +365,7 @@ type Config struct {
 	MTLSNLBServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_NLB_SERVER_NAME"      default:""`
 	MTLSGeoServerName      string `envconfig:"KACHO_API_GATEWAY_MTLS_GEO_SERVER_NAME"      default:""`
 	MTLSRegistryServerName string `envconfig:"KACHO_API_GATEWAY_MTLS_REGISTRY_SERVER_NAME" default:""`
+	MTLSStorageServerName  string `envconfig:"KACHO_API_GATEWAY_MTLS_STORAGE_SERVER_NAME"  default:""`
 
 	// Hybrid external listener: when true, the external TLS listener
 	// (TLSListenAddr) runs with tls.VerifyClientCertIfGiven and the internal CA
@@ -503,6 +520,8 @@ func (c Config) BackendAddrs() map[string]string {
 		"geoInternal":          c.GeoInternalAddr,
 		"registry":             c.RegistryAddr,
 		"registryInternal":     c.RegistryInternalAddr,
+		"storage":              c.StorageAddr,
+		"storageInternal":      c.StorageInternalAddr,
 	}
 }
 
@@ -520,7 +539,7 @@ func (c Config) InternalGRPCAllowedSPIFFESet() map[string]struct{} {
 }
 
 // EdgeTLSClient assembles the corelib grpcclient.TLSClient value-struct for a
-// backend edge ("vpc" | "compute" | "iam" | "nlb" | "geo" | "registry"),
+// backend edge ("vpc" | "compute" | "iam" | "nlb" | "geo" | "registry" | "storage"),
 // deriving the server-name from the dial address host when no per-edge override
 // is set.
 //
@@ -583,6 +602,8 @@ func (c Config) edgeMTLS(edge string) (enable bool, serverName string, err error
 		return c.MTLSGeoEnable, c.MTLSGeoServerName, nil
 	case "registry":
 		return c.MTLSRegistryEnable, c.MTLSRegistryServerName, nil
+	case "storage":
+		return c.MTLSStorageEnable, c.MTLSStorageServerName, nil
 	default:
 		return false, "", fmt.Errorf("unknown mtls edge %q", edge)
 	}
