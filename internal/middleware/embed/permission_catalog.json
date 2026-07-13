@@ -2621,7 +2621,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserTokenService/Issue",
     "permission": "iam.issue_user_tokens.issue",
-    "required_relation": "token_admin",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -2631,7 +2631,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserTokenService/List",
     "permission": "iam.user_tokens.list",
-    "required_relation": "token_admin",
+    "required_relation": "v_list",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -2641,7 +2641,7 @@
   {
     "fqn": "kacho.cloud.iam.v1.UserTokenService/Revoke",
     "permission": "iam.revoke_user_tokens.revoke",
-    "required_relation": "token_admin",
+    "required_relation": "v_update",
     "scope_extractor": {
       "object_type": "iam_user",
       "from_request_field": "user_id"
@@ -3389,6 +3389,36 @@
       "object_type": "",
       "from_request_field": ""
     }
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.InternalNetworkInterfaceService/Attach",
+    "permission": "vpc.network_interfaces.attach",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "vpc_network_interface",
+      "from_request_field": "nic_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.InternalNetworkInterfaceService/Detach",
+    "permission": "vpc.network_interfaces.detach",
+    "required_relation": "editor",
+    "scope_extractor": {
+      "object_type": "vpc_network_interface",
+      "from_request_field": "nic_id"
+    },
+    "required_acr_min": "2"
+  },
+  {
+    "fqn": "kacho.cloud.vpc.v1.InternalNetworkInterfaceService/ListByInstance",
+    "permission": "vpc.network_interfaces.listByInstance",
+    "required_relation": "viewer",
+    "scope_extractor": {
+      "object_type": "cluster",
+      "from_request_field": "*"
+    },
+    "required_acr_min": "2"
   },
   {
     "fqn": "kacho.cloud.vpc.v1.InternalNetworkService/GetNetwork",
