@@ -12,8 +12,8 @@
 # Таблица path->FQN собирается ЗДЕСЬ (не в доменных репозиториях): после
 # proto-децентрализации доменные .proto живут в репозиториях-владельцах
 # (kacho-iam / kacho-vpc / kacho-compute / kacho-geo / kacho-nlb /
-# kacho-registry), а общая инфраструктура (operation / validation) — в
-# kacho-corelib.
+# kacho-registry / kacho-storage), а общая инфраструктура (operation / validation)
+# — в kacho-corelib.
 #
 # Что делает скрипт (то же дерево, что gen-permission-catalog.sh):
 #   1. собирает единое buf-дерево во временном каталоге: общая инфраструктура из
@@ -38,15 +38,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIBLINGS="$(cd "${REPO_ROOT}/.." && pwd)"
 OUT="${1:-${REPO_ROOT}/internal/middleware/rest_route_table_gen.go}"
 
-CORELIB="${SIBLINGS}/kacho-corelib/proto"
-IAM="${SIBLINGS}/kacho-iam/proto"
-VPC="${SIBLINGS}/kacho-vpc/proto"
-COMPUTE="${SIBLINGS}/kacho-compute/proto"
-GEO="${SIBLINGS}/kacho-geo/proto"
-NLB="${SIBLINGS}/kacho-nlb/proto"
-REGISTRY="${SIBLINGS}/kacho-registry/proto"
+# Proto централизован в kacho-proto (per-service .proto упразднены); все домены
+# читаются из единого ../kacho-proto/proto (симметрично gen-permission-catalog.sh).
+CORELIB="${SIBLINGS}/kacho-proto/proto"
+IAM="${SIBLINGS}/kacho-proto/proto"
+VPC="${SIBLINGS}/kacho-proto/proto"
+COMPUTE="${SIBLINGS}/kacho-proto/proto"
+GEO="${SIBLINGS}/kacho-proto/proto"
+NLB="${SIBLINGS}/kacho-proto/proto"
+REGISTRY="${SIBLINGS}/kacho-proto/proto"
+STORAGE="${SIBLINGS}/kacho-proto/proto"
 
-for d in "${CORELIB}" "${IAM}" "${VPC}" "${COMPUTE}" "${GEO}" "${NLB}" "${REGISTRY}"; do
+for d in "${CORELIB}" "${IAM}" "${VPC}" "${COMPUTE}" "${GEO}" "${NLB}" "${REGISTRY}" "${STORAGE}"; do
   if [[ ! -d "${d}" ]]; then
     echo "ERR: proto-дерево не найдено: ${d}" >&2
     echo "Нужна рабочая копия workspace с соседними репозиториями (../kacho-*)." >&2
@@ -78,6 +81,7 @@ cp -R "${COMPUTE}/kacho/cloud/maintenance" "${STAGE}/kacho/cloud/maintenance"
 cp -R "${GEO}/kacho/cloud/geo"             "${STAGE}/kacho/cloud/geo"
 cp -R "${NLB}/kacho/cloud/loadbalancer"    "${STAGE}/kacho/cloud/loadbalancer"
 cp -R "${REGISTRY}/kacho/cloud/registry"   "${STAGE}/kacho/cloud/registry"
+cp -R "${STORAGE}/kacho/cloud/storage"     "${STAGE}/kacho/cloud/storage"
 
 # --- anchor-файл плагина (primary file) ---
 mkdir -p "${STAGE}/kacho/iam/authz/catalog/v1"

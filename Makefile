@@ -8,7 +8,8 @@ IMAGE  := kacho-api-gateway:dev
 # Permission catalog — рантайм source-of-truth для per-RPC authz-middleware.
 # Генерируется ЗДЕСЬ (api-gateway импортирует proto всех доменов) скриптом
 # scripts/gen-permission-catalog.sh из proto-деревьев репозиториев-владельцев
-# (kacho-iam / kacho-vpc / kacho-compute / kacho-geo / kacho-nlb) + общей
+# (kacho-iam / kacho-vpc / kacho-compute / kacho-geo / kacho-nlb / kacho-registry /
+# kacho-storage) + общей
 # инфраструктуры kacho-corelib. Рантайм использует вшитую копию ниже.
 PERMISSION_CATALOG_TARGET := internal/middleware/embed/permission_catalog.json
 PERMISSION_CATALOG_BUILD  := build/permission_catalog.json

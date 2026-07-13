@@ -16,6 +16,7 @@
 //	"iop" → iam               (ВСЕ операции iam-домена: Account/Project/User/SA/Group/Role/AccessBinding)
 //	"nlb" → loadbalancer      (ВСЕ операции kacho-nlb: NetworkLoadBalancer/Listener/TargetGroup)
 //	"rop" → registry          (ВСЕ операции kacho-registry: Registry/DeleteTag)
+//	"sop" → storage           (ВСЕ операции kacho-storage: Volume/Snapshot)
 //
 // Префикс заведомо стабильный: ровно 3 символа, lowercase crockford-base32-friendly.
 // Тело id (17 символов) — непрозрачно для proxy.
@@ -84,6 +85,8 @@ var prefixToBackend = map[string]string{
 	ids.PrefixOperationNLB: "loadbalancer", // nlb: все операции kacho-nlb (NetworkLoadBalancer/Listener/TargetGroup — общий op-prefix)
 	// registry domain
 	ids.PrefixOperationReg: "registry", // rop: все операции kacho-registry (Registry/DeleteTag)
+	// storage domain
+	ids.PrefixOperationStorage: "storage", // sop: все операции kacho-storage (Volume/Snapshot — общий op-prefix, декаплен от ресурса)
 }
 
 // legacyPrefixToBackend — старые «<service>_<uuid>» Operation.id, все еще
@@ -121,7 +124,7 @@ func New(conns map[string]*grpc.ClientConn) *OpsProxy {
 //   - legacy "<prefix>_<uuid>" с известным legacy-prefix → роутим.
 //   - все остальное (malformed, неизвестный prefix) → InvalidArgument
 //     "invalid operation id <X>" — валидные operation-id у Kachō имеют только
-//     известные domain-префиксы (enp…/e9b…/epd…/iop…/nlb…) и legacy-формы.
+//     известные domain-префиксы (enp…/e9b…/epd…/iop…/nlb…/rop…/sop…) и legacy-формы.
 func (p *OpsProxy) resolveBackend(id string) (operationpb.OperationServiceClient, error) {
 	invalid := status.Errorf(codes.InvalidArgument, "invalid operation id %q", id)
 	notFound := status.Errorf(codes.NotFound, "Operation %s not found", id)

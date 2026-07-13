@@ -24,6 +24,7 @@ func TestPrefixToBackend_BoundToCorelibConstants(t *testing.T) {
 		prefixOperationIAM:         "iam",          // iop (kacho-iam domain, not importable)
 		ids.PrefixOperationNLB:     "loadbalancer", // nlb
 		ids.PrefixOperationReg:     "registry",     // rop
+		ids.PrefixOperationStorage: "storage",      // sop
 	}
 	if len(prefixToBackend) != len(want) {
 		t.Fatalf("prefixToBackend has %d entries, want %d — a prefix was added/removed without updating the guard", len(prefixToBackend), len(want))
