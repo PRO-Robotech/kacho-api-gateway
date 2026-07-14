@@ -99,6 +99,27 @@ jobs:
           EOF
             : >kacho-ui/deploy/values.yaml
           fi
+      # kacho-ui-future sibling (aliased `uif` in the umbrella) — best-effort +
+      # stub. The umbrella Chart.yaml carries a `file://../../../kacho-ui-future/deploy`
+      # dependency; `helm dep update` resolves file:// deps regardless of the
+      # `uif.enabled` condition, so the directory MUST exist even though the
+      # newman/dev stack keeps uif disabled (stub is never rendered).
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-ui-future, ref: main, path: kacho-ui-future }
+      - name: stub kacho-ui-future/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-ui-future/deploy/Chart.yaml ]; then
+            mkdir -p kacho-ui-future/deploy/templates
+            cat >kacho-ui-future/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: uif
+          version: 2.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-ui-future)
+          EOF
+            : >kacho-ui-future/deploy/values.yaml
+          fi
 
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
