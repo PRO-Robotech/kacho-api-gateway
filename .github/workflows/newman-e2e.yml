@@ -120,6 +120,46 @@ jobs:
           EOF
             : >kacho-ui-future/deploy/values.yaml
           fi
+      # kacho-registry sibling (aliased `registry` in the umbrella) — helm dep
+      # needs file://../../../kacho-registry/deploy. Public repo → real checkout,
+      # stub fallback if skipped. registry.enabled is off in the newman/dev stack,
+      # so the chart is resolved for `helm dep` but never rendered.
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-registry, ref: main, path: kacho-registry }
+      - name: stub kacho-registry/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-registry/deploy/Chart.yaml ]; then
+            mkdir -p kacho-registry/deploy/templates
+            cat >kacho-registry/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: registry
+          version: 1.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-registry)
+          EOF
+            : >kacho-registry/deploy/values.yaml
+          fi
+      # kacho-storage sibling (aliased `storage` in the umbrella) — helm dep needs
+      # file://../../../kacho-storage/deploy. Public repo → real checkout, stub
+      # fallback if skipped. storage.enabled is off in the newman/dev stack, so the
+      # chart is resolved for `helm dep` but never rendered.
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-storage, ref: main, path: kacho-storage }
+      - name: stub kacho-storage/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-storage/deploy/Chart.yaml ]; then
+            mkdir -p kacho-storage/deploy/templates
+            cat >kacho-storage/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: storage
+          version: 1.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-storage)
+          EOF
+            : >kacho-storage/deploy/values.yaml
+          fi
 
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
