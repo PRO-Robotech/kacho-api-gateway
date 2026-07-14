@@ -3,8 +3,8 @@ module github.com/PRO-Robotech/kacho-api-gateway
 go 1.26.5
 
 require (
-	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260705005204-a60a829f8607
-	github.com/PRO-Robotech/kacho-proto v0.0.0-20260705204852-75c163ecf237
+	github.com/PRO-Robotech/kacho-corelib v1.0.3-0.20260712234555-666ca389fd55
+	github.com/PRO-Robotech/kacho-proto v0.0.0-20260712234552-8f1df0ce7887
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
@@ -34,7 +34,3 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
-
-replace github.com/PRO-Robotech/kacho-proto => ../kacho-proto
-
-replace github.com/PRO-Robotech/kacho-corelib => ../kacho-corelib
