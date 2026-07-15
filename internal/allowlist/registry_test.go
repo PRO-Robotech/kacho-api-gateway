@@ -24,6 +24,13 @@ func TestGateway_Registry_PublicVsInternal(t *testing.T) {
 		"/kacho.cloud.registry.v1.RegistryService/ListRepositories",
 		"/kacho.cloud.registry.v1.RegistryService/ListTags",
 		"/kacho.cloud.registry.v1.RegistryService/DeleteTag",
+		// Repository config-overlay (RG-1) — public RPC на том же RegistryService.
+		"/kacho.cloud.registry.v1.RegistryService/GetRepository",
+		"/kacho.cloud.registry.v1.RegistryService/ListReferrers",
+		"/kacho.cloud.registry.v1.RegistryService/CreateRepository",
+		"/kacho.cloud.registry.v1.RegistryService/UpdateRepository",
+		"/kacho.cloud.registry.v1.RegistryService/DeleteRepository",
+		"/kacho.cloud.registry.v1.RegistryService/RenameRepository",
 	}
 	for _, m := range publicMethods {
 		m := m

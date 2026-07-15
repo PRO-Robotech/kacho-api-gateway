@@ -25,6 +25,14 @@ func TestResolver_RegistryPublicVsInternal(t *testing.T) {
 		"/kacho.cloud.registry.v1.RegistryService/ListRepositories",
 		"/kacho.cloud.registry.v1.RegistryService/ListTags",
 		"/kacho.cloud.registry.v1.RegistryService/DeleteTag",
+		// Repository config-overlay (RG-1) — те же public RPC на RegistryService,
+		// резолвятся на registry-backend по domain-prefix.
+		"/kacho.cloud.registry.v1.RegistryService/GetRepository",
+		"/kacho.cloud.registry.v1.RegistryService/ListReferrers",
+		"/kacho.cloud.registry.v1.RegistryService/CreateRepository",
+		"/kacho.cloud.registry.v1.RegistryService/UpdateRepository",
+		"/kacho.cloud.registry.v1.RegistryService/DeleteRepository",
+		"/kacho.cloud.registry.v1.RegistryService/RenameRepository",
 	} {
 		_, conn, ok := resolve(m)
 		if !ok || conn != backends["registry"] {
