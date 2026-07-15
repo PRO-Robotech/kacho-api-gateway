@@ -286,6 +286,18 @@ var AllowedMethods = map[string]struct{}{
 	"/kacho.cloud.registry.v1.RegistryService/ListTags":         {},
 	"/kacho.cloud.registry.v1.RegistryService/DeleteTag":        {},
 	"/kacho.cloud.registry.v1.RegistryService/ListOperations":   {},
+	// registry.v1 — Repository config-overlay (RG-1). Публичные RPC на том же
+	// RegistryService: sync-чтение GetRepository/ListReferrers + async-мутации
+	// CreateRepository/UpdateRepository/DeleteRepository/RenameRepository. Все
+	// шесть — gateway `<exempt>` (per-repo Check + existence-hiding в handler'е:
+	// COMPOSITE-объект registry_repository:<reg>/<repo> не выразим gateway
+	// scope_extractor'ом; deny → uniform NOT_FOUND, иначе existence-oracle).
+	"/kacho.cloud.registry.v1.RegistryService/GetRepository":    {},
+	"/kacho.cloud.registry.v1.RegistryService/ListReferrers":    {},
+	"/kacho.cloud.registry.v1.RegistryService/CreateRepository": {},
+	"/kacho.cloud.registry.v1.RegistryService/UpdateRepository": {},
+	"/kacho.cloud.registry.v1.RegistryService/DeleteRepository": {},
+	"/kacho.cloud.registry.v1.RegistryService/RenameRepository": {},
 
 	// operation (без v1!) — OperationService (in-process OpsProxy, фан-аут по domain-prefix)
 	"/kacho.cloud.operation.OperationService/Get":    {},

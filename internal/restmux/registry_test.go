@@ -54,6 +54,17 @@ func TestRegistry_PublicRoutesRegistered(t *testing.T) {
 		// сам факт регистрации route (не encoded-slash matching).
 		{"GET", "/registry/v1/registries/reg-1/repositories/web/tags"},
 		{"DELETE", "/registry/v1/registries/reg-1/repositories/web/tags/v1"},
+		// Repository config-overlay (RG-1) — 6 public RPC на том же RegistryService.
+		// Регистрируются автоматически через RegisterRegistryServiceHandlerFromEndpoint
+		// (RG-1 добавляет методы к уже-зарегистрированному сервису → нового вызова
+		// регистрации не требуется). Пути с {repository=**} несут multi-segment repo-имя
+		// (напр. backend/api). Проверяем факт регистрации route на external listener.
+		{"GET", "/registry/v1/registries/reg-1/repositories/backend/api"},              // GetRepository
+		{"GET", "/registry/v1/registries/reg-1/repositories/backend/api/referrers"},    // ListReferrers
+		{"POST", "/registry/v1/registries/reg-1/repositories"},                         // CreateRepository (POST; ListRepositories — GET)
+		{"PATCH", "/registry/v1/registries/reg-1/repositories/backend/api"},            // UpdateRepository
+		{"DELETE", "/registry/v1/registries/reg-1/repositories/backend/api"},           // DeleteRepository
+		{"POST", "/registry/v1/registries/reg-1/repositories/backend/api:rename"},      // RenameRepository
 	}
 	for _, tc := range publicRoutes {
 		tc := tc
