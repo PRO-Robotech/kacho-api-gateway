@@ -38,6 +38,12 @@ env:
   # rebuilt from source in this umbrella). Pin the known-good tag in one place
   # so the docker-pull, kind-load and helm --set all stay in lockstep.
   KACHO_GEO_IMAGE: docker.io/prorobotech/kacho-geo:main-84d9d68f
+  # kacho-iam@main's tests/newman/scripts/run.sh runs an inline RPC-coverage
+  # summary after the suites; it exits non-zero ("no RPCs discovered") unless the
+  # proto glob resolves. .proto live ONLY in kacho-proto (centralized), so point
+  # it at the kacho-proto sibling checkout (added below), not the default relative
+  # glob. run.sh reads it as $COVERAGE_PROTO_GLOB.
+  COVERAGE_PROTO_GLOB: ${{ github.workspace }}/kacho-proto/proto/kacho/cloud/iam/v1/*.proto
 
 concurrency:
   group: newman-e2e-${{ github.ref }}
@@ -62,6 +68,10 @@ jobs:
       # kacho-corelib carries the IAM/nlb id-prefixes the authz middleware needs.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+      # kacho-proto is the single home of all .proto — needed by kacho-iam's
+      # run.sh inline RPC-coverage summary (COVERAGE_PROTO_GLOB above points here).
+      - uses: actions/checkout@v4
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
