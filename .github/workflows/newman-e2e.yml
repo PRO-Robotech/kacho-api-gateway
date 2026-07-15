@@ -38,6 +38,12 @@ env:
   # rebuilt from source in this umbrella). Pin the known-good tag in one place
   # so the docker-pull, kind-load and helm --set all stay in lockstep.
   KACHO_GEO_IMAGE: docker.io/prorobotech/kacho-geo:main-84d9d68f
+  # kacho-iam@main's tests/newman/scripts/run.sh runs an inline RPC-coverage
+  # summary after the suites; it exits non-zero ("no RPCs discovered") unless the
+  # proto glob resolves. .proto live ONLY in kacho-proto (centralized), so point
+  # it at the kacho-proto sibling checkout (added below), not the default relative
+  # glob. run.sh reads it as $COVERAGE_PROTO_GLOB.
+  COVERAGE_PROTO_GLOB: ${{ github.workspace }}/kacho-proto/proto/kacho/cloud/iam/v1/*.proto
 
 concurrency:
   group: newman-e2e-${{ github.ref }}
@@ -62,6 +68,10 @@ jobs:
       # kacho-corelib carries the IAM/nlb id-prefixes the authz middleware needs.
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-corelib, ref: main, path: kacho-corelib }
+      # kacho-proto is the single home of all .proto — needed by kacho-iam's
+      # run.sh inline RPC-coverage summary (COVERAGE_PROTO_GLOB above points here).
+      - uses: actions/checkout@v4
+        with: { repository: PRO-Robotech/kacho-proto, ref: main, path: kacho-proto }
       - uses: actions/checkout@v4
         with: { repository: PRO-Robotech/kacho-vpc, ref: main, path: kacho-vpc }
       - uses: actions/checkout@v4
@@ -98,6 +108,67 @@ jobs:
           description: stub for CI (real chart in private repo PRO-Robotech/kacho-ui)
           EOF
             : >kacho-ui/deploy/values.yaml
+          fi
+      # kacho-ui-future sibling (aliased `uif` in the umbrella) — best-effort +
+      # stub. The umbrella Chart.yaml carries a `file://../../../kacho-ui-future/deploy`
+      # dependency; `helm dep update` resolves file:// deps regardless of the
+      # `uif.enabled` condition, so the directory MUST exist even though the
+      # newman/dev stack keeps uif disabled (stub is never rendered).
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-ui-future, ref: main, path: kacho-ui-future }
+      - name: stub kacho-ui-future/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-ui-future/deploy/Chart.yaml ]; then
+            mkdir -p kacho-ui-future/deploy/templates
+            cat >kacho-ui-future/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: uif
+          version: 2.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-ui-future)
+          EOF
+            : >kacho-ui-future/deploy/values.yaml
+          fi
+      # kacho-registry sibling (aliased `registry` in the umbrella) — helm dep
+      # needs file://../../../kacho-registry/deploy. Public repo → real checkout,
+      # stub fallback if skipped. registry.enabled is off in the newman/dev stack,
+      # so the chart is resolved for `helm dep` but never rendered.
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-registry, ref: main, path: kacho-registry }
+      - name: stub kacho-registry/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-registry/deploy/Chart.yaml ]; then
+            mkdir -p kacho-registry/deploy/templates
+            cat >kacho-registry/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: registry
+          version: 1.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-registry)
+          EOF
+            : >kacho-registry/deploy/values.yaml
+          fi
+      # kacho-storage sibling (aliased `storage` in the umbrella) — helm dep needs
+      # file://../../../kacho-storage/deploy. Public repo → real checkout, stub
+      # fallback if skipped. storage.enabled is off in the newman/dev stack, so the
+      # chart is resolved for `helm dep` but never rendered.
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with: { repository: PRO-Robotech/kacho-storage, ref: main, path: kacho-storage }
+      - name: stub kacho-storage/deploy if checkout was skipped
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ ! -f kacho-storage/deploy/Chart.yaml ]; then
+            mkdir -p kacho-storage/deploy/templates
+            cat >kacho-storage/deploy/Chart.yaml <<'EOF'
+          apiVersion: v2
+          name: storage
+          version: 1.0.0
+          description: stub for CI (real chart in PRO-Robotech/kacho-storage)
+          EOF
+            : >kacho-storage/deploy/values.yaml
           fi
 
       - uses: actions/setup-node@v4
@@ -266,15 +337,26 @@ jobs:
           kubectl -n kacho port-forward svc/api-gateway 18080:8080 \
             >/tmp/api-gateway-pf.log 2>&1 &
           AGW_PF=$!
+          # api-gateway cluster-internal admin REST listener (`internal-rest`
+          # Service port, default :8081). It is the ONLY listener that serves
+          # /iam/v1/internal/* REST paths (Internal* RPCs — UpsertFromIdentity,
+          # InternalIAMService.Check/LookupSubject); the public cmux (:8080) 404s
+          # them by design (ban #6). The iam-internal-only-check positive controls
+          # and the rbac-subjects group-userset Check probe reach these Internal*
+          # RPCs via {{internalBaseUrl}} = http://localhost:18081 (set below).
+          kubectl -n kacho port-forward svc/api-gateway 18081:8081 \
+            >/tmp/api-gateway-internal-pf.log 2>&1 &
+          AGW_INT_PF=$!
           kubectl -n kacho port-forward svc/kacho-iam-internal 19091:9091 \
             >/tmp/iam-internal-pf.log 2>&1 &
           IAM_PF=$!
-          trap 'kill "$AGW_PF" "$IAM_PF" 2>/dev/null || true' EXIT
+          trap 'kill "$AGW_PF" "$AGW_INT_PF" "$IAM_PF" 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do
             up=1
             bash -c 'echo > /dev/tcp/127.0.0.1/18080' 2>/dev/null || up=0
+            bash -c 'echo > /dev/tcp/127.0.0.1/18081' 2>/dev/null || up=0
             bash -c 'echo > /dev/tcp/127.0.0.1/19091' 2>/dev/null || up=0
-            [ "$up" = 1 ] && { echo "port-forwards up (:18080 api-gateway, :19091 iam-internal)"; break; }
+            [ "$up" = 1 ] && { echo "port-forwards up (:18080 api-gateway, :18081 api-gateway internal-rest, :19091 iam-internal)"; break; }
             echo "waiting for port-forwards ($i/30)..."; sleep 2
           done
           for i in $(seq 1 30); do
@@ -302,9 +384,15 @@ jobs:
           cat tests/authz-fixtures/out/authz-fixtures.json
 
           # --- newman -----------------------------------------------------
+          # internalBaseUrl → the api-gateway internal-rest port-forward (:18081)
+          # so the Internal* REST probes (iam-internal-only-check positive controls,
+          # rbac-subjects group-userset Check) reach /iam/v1/internal/* — they are
+          # NOT on the public cmux (:18080).
           cd "${GITHUB_WORKSPACE}/kacho-iam"
           python3 tests/newman/scripts/gen.py
-          tests/newman/scripts/run.sh --env-var baseUrl=http://localhost:18080
+          tests/newman/scripts/run.sh \
+            --env-var baseUrl=http://localhost:18080 \
+            --env-var internalBaseUrl=http://localhost:18081
 
       - name: dump stack logs
         # `always()` (not `failure()`): newman exits 0 even with failed
@@ -348,6 +436,7 @@ jobs:
           kubectl -n kacho logs job/openfga-bootstrap --tail=200 || true
           echo "=== port-forward logs ==="
           cat /tmp/api-gateway-pf.log 2>/dev/null || true
+          cat /tmp/api-gateway-internal-pf.log 2>/dev/null || true
           cat /tmp/iam-internal-pf.log 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
