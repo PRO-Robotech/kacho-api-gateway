@@ -327,15 +327,26 @@ jobs:
           kubectl -n kacho port-forward svc/api-gateway 18080:8080 \
             >/tmp/api-gateway-pf.log 2>&1 &
           AGW_PF=$!
+          # api-gateway cluster-internal admin REST listener (`internal-rest`
+          # Service port, default :8081). It is the ONLY listener that serves
+          # /iam/v1/internal/* REST paths (Internal* RPCs — UpsertFromIdentity,
+          # InternalIAMService.Check/LookupSubject); the public cmux (:8080) 404s
+          # them by design (ban #6). The iam-internal-only-check positive controls
+          # and the rbac-subjects group-userset Check probe reach these Internal*
+          # RPCs via {{internalBaseUrl}} = http://localhost:18081 (set below).
+          kubectl -n kacho port-forward svc/api-gateway 18081:8081 \
+            >/tmp/api-gateway-internal-pf.log 2>&1 &
+          AGW_INT_PF=$!
           kubectl -n kacho port-forward svc/kacho-iam-internal 19091:9091 \
             >/tmp/iam-internal-pf.log 2>&1 &
           IAM_PF=$!
-          trap 'kill "$AGW_PF" "$IAM_PF" 2>/dev/null || true' EXIT
+          trap 'kill "$AGW_PF" "$AGW_INT_PF" "$IAM_PF" 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do
             up=1
             bash -c 'echo > /dev/tcp/127.0.0.1/18080' 2>/dev/null || up=0
+            bash -c 'echo > /dev/tcp/127.0.0.1/18081' 2>/dev/null || up=0
             bash -c 'echo > /dev/tcp/127.0.0.1/19091' 2>/dev/null || up=0
-            [ "$up" = 1 ] && { echo "port-forwards up (:18080 api-gateway, :19091 iam-internal)"; break; }
+            [ "$up" = 1 ] && { echo "port-forwards up (:18080 api-gateway, :18081 api-gateway internal-rest, :19091 iam-internal)"; break; }
             echo "waiting for port-forwards ($i/30)..."; sleep 2
           done
           for i in $(seq 1 30); do
@@ -363,9 +374,15 @@ jobs:
           cat tests/authz-fixtures/out/authz-fixtures.json
 
           # --- newman -----------------------------------------------------
+          # internalBaseUrl → the api-gateway internal-rest port-forward (:18081)
+          # so the Internal* REST probes (iam-internal-only-check positive controls,
+          # rbac-subjects group-userset Check) reach /iam/v1/internal/* — they are
+          # NOT on the public cmux (:18080).
           cd "${GITHUB_WORKSPACE}/kacho-iam"
           python3 tests/newman/scripts/gen.py
-          tests/newman/scripts/run.sh --env-var baseUrl=http://localhost:18080
+          tests/newman/scripts/run.sh \
+            --env-var baseUrl=http://localhost:18080 \
+            --env-var internalBaseUrl=http://localhost:18081
 
       - name: dump stack logs
         # `always()` (not `failure()`): newman exits 0 even with failed
@@ -409,6 +426,7 @@ jobs:
           kubectl -n kacho logs job/openfga-bootstrap --tail=200 || true
           echo "=== port-forward logs ==="
           cat /tmp/api-gateway-pf.log 2>/dev/null || true
+          cat /tmp/api-gateway-internal-pf.log 2>/dev/null || true
           cat /tmp/iam-internal-pf.log 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
